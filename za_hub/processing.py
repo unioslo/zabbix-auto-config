@@ -1,0 +1,252 @@
+import multiprocessing
+import logging
+import datetime
+import time
+import sys
+import signal
+import itertools
+import queue
+
+import pymongo
+
+from . import utils
+
+class SourceCollectorProcess(multiprocessing.Process):
+    def __init__(self, name, module, update_interval, source_hosts_queue, stop_event):
+        super().__init__() 
+        self.name = name
+        self.module = module
+        self.update_interval = update_interval
+        self.source_hosts_queue = source_hosts_queue
+        self.stop_event = stop_event
+
+        self.next_update = None
+
+    def run(self):
+        logging.info("Process starting")
+
+        while not self.stop_event.is_set():
+            if self.next_update and self.next_update > datetime.datetime.now():
+                #logging.debug(f"Waiting for next update {self.next_update.isoformat()}")
+                time.sleep(1)
+                continue
+
+            self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
+            
+            start_time = time.time()
+
+            try:
+                hosts = self.module.collect()
+                assert type(hosts) is list, "Collect module did not return a list"
+            except (AssertionError, Exception) as e:
+                logging.warning(f"Error when collecting hosts: {str(e)}")
+                continue
+
+            valid_hosts = []
+            for host in hosts:
+                try:
+                    host["source"] = self.name
+                    utils.validate_host(host)
+                    valid_hosts.append(host)
+                except AssertionError as e:
+                    if "hostname" in host:
+                        logging.error(f"Host <{host['hostname']}> is invalid: {str(e)}")
+                    else:
+                        logging.error(f"Host object is invalid: {str(e)}")
+
+            source_hosts = {
+                "source": self.name,
+                "hosts": valid_hosts,
+            }
+
+            self.source_hosts_queue.put(source_hosts)
+
+            logging.info(f"Collected hosts ({len(valid_hosts)}) from source <{self.name}> in {time.time() - start_time:.2f}s. Next update {self.next_update.isoformat()}")
+
+        self.source_hosts_queue.cancel_join_thread()  # Don't wait for empty queue
+        logging.info("Process exiting")
+
+class SourceHandlerProcess(multiprocessing.Process):
+    def __init__(self, name, stop_event, source_hosts_queues):
+        super().__init__() 
+        self.name = name
+        self.stop_event = stop_event
+
+        self.source_hosts_queues = source_hosts_queues
+
+    def run(self):
+        logging.info("Process starting")
+
+        try:
+            self.mongo_client = pymongo.MongoClient("mongodb://localhost:27017/mydatabase")
+            self.mongo_client.admin.command('ismaster')  # Test connection
+        except pymongo.errors.ServerSelectionTimeoutError:
+            logging.error("Unable to connect to database. Process exiting with error")
+            sys.exit(1)
+        
+        self.db = self.mongo_client.get_default_database()
+        self.mongo_collection_hosts_source = self.db["hosts_source"]
+
+        while not self.stop_event.is_set():
+            for source_hosts_queue in self.source_hosts_queues:
+                try:
+                    source_hosts = source_hosts_queue.get_nowait()
+                except queue.Empty:
+                    continue
+                
+                self.handle_source_hosts(source_hosts)
+            
+            time.sleep(1)
+
+        logging.info("Process exiting")
+
+    @utils.handle_database_error
+    def handle_source_hosts(self, source_hosts):
+        source = source_hosts["source"]
+        hosts = source_hosts["hosts"]
+        
+        start_time = time.time()
+        equal_hosts, replaced_hosts, inserted_hosts, removed_hosts = (0, 0, 0, 0)
+
+        source_hostnames = [host["hostname"] for host in hosts]
+        current_hostnames = self.mongo_collection_hosts_source.distinct("hostname", {"source": source})
+
+        removed_hostnames = set(current_hostnames) - set(source_hostnames)
+        for removed_hostname in removed_hostnames:
+            current_hostnames = self.mongo_collection_hosts_source.delete_one({"hostname": removed_hostname, "source": source})
+            removed_hosts += 1
+
+        for host in hosts:
+            mongo_filter = {
+                "hostname": host["hostname"],
+                "source": source
+            }
+            current_host = self.mongo_collection_hosts_source.find_one(mongo_filter, projection={'_id': False})
+            
+            if current_host:
+                if current_host == host:
+                    equal_hosts += 1
+                else:
+                    #logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
+                    self.mongo_collection_hosts_source.replace_one(mongo_filter, host)
+                    replaced_hosts += 1
+            else:
+                #logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
+                self.mongo_collection_hosts_source.insert_one(host)
+                inserted_hosts += 1
+
+        logging.info(f"Handled hosts from source <{source}> in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
+
+class SourceMergerProcess(multiprocessing.Process):
+    def __init__(self, name, stop_event):
+        super().__init__() 
+        self.name = name
+        self.stop_event = stop_event
+
+        self.update_interval = 60
+        self.next_update = None
+
+    def run(self):
+        logging.info("Process starting")
+
+        self.mongo_client = pymongo.MongoClient("mongodb://localhost:27017/mydatabase")
+
+        try:
+            self.mongo_client.admin.command('ismaster')  # Test connection
+        except pymongo.errors.ServerSelectionTimeoutError:
+            logging.error("Unable to connect to database. Process exiting with error")
+            sys.exit(1)
+        
+        self.mongo_db = self.mongo_client.get_default_database()
+        self.mongo_collection_hosts_source = self.mongo_db["hosts_source"]
+        self.mongo_collection_hosts = self.mongo_db["hosts"]
+
+        while not self.stop_event.is_set():
+            if self.next_update and self.next_update > datetime.datetime.now():
+                #logging.debug(f"Waiting for next update {self.next_update.isoformat()}")
+                time.sleep(1)
+                continue
+
+            self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
+
+            self.merge_sources()
+
+            logging.info(f"Merge done. Next update {self.next_update.isoformat()}")
+
+        self.mongo_client.close()
+
+        logging.info("Process exiting")
+
+    @utils.handle_database_error
+    def merge_hosts(self, hostname):
+        hosts = list(self.mongo_collection_hosts_source.find({"hostname": hostname}, projection={'_id': False}))
+
+        if len(hosts) == 0:
+            # Host not found. TODO: Raise error?
+            return None
+        else:
+            merged_host = {
+                "enabled": any([host["enabled"] for host in hosts]),
+                "hostname": hostname,
+                "importance": min([host.get("importance", 6) for host in hosts]),
+                "interfaces": None, # TODO
+                "inventory": None, # TODO
+                "macros": None, # TODO
+                "roles": sorted(list(set(itertools.chain.from_iterable([host["roles"] for host in hosts if "roles" in host])))),
+                "siteadmins": sorted(list(set([host["siteadmins"] for host in hosts if "siteadmins" in host]))),
+                "sources": sorted(list(set([host["source"] for host in hosts if "source" in host])))
+            }
+            return merged_host
+
+    @utils.handle_database_error
+    def merge_sources(self):
+        start_time = time.time()
+        equal_hosts, replaced_hosts, inserted_hosts, removed_hosts = (0, 0, 0, 0)
+
+        source_hostnames = self.mongo_collection_hosts_source.distinct("hostname")
+        current_hostnames = self.mongo_collection_hosts.distinct("hostname")
+
+        removed_hostnames = set(current_hostnames) - set(source_hostnames)
+        for removed_hostname in removed_hostnames:
+            current_hostnames = self.mongo_collection_hosts.delete_one({"hostname": removed_hostname})
+            removed_hosts += 1
+        
+        for hostname in source_hostnames:
+            host = self.merge_hosts(hostname)
+            if not host:
+                # TODO: Raise error? How to handle? Handle inside merge_hosts?
+                continue
+
+            # TODO: Pass host through modifiers here
+
+            current_host = self.mongo_collection_hosts.find_one({"hostname": hostname}, projection={'_id': False})
+            
+            if current_host:
+                if current_host == host:
+                    equal_hosts += 1
+                else:
+                    #logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
+                    self.mongo_collection_hosts.replace_one({"hostname": hostname}, host)
+                    replaced_hosts += 1
+            else:
+                #logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
+                self.mongo_collection_hosts.insert_one(host)
+                inserted_hosts += 1
+
+        logging.info(f"Merged sources in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
+
+class ProcessTerminator():
+    def __init__(self, stop_event):
+        self.stop_event = stop_event
+
+    def __enter__(self):
+        self.old_sigint_handler = signal.signal(signal.SIGINT, self._handler)
+        self.old_sigterm_handler = signal.signal(signal.SIGTERM, self._handler)
+
+    def __exit__(self, *args):
+        signal.signal(signal.SIGINT, self.old_sigint_handler)
+        signal.signal(signal.SIGTERM, self.old_sigterm_handler)
+
+    def _handler(self, signum, frame):
+        logging.info(f"Received signal: {signal.Signals(signum).name}")
+        self.stop_event.set()
