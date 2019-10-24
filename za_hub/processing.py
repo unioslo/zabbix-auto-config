@@ -67,18 +67,19 @@ class SourceCollectorProcess(multiprocessing.Process):
         logging.info("Process exiting")
 
 class SourceHandlerProcess(multiprocessing.Process):
-    def __init__(self, name, stop_event, source_hosts_queues):
+    def __init__(self, name, stop_event, db_uri, source_hosts_queues):
         super().__init__() 
         self.name = name
         self.stop_event = stop_event
 
+        self.db_uri = db_uri
         self.source_hosts_queues = source_hosts_queues
 
     def run(self):
         logging.info("Process starting")
 
         try:
-            self.mongo_client = pymongo.MongoClient("mongodb://localhost:27017/mydatabase")
+            self.mongo_client = pymongo.MongoClient(self.db_uri)
             self.mongo_client.admin.command('ismaster')  # Test connection
         except pymongo.errors.ServerSelectionTimeoutError:
             logging.error("Unable to connect to database. Process exiting with error")
@@ -138,10 +139,12 @@ class SourceHandlerProcess(multiprocessing.Process):
         logging.info(f"Handled hosts from source <{source}> in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
 
 class SourceMergerProcess(multiprocessing.Process):
-    def __init__(self, name, stop_event):
+    def __init__(self, name, stop_event, db_uri):
         super().__init__() 
         self.name = name
         self.stop_event = stop_event
+
+        self.db_uri = db_uri
 
         self.update_interval = 60
         self.next_update = None
@@ -149,7 +152,7 @@ class SourceMergerProcess(multiprocessing.Process):
     def run(self):
         logging.info("Process starting")
 
-        self.mongo_client = pymongo.MongoClient("mongodb://localhost:27017/mydatabase")
+        self.mongo_client = pymongo.MongoClient(self.db_uri)
 
         try:
             self.mongo_client.admin.command('ismaster')  # Test connection

@@ -72,11 +72,11 @@ def main():
         processes.append(process)
         process.start()
 
-    process = processing.SourceHandlerProcess("source-handler", stop_event, source_hosts_queues)
+    process = processing.SourceHandlerProcess("source-handler", stop_event, config["za-hub"]["db_uri"], source_hosts_queues)
     process.start()
     processes.append(process)
 
-    process = processing.SourceMergerProcess("source-merger", stop_event)
+    process = processing.SourceMergerProcess("source-merger", stop_event, config["za-hub"]["db_uri"])
     process.start()
     processes.append(process)
 
