@@ -251,5 +251,5 @@ class ProcessTerminator():
         signal.signal(signal.SIGTERM, self.old_sigterm_handler)
 
     def _handler(self, signum, frame):
-        logging.info(f"Received signal: {signal.Signals(signum).name}")
+        logging.info(f"Received signal: {signal.Signals(signum).name}")  #  https://github.com/PyCQA/pylint/issues/2804 pylint: disable=E1101
         self.stop_event.set()
