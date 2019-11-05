@@ -8,6 +8,7 @@ import itertools
 import queue
 
 import pymongo
+import pyzabbix
 
 from . import utils
 
@@ -237,6 +238,84 @@ class SourceMergerProcess(multiprocessing.Process):
                 inserted_hosts += 1
 
         logging.info(f"Merged sources in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
+
+class ZabbixUpdater(multiprocessing.Process):
+    def __init__(self, name, stop_event, map_dir, db_uri, zabbix_url, zabbix_username, zabbix_password):
+        super().__init__()
+        self.name = name
+        self.stop_event = stop_event
+
+        self.map_dir = map_dir
+        self.db_uri = db_uri
+        self.zabbix_url = zabbix_url
+        self.zabbix_username = zabbix_username
+        self.zabbix_password = zabbix_password
+
+        self.update_interval = 60
+        self.next_update = None
+
+        pyzabbix_logger = logging.getLogger("pyzabbix")
+        pyzabbix_logger.setLevel(logging.ERROR)
+
+        self.api = pyzabbix.ZabbixAPI(zabbix_url)
+
+        #with open(os.path.join(map_dir, "role_map.txt")) as f:
+        #    self.role_map = [s.strip() for s in f.readlines()]
+        #with open(os.path.join(map_dir, "siteadmin_map.txt")) as f:
+        #    self.siteadmin_map = [s.strip() for s in f.readlines()]
+
+    def run(self):
+        logging.info("Process starting")
+
+        try:
+            self.api.login(self.zabbix_username, self.zabbix_password)
+        except pyzabbix.ZabbixAPIException as e:
+            logging.error("Unable to login to Zabbix API: %s", str(e))
+            sys.exit(1)
+
+        self.mongo_client = pymongo.MongoClient(self.db_uri)
+
+        try:
+            self.mongo_client.admin.command('ismaster')  # Test connection
+        except pymongo.errors.ServerSelectionTimeoutError:
+            logging.error("Unable to connect to database. Process exiting with error")
+            sys.exit(1)
+
+        self.mongo_db = self.mongo_client.get_default_database()
+        self.mongo_collection_hosts = self.mongo_db["hosts"]
+
+        while not self.stop_event.is_set():
+            if self.next_update and self.next_update > datetime.datetime.now():
+                #logging.debug(f"Waiting for next update {self.next_update.isoformat()}")
+                time.sleep(1)
+                continue
+
+            self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
+
+            self.update_zabbix()
+
+            logging.info(f"Zabbix update done. Next update {self.next_update.isoformat()}")
+
+        self.mongo_client.close()
+
+        logging.info("Process exiting")
+
+    @utils.handle_database_error
+    def update_zabbix(self):
+        hosts = self.mongo_collection_hosts.find({"enabled": True}, projection={'_id': False})
+        zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host", "status", "flags"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
+
+        hostnames = set([host["hostname"] for host in hosts])
+        zabbix_hostnames = set([host["host"] for host in zabbix_hosts])
+        to_remove = zabbix_hostnames - hostnames
+        to_add = hostnames - zabbix_hostnames
+        in_both = hostnames.intersection(zabbix_hostnames)
+        logging.info("Only in zabbix: {}".format(len(to_remove)))
+        logging.info("Only in zabbix: {}".format(" ".join(list(to_remove)[:10])))
+        logging.info("Only in db: {}".format(len(to_add)))
+        logging.info("Only in db: {}".format(" ".join(list(to_add)[:10])))
+        logging.info("In both: {}".format(len(in_both)))
+
 
 class ProcessTerminator():
     def __init__(self, stop_event):
