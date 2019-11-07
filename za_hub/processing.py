@@ -302,7 +302,7 @@ class ZabbixUpdater(multiprocessing.Process):
 
     @utils.handle_database_error
     def update_zabbix(self):
-        db_hosts = self.mongo_collection_hosts.find({"enabled": True}, projection={'_id': False})
+        db_hosts = list(self.mongo_collection_hosts.find({"enabled": True}, projection={'_id': False}))
         zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host", "status", "flags"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
 
         db_hostnames = set([host["hostname"] for host in db_hosts])
