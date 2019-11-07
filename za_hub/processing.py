@@ -302,14 +302,16 @@ class ZabbixUpdater(multiprocessing.Process):
 
     @utils.handle_database_error
     def update_zabbix(self):
-        hosts = self.mongo_collection_hosts.find({"enabled": True}, projection={'_id': False})
+        db_hosts = self.mongo_collection_hosts.find({"enabled": True}, projection={'_id': False})
         zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host", "status", "flags"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
 
-        hostnames = set([host["hostname"] for host in hosts])
+        db_hostnames = set([host["hostname"] for host in db_hosts])
         zabbix_hostnames = set([host["host"] for host in zabbix_hosts])
-        to_remove = zabbix_hostnames - hostnames
-        to_add = hostnames - zabbix_hostnames
-        in_both = hostnames.intersection(zabbix_hostnames)
+
+        to_remove = zabbix_hostnames - db_hostnames
+        to_add = db_hostnames - zabbix_hostnames
+        in_both = db_hostnames.intersection(zabbix_hostnames)
+
         logging.info("Only in zabbix: {}".format(len(to_remove)))
         logging.info("Only in zabbix: {}".format(" ".join(list(to_remove)[:10])))
         logging.info("Only in db: {}".format(len(to_add)))
