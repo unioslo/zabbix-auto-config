@@ -1,6 +1,7 @@
 import multiprocessing
 import logging
 import datetime
+import os.path
 import time
 import sys
 import signal
@@ -259,10 +260,9 @@ class ZabbixUpdater(multiprocessing.Process):
 
         self.api = pyzabbix.ZabbixAPI(zabbix_url)
 
-        #with open(os.path.join(map_dir, "role_map.txt")) as f:
-        #    self.role_map = [s.strip() for s in f.readlines()]
-        #with open(os.path.join(map_dir, "siteadmin_map.txt")) as f:
-        #    self.siteadmin_map = [s.strip() for s in f.readlines()]
+        self.role_template_map = utils.read_map_file(os.path.join(map_dir, "role_template_map.txt"))
+        self.role_hostgroup_map = utils.read_map_file(os.path.join(map_dir, "role_hostgroup_map.txt"))
+        self.siteadmin_hostgroup_map = utils.read_map_file(os.path.join(map_dir, "siteadmin_hostgroup_map.txt"))
 
     def run(self):
         logging.info("Process starting")
