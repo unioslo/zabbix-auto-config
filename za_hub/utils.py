@@ -26,7 +26,7 @@ def validate_host(host):
         "invertory",
         "macros",
         "roles",
-        "siteadmin",
+        "siteadmins",
         "source",
     ]
 
@@ -64,4 +64,6 @@ def validate_host(host):
             assert type(role) is str, "Found role that isn't a string"
 
     if "siteadmins" in host:
-        assert type(host["siteadmins"]) is str, "'siteadmins' is not a string"
+        assert type(host["siteadmins"]) is list, "'siteadmins' is not a list"
+        for siteadmin in host["siteadmins"]:
+            assert type(siteadmin) is str, "Found siteadmin that isn't a string"

@@ -197,7 +197,7 @@ class SourceMergerProcess(multiprocessing.Process):
                 "inventory": None, # TODO
                 "macros": None, # TODO
                 "roles": sorted(list(set(itertools.chain.from_iterable([host["roles"] for host in hosts if "roles" in host])))),
-                "siteadmins": sorted(list(set([host["siteadmins"] for host in hosts if "siteadmins" in host]))),
+                "siteadmins": sorted(list(set(itertools.chain.from_iterable([host["siteadmins"] for host in hosts if "siteadmins" in host])))),
                 "sources": sorted(list(set([host["source"] for host in hosts if "source" in host])))
             }
             return merged_host
