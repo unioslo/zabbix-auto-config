@@ -67,3 +67,27 @@ def validate_host(host):
         assert type(host["siteadmins"]) is list, "'siteadmins' is not a list"
         for siteadmin in host["siteadmins"]:
             assert type(siteadmin) is str, "Found siteadmin that isn't a string"
+
+
+def read_map_file(path):
+    _map = {}
+
+    with open(path) as f:
+        for line in [s.strip() for s in f.readlines()]:
+            if line.startswith("#") or line == "":
+                continue
+
+            try:
+                key, values = line.split(":")
+                values = [s.strip() for s in values.split(",")]
+                key = key.strip()
+            except ValueError:
+                logging.warning("Unable to read line in map file: '{line}'")
+                continue
+
+            if key in _map:
+                _map[key].extend(values)
+            else:
+                _map[key] = values
+
+    return _map
