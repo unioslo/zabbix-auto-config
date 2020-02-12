@@ -292,7 +292,7 @@ class ZabbixUpdater(multiprocessing.Process):
 
             self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
 
-            self.update_zabbix()
+            self.work()
 
             logging.info(f"Zabbix update done. Next update {self.next_update.isoformat()}")
 
@@ -300,8 +300,13 @@ class ZabbixUpdater(multiprocessing.Process):
 
         logging.info("Process exiting")
 
+    def work(self):
+        pass
+
+class ZabbixHostUpdater(ZabbixUpdater):
+
     @utils.handle_database_error
-    def update_zabbix(self):
+    def work(self):
         db_hosts = list(self.mongo_collection_hosts.find({"enabled": True}, projection={'_id': False}))
         zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host", "status", "flags"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
 
