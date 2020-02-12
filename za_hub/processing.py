@@ -314,19 +314,15 @@ class ZabbixHostUpdater(ZabbixUpdater):
             logging.info("DRYRUN: Disabling host: '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
 
     def enable_host(self, hostname, dryrun=True):
-        """
-        . create / enable
-        . add templates
-        . add groups
-        """
         if not dryrun:
+            hostgroup_id = self.api.hostgroup.get(filter={"name": "All-hosts"})[0]["groupid"]
+
             hosts = self.api.host.get(filter={"name": hostname})
             if hosts:
                 host = hosts[0]
-                self.api.host.update(hostid=host["hostid"], status=0)
+                self.api.host.update(hostid=host["hostid"], status=0, groups=[{"groupid": hostgroup_id}])
                 logging.info("Enabling old host: '{}' ({})".format(host["hostname"], host["hostid"]))
             else:
-                hostgroup_id = self.api.hostgroup.get(filter={"name": "All-hosts"})[0]["groupid"]
                 interface = {
                     "dns": hostname,
                     "ip": "",
