@@ -308,15 +308,27 @@ class ZabbixHostUpdater(ZabbixUpdater):
     @utils.handle_database_error
     def work(self):
         db_hosts = list(self.mongo_collection_hosts.find({"enabled": True}, projection={'_id': False}))
+        # status:0 = monitored, flags:0 = non-discovered host
         zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host", "status", "flags"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
+        zabbix_managed_hosts = []
+        zabbix_manual_hosts = []
+
+        for host in zabbix_hosts:
+            hostgroup_names = [group["name"] for group in host["groups"]]
+            if "All-manual-hosts" in hostgroup_names:
+                zabbix_manual_hosts.append(host)
+            else:
+                zabbix_managed_hosts.append(host)
+
 
         db_hostnames = set([host["hostname"] for host in db_hosts])
-        zabbix_hostnames = set([host["host"] for host in zabbix_hosts])
+        zabbix_hostnames = set([host["host"] for host in zabbix_managed_hosts])
 
         to_remove = zabbix_hostnames - db_hostnames
         to_add = db_hostnames - zabbix_hostnames
         in_both = db_hostnames.intersection(zabbix_hostnames)
 
+        logging.info("Manual in zabbix: {}".format(len(zabbix_manual_hosts)))
         logging.info("Only in zabbix: {}".format(len(to_remove)))
         logging.info("Only in zabbix: {}".format(" ".join(list(to_remove)[:10])))
         logging.info("Only in db: {}".format(len(to_add)))
