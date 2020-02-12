@@ -305,6 +305,41 @@ class ZabbixUpdater(multiprocessing.Process):
 
 class ZabbixHostUpdater(ZabbixUpdater):
 
+    def disable_host(self, zabbix_host, dryrun=True):
+        if not dryrun:
+            manual_hostgroup_id = self.api.hostgroup.get(filter={"name": "All-manual-hosts"})[0]["groupid"]
+            self.api.host.update(hostid=zabbix_host["hostid"], status=1, templates=[], groups=[{"groupid": manual_hostgroup_id}])
+            logging.info("Disabling host: '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
+        else:
+            logging.info("DRYRUN: Disabling host: '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
+
+    def enable_host(self, hostname, dryrun=True):
+        """
+        . create / enable
+        . add templates
+        . add groups
+        """
+        if not dryrun:
+            hosts = self.api.host.get(filter={"name": hostname})
+            if hosts:
+                host = hosts[0]
+                self.api.host.update(hostid=host["hostid"], status=0)
+                logging.info("Enabling old host: '{}' ({})".format(host["hostname"], host["hostid"]))
+            else:
+                hostgroup_id = self.api.hostgroup.get(filter={"name": "All-hosts"})[0]["groupid"]
+                interface = {
+                    "dns": hostname,
+                    "ip": "",
+                    "useip": 0,
+                    "type": 1,
+                    "port": 10050,
+                    "main": 1
+                }
+                result = self.api.host.create(host=hostname, status=0, groups=[{"groupid": hostgroup_id}], interfaces=[interface])
+                logging.info("Enabling new host: '{}' ({})".format(host["hostname"], result["hostids"][0]))
+        else:
+            logging.info("DRYRUN: Enabling host: '{}'".format(hostname))
+
     @utils.handle_database_error
     def work(self):
         db_hosts = list(self.mongo_collection_hosts.find({"enabled": True}, projection={'_id': False}))
@@ -324,17 +359,23 @@ class ZabbixHostUpdater(ZabbixUpdater):
         db_hostnames = set([host["hostname"] for host in db_hosts])
         zabbix_hostnames = set([host["host"] for host in zabbix_managed_hosts])
 
-        to_remove = zabbix_hostnames - db_hostnames
-        to_add = db_hostnames - zabbix_hostnames
-        in_both = db_hostnames.intersection(zabbix_hostnames)
+        hostnames_to_remove = list(zabbix_hostnames - db_hostnames)
+        hostnames_to_add = list(db_hostnames - zabbix_hostnames)
+        hostnames_in_both = list(db_hostnames.intersection(zabbix_hostnames))
 
         logging.info("Manual in zabbix: {}".format(len(zabbix_manual_hosts)))
-        logging.info("Only in zabbix: {}".format(len(to_remove)))
-        logging.info("Only in zabbix: {}".format(" ".join(list(to_remove)[:10])))
-        logging.info("Only in db: {}".format(len(to_add)))
-        logging.info("Only in db: {}".format(" ".join(list(to_add)[:10])))
-        logging.info("In both: {}".format(len(in_both)))
+        logging.info("Only in zabbix: {}".format(len(hostnames_to_remove)))
+        logging.info("Only in zabbix: {}".format(" ".join(hostnames_to_remove[:10])))
+        logging.info("Only in db: {}".format(len(hostnames_to_add)))
+        logging.info("Only in db: {}".format(" ".join(hostnames_to_add[:10])))
+        logging.info("In both: {}".format(len(hostnames_in_both)))
 
+        for hostname in hostnames_to_remove:
+            zabbix_host = [host for host in zabbix_managed_hosts if hostname == host["host"]][0]
+            self.disable_host(zabbix_host)
+
+        for hostname in hostnames_to_add:
+            self.enable_host(hostname)
 
 class ProcessTerminator():
     def __init__(self, stop_event):
