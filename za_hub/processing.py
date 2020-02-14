@@ -373,6 +373,45 @@ class ZabbixHostUpdater(ZabbixUpdater):
         for hostname in hostnames_to_add:
             self.enable_host(hostname)
 
+class ZabbixTemplateUpdater(ZabbixUpdater):
+
+    @utils.handle_database_error
+    def work(self):
+        managed_template_names = set(itertools.chain.from_iterable(self.role_template_map.values()))
+        zabbix_template_names = set([template["host"] for template in self.api.template.get(output=["host", "templateid"])])
+        managed_template_names = managed_template_names.intersection(zabbix_template_names)  # If the template isn't in zabbix we can't manage it
+        db_hosts = list(self.mongo_collection_hosts.find({"enabled": True}, projection={'_id': False}))
+        zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
+
+        for zabbix_host in zabbix_hosts:
+            db_host = [host for host in db_hosts if host["hostname"] == zabbix_host["host"]]
+            if not db_host:
+                logging.debug("Host is unknown in the database. It's probably going to be deleted: '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
+                continue
+            else:
+                db_host = db_host[0]
+
+            if "All-manual-hosts" not in [group["name"] for group in zabbix_host["groups"]]:
+                synced_template_names = set()
+                for role in db_host["roles"]:
+                    if role in self.role_template_map:
+                        synced_template_names.update(self.role_template_map[role])
+                synced_template_names = synced_template_names.intersection(zabbix_template_names)  # If the template isn't in zabbix we can't manage it
+
+                host_template_names = [template["host"] for template in zabbix_host["parentTemplates"]]
+
+                for template_name in host_template_names:
+                    if template_name in managed_template_names and template_name not in synced_template_names:
+                        # Remove template from host
+                        logging.info("Removing template '{}' from host '{}'.".format(template_name, zabbix_host["host"]))
+                        # TODO: Remove
+                for template_name in synced_template_names:
+                    if template_name not in host_template_names:
+                        # Add template
+                        logging.info("Adding template '{}' to host '{}'.".format(template_name, zabbix_host["host"]))
+                        logging.info(host_template_names)
+                        # TODO: Add
+
 class ProcessTerminator():
     def __init__(self, stop_event):
         self.stop_event = stop_event
