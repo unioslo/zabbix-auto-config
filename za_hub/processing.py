@@ -332,7 +332,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                     "main": 1
                 }
                 result = self.api.host.create(host=hostname, status=0, groups=[{"groupid": hostgroup_id}], interfaces=[interface])
-                logging.info("Enabling new host: '{}' ({})".format(host["hostname"], result["hostids"][0]))
+                logging.info("Enabling new host: '{}' ({})".format(hostname, result["hostids"][0]))
         else:
             logging.info("DRYRUN: Enabling host: '{}'".format(hostname))
 
