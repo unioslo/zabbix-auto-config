@@ -84,6 +84,10 @@ def main():
     process.start()
     processes.append(process)
 
+    process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"])
+    process.start()
+    processes.append(process)
+
     process = processing.ZabbixTemplateUpdater("zabbix-template-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"])
     process.start()
     processes.append(process)
