@@ -116,6 +116,7 @@ def main():
             time.sleep(1)
 
         for process in processes:
+            logging.debug("Queues: {}".format(", ".join([str(queue.qsize()) for queue in source_hosts_queues])))
             logging.info(f"Waiting for: {process.name}({process.pid})")
             process.join()
 
