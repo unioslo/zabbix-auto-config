@@ -414,12 +414,27 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
 
 class ZabbixHostgroupUpdater(ZabbixUpdater):
 
+    def set_hostgroups(self, hostgroups, host, dryrun=True):
+        logging.debug("Setting hostgroups on host: '{}'".format(host["host"]))
+        if not dryrun:
+            self.api.host.update(hostid=host["hostid"], groups=hostgroups)
+
+    def create_hostgroup(self, hostgroup_name, dryrun=True):
+        if not dryrun:
+            result = self.api.hostgroup.create(name=hostgroup_name)
+            return result["groupids"][0]
+        else:
+            return "-1"
+
     @utils.handle_database_error
     def work(self):
         managed_hostgroup_names = set(itertools.chain.from_iterable(self.role_hostgroup_map.values()))
         managed_hostgroup_names.union(set(itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values())))
-        zabbix_hostgroup_names = [hostgroup["name"] for hostgroup in self.api.hostgroup.get(output=["name", "groupid"])]
-        #managed_hostgroup_names.union([hostgroup_name for hostgroup_name in zabbix_hostgroup_names if hostgroup_name.startswith("Source-")])
+        zabbix_hostgroups = {}
+        for zabbix_hostgroup in self.api.hostgroup.get(output=["name", "groupid"]):
+            zabbix_hostgroups[zabbix_hostgroup["name"]] = zabbix_hostgroup["groupid"]
+            if zabbix_hostgroup["name"].startswith("Source-"):
+                managed_hostgroup_names.add(zabbix_hostgroup["name"])
         managed_hostgroup_names.update(["All-hosts"])
 
         db_hosts = list(self.mongo_collection_hosts.find({"enabled": True}, projection={'_id': False}))
@@ -441,24 +456,32 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 for siteadmin in db_host["siteadmins"]:
                     if siteadmin in self.siteadmin_hostgroup_map:
                         synced_hostgroup_names.update(self.siteadmin_hostgroup_map[siteadmin])
-                #for source in db_host["sources"]:
-                #    synced_hostgroup_names.update(f"Source-{source}")
+                for source in db_host["sources"]:
+                    synced_hostgroup_names.add(f"Source-{source}")
 
-                #synced_hostgroup_names = synced_hostgroup_names.intersection(zabbix_hostgroup_names)  # If the hostgroup isn't in zabbix we can't manage it
-                # TODO: Just add the hostgroup?
+                host_hostgroups = {}
+                for zabbix_hostgroup in zabbix_host["groups"]:
+                    host_hostgroups[zabbix_hostgroup["name"]] = zabbix_hostgroup["groupid"]
 
-                host_hostgroup_names = [group["name"] for group in zabbix_host["groups"]]
+                old_host_hostgroups = host_hostgroups.copy()
 
-                for hostgroup_name in host_hostgroup_names:
+                for hostgroup_name in list(host_hostgroups.keys()):
                     if hostgroup_name in managed_hostgroup_names and hostgroup_name not in synced_hostgroup_names:
-                        # Remove hostgroup from host
-                        logging.info("Removing hostgroup '{}' from host '{}'.".format(hostgroup_name, zabbix_host["host"]))
-                        # TODO: Remove
+                        logging.info("Going to remove hostgroup '{}' from host '{}'.".format(hostgroup_name, zabbix_host["host"]))
+                        del host_hostgroups[hostgroup_name]
                 for hostgroup_name in synced_hostgroup_names:
-                    if hostgroup_name not in host_hostgroup_names:
-                        # Add template
-                        logging.info("Adding hostgroup '{}' to host '{}'.".format(hostgroup_name, zabbix_host["host"]))
-                        # TODO: Add
+                    if hostgroup_name not in host_hostgroups.keys():
+                        logging.info("Going to add hostgroup '{}' to host '{}'.".format(hostgroup_name, zabbix_host["host"]))
+                        zabbix_hostgroup_id = zabbix_hostgroups.get(hostgroup_name, None)
+                        if not zabbix_hostgroup_id:
+                            # The hostgroup doesn't exist. We need to create it.
+                            zabbix_hostgroup_id = self.create_hostgroup(hostgroup_name)
+                        host_hostgroups[hostgroup_name] = zabbix_hostgroup_id
+
+                if host_hostgroups != old_host_hostgroups:
+                    logging.info("Updating hostgroups on host '{}'. Old: {}. New: {}".format(zabbix_host["host"], ", ".join(old_host_hostgroups.keys()), ", ".join(host_hostgroups.keys())))
+                    self.set_hostgroups(host_hostgroups, zabbix_host)
+
 
 class ProcessTerminator():
     def __init__(self, stop_event):
