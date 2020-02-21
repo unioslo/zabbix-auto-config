@@ -420,6 +420,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         managed_hostgroup_names.union(set(itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values())))
         zabbix_hostgroup_names = [hostgroup["name"] for hostgroup in self.api.hostgroup.get(output=["name", "groupid"])]
         #managed_hostgroup_names.union([hostgroup_name for hostgroup_name in zabbix_hostgroup_names if hostgroup_name.startswith("Source-")])
+        managed_hostgroup_names.update(["All-hosts"])
 
         db_hosts = list(self.mongo_collection_hosts.find({"enabled": True}, projection={'_id': False}))
         zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
@@ -433,7 +434,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 db_host = db_host[0]
 
             if "All-manual-hosts" not in [group["name"] for group in zabbix_host["groups"]]:
-                synced_hostgroup_names = set()
+                synced_hostgroup_names = set(["All-hosts"])
                 for role in db_host["roles"]:
                     if role in self.role_hostgroup_map:
                         synced_hostgroup_names.update(self.role_hostgroup_map[role])
