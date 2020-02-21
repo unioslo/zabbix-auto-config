@@ -321,7 +321,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             if hosts:
                 host = hosts[0]
                 self.api.host.update(hostid=host["hostid"], status=0, groups=[{"groupid": hostgroup_id}])
-                logging.info("Enabling old host: '{}' ({})".format(host["hostname"], host["hostid"]))
+                logging.info("Enabling old host: '{}' ({})".format(host["host"], host["hostid"]))
             else:
                 interface = {
                     "dns": hostname,
