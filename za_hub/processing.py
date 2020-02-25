@@ -417,7 +417,8 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
     def set_hostgroups(self, hostgroups, host, dryrun=True):
         logging.debug("Setting hostgroups on host: '{}'".format(host["host"]))
         if not dryrun:
-            self.api.host.update(hostid=host["hostid"], groups=hostgroups)
+            groups = [{"groupid": hostgroup_id} for _, hostgroup_id in hostgroups.items()]
+            self.api.host.update(hostid=host["hostid"], groups=groups)
 
     def create_hostgroup(self, hostgroup_name, dryrun=True):
         if not dryrun:
