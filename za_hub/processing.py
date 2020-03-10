@@ -375,18 +375,32 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
 class ZabbixTemplateUpdater(ZabbixUpdater):
 
+    def clear_templates(self, templates, host, dryrun=True):
+        logging.debug("Clearing templates on host: '{}'".format(host["host"]))
+        if not dryrun:
+            templates = [{"templateid": template_id} for _, template_id in templates.items()]
+            self.api.host.update(hostid=host["hostid"], templates_clear=templates)
+
+    def set_templates(self, templates, host, dryrun=True):
+        logging.debug("Setting templates on host: '{}'".format(host["host"]))
+        if not dryrun:
+            templates = [{"templateid": template_id} for _, template_id in templates.items()]
+            self.api.host.update(hostid=host["hostid"], templates=templates)
+
     @utils.handle_database_error
     def work(self):
         managed_template_names = set(itertools.chain.from_iterable(self.role_template_map.values()))
-        zabbix_template_names = set([template["host"] for template in self.api.template.get(output=["host", "templateid"])])
-        managed_template_names = managed_template_names.intersection(zabbix_template_names)  # If the template isn't in zabbix we can't manage it
+        zabbix_templates = {}
+        for zabbix_template in self.api.template.get(output=["host", "templateid"]):
+            zabbix_templates[zabbix_template["host"]] = zabbix_template["templateid"]
+        managed_template_names = managed_template_names.intersection(set(zabbix_templates.keys()))  # If the template isn't in zabbix we can't manage it
         db_hosts = list(self.mongo_collection_hosts.find({"enabled": True}, projection={'_id': False}))
         zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
 
         for zabbix_host in zabbix_hosts:
             db_host = [host for host in db_hosts if host["hostname"] == zabbix_host["host"]]
             if not db_host:
-                logging.debug("Host is unknown in the database. It's probably going to be deleted: '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
+                logging.debug("Skipping host. It is unknown in the database. It's probably going to be deleted: '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
                 continue
             else:
                 db_host = db_host[0]
@@ -396,21 +410,32 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                 for role in db_host["roles"]:
                     if role in self.role_template_map:
                         synced_template_names.update(self.role_template_map[role])
-                synced_template_names = synced_template_names.intersection(zabbix_template_names)  # If the template isn't in zabbix we can't manage it
+                synced_template_names = synced_template_names.intersection(set(zabbix_templates.keys()))  # If the template isn't in zabbix we can't manage it
 
-                host_template_names = [template["host"] for template in zabbix_host["parentTemplates"]]
+                host_templates = {}
+                for zabbix_template in zabbix_host["parentTemplates"]:
+                    host_templates[zabbix_template["host"]] = zabbix_template["templateid"]
 
-                for template_name in host_template_names:
+                old_host_templates = host_templates.copy()
+                host_templates_to_remove = {}
+
+                for template_name in list(host_templates.keys()):
                     if template_name in managed_template_names and template_name not in synced_template_names:
-                        # Remove template from host
-                        logging.info("Removing template '{}' from host '{}'.".format(template_name, zabbix_host["host"]))
-                        # TODO: Remove
+                        logging.info("Going to remove template '{}' from host '{}'.".format(template_name, zabbix_host["host"]))
+                        host_templates_to_remove[template_name] = host_templates[template_name]
+                        del host_templates[template_name]
                 for template_name in synced_template_names:
-                    if template_name not in host_template_names:
-                        # Add template
-                        logging.info("Adding template '{}' to host '{}'.".format(template_name, zabbix_host["host"]))
-                        logging.info(host_template_names)
-                        # TODO: Add
+                    if template_name not in host_templates.keys():
+                        logging.info("Going to add template '{}' to host '{}'.".format(template_name, zabbix_host["host"]))
+                        host_templates[template_name] = zabbix_templates[template_name]
+
+                if host_templates != old_host_templates:
+                    logging.info("Updating templates on host '{}'. Old: {}. New: {}".format(zabbix_host["host"], ", ".join(old_host_templates.keys()), ", ".join(host_templates.keys())))
+                    if host_templates_to_remove:
+                        self.clear_templates(host_templates_to_remove, zabbix_host)
+                    # TODO: Setting templates might not be necessary if we only removed templates. Consider refactor
+                    # TODO: Setting templates should not be performed if template clearing has failed (will lead to unlink without clear)
+                    self.set_templates(host_templates, zabbix_host)
 
 class ZabbixHostgroupUpdater(ZabbixUpdater):
 
