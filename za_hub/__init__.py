@@ -57,6 +57,7 @@ def main():
 
     logging.basicConfig(format='%(asctime)s %(levelname)s %(processName)s(%(process)d) %(name)s %(message)s', level=logging.DEBUG)
     multiprocessing_logging.install_mp_handler()
+    logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
 
     if config["za-hub"]["dryrun"] == "false":
         dryrun = False
