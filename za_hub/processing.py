@@ -308,32 +308,38 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
     def disable_host(self, zabbix_host):
         if not self.dryrun:
-            manual_hostgroup_id = self.api.hostgroup.get(filter={"name": "All-manual-hosts"})[0]["groupid"]
-            self.api.host.update(hostid=zabbix_host["hostid"], status=1, templates=[], groups=[{"groupid": manual_hostgroup_id}])
-            logging.info("Disabling host: '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
+            try:
+                manual_hostgroup_id = self.api.hostgroup.get(filter={"name": "All-manual-hosts"})[0]["groupid"]
+                self.api.host.update(hostid=zabbix_host["hostid"], status=1, templates=[], groups=[{"groupid": manual_hostgroup_id}])
+                logging.info("Disabling host: '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
+            except pyzabbix.ZabbixAPIException as e:
+                logging.error("Error when disabling host '{}' ({}): {}".format(zabbix_host["host"], zabbix_host["hostid"], e.args))
         else:
             logging.info("DRYRUN: Disabling host: '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
 
     def enable_host(self, hostname):
         if not self.dryrun:
-            hostgroup_id = self.api.hostgroup.get(filter={"name": "All-hosts"})[0]["groupid"]
+            try:
+                hostgroup_id = self.api.hostgroup.get(filter={"name": "All-hosts"})[0]["groupid"]
 
-            hosts = self.api.host.get(filter={"name": hostname})
-            if hosts:
-                host = hosts[0]
-                self.api.host.update(hostid=host["hostid"], status=0, groups=[{"groupid": hostgroup_id}])
-                logging.info("Enabling old host: '{}' ({})".format(host["host"], host["hostid"]))
-            else:
-                interface = {
-                    "dns": hostname,
-                    "ip": "",
-                    "useip": 0,
-                    "type": 1,
-                    "port": 10050,
-                    "main": 1
-                }
-                result = self.api.host.create(host=hostname, status=0, groups=[{"groupid": hostgroup_id}], interfaces=[interface])
-                logging.info("Enabling new host: '{}' ({})".format(hostname, result["hostids"][0]))
+                hosts = self.api.host.get(filter={"name": hostname})
+                if hosts:
+                    host = hosts[0]
+                    self.api.host.update(hostid=host["hostid"], status=0, groups=[{"groupid": hostgroup_id}])
+                    logging.info("Enabling old host: '{}' ({})".format(host["host"], host["hostid"]))
+                else:
+                    interface = {
+                        "dns": hostname,
+                        "ip": "",
+                        "useip": 0,
+                        "type": 1,
+                        "port": 10050,
+                        "main": 1
+                    }
+                    result = self.api.host.create(host=hostname, status=0, groups=[{"groupid": hostgroup_id}], interfaces=[interface])
+                    logging.info("Enabling new host: '{}' ({})".format(hostname, result["hostids"][0]))
+            except pyzabbix.ZabbixAPIException as e:
+                logging.error("Error when enabling/creating host '{}': {}".format(hostname, e.args))
         else:
             logging.info("DRYRUN: Enabling host: '{}'".format(hostname))
 
@@ -379,14 +385,20 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
     def clear_templates(self, templates, host):
         logging.debug("Clearing templates on host: '{}'".format(host["host"]))
         if not self.dryrun:
-            templates = [{"templateid": template_id} for _, template_id in templates.items()]
-            self.api.host.update(hostid=host["hostid"], templates_clear=templates)
+            try:
+                templates = [{"templateid": template_id} for _, template_id in templates.items()]
+                self.api.host.update(hostid=host["hostid"], templates_clear=templates)
+            except pyzabbix.ZabbixAPIException as e:
+                logging.error("Error when clearing templates on host '{}': {}".format(host["host"], e.args))
 
     def set_templates(self, templates, host):
         logging.debug("Setting templates on host: '{}'".format(host["host"]))
         if not self.dryrun:
-            templates = [{"templateid": template_id} for _, template_id in templates.items()]
-            self.api.host.update(hostid=host["hostid"], templates=templates)
+            try:
+                templates = [{"templateid": template_id} for _, template_id in templates.items()]
+                self.api.host.update(hostid=host["hostid"], templates=templates)
+            except pyzabbix.ZabbixAPIException as e:
+                logging.error("Error when setting templates on host '{}': {}".format(host["host"], e.args))
 
     @utils.handle_database_error
     def work(self):
@@ -443,13 +455,19 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
     def set_hostgroups(self, hostgroups, host):
         logging.debug("Setting hostgroups on host: '{}'".format(host["host"]))
         if not self.dryrun:
-            groups = [{"groupid": hostgroup_id} for _, hostgroup_id in hostgroups.items()]
-            self.api.host.update(hostid=host["hostid"], groups=groups)
+            try:
+                groups = [{"groupid": hostgroup_id} for _, hostgroup_id in hostgroups.items()]
+                self.api.host.update(hostid=host["hostid"], groups=groups)
+            except pyzabbix.ZabbixAPIException as e:
+                logging.error("Error when setting hostgroups on host '{}': {}".format(host["host"], e.args))
 
     def create_hostgroup(self, hostgroup_name):
         if not self.dryrun:
-            result = self.api.hostgroup.create(name=hostgroup_name)
-            return result["groupids"][0]
+            try:
+                result = self.api.hostgroup.create(name=hostgroup_name)
+                return result["groupids"][0]
+            except pyzabbix.ZabbixAPIException as e:
+                logging.error("Error when creating hostgroups '{}': {}".format(hostgroup_name, e.args))
         else:
             return "-1"
 
