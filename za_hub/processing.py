@@ -411,44 +411,47 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
 
         for zabbix_host in zabbix_hosts:
+            if "All-manual-hosts" in [group["name"] for group in zabbix_host["groups"]]:
+                logging.debug("Skipping manual host: '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
+                continue
+
             db_host = [host for host in db_hosts if host["hostname"] == zabbix_host["host"]]
             if not db_host:
-                logging.debug("Skipping host. It is unknown in the database. It's probably going to be deleted: '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
+                logging.debug("Skipping host (It is not an enabled in the database): '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
                 continue
             else:
                 db_host = db_host[0]
 
-            if "All-manual-hosts" not in [group["name"] for group in zabbix_host["groups"]]:
-                synced_template_names = set()
-                for role in db_host["roles"]:
-                    if role in self.role_template_map:
-                        synced_template_names.update(self.role_template_map[role])
-                synced_template_names = synced_template_names.intersection(set(zabbix_templates.keys()))  # If the template isn't in zabbix we can't manage it
+            synced_template_names = set()
+            for role in db_host["roles"]:
+                if role in self.role_template_map:
+                    synced_template_names.update(self.role_template_map[role])
+            synced_template_names = synced_template_names.intersection(set(zabbix_templates.keys()))  # If the template isn't in zabbix we can't manage it
 
-                host_templates = {}
-                for zabbix_template in zabbix_host["parentTemplates"]:
-                    host_templates[zabbix_template["host"]] = zabbix_template["templateid"]
+            host_templates = {}
+            for zabbix_template in zabbix_host["parentTemplates"]:
+                host_templates[zabbix_template["host"]] = zabbix_template["templateid"]
 
-                old_host_templates = host_templates.copy()
-                host_templates_to_remove = {}
+            old_host_templates = host_templates.copy()
+            host_templates_to_remove = {}
 
-                for template_name in list(host_templates.keys()):
-                    if template_name in managed_template_names and template_name not in synced_template_names:
-                        logging.info("Going to remove template '{}' from host '{}'.".format(template_name, zabbix_host["host"]))
-                        host_templates_to_remove[template_name] = host_templates[template_name]
-                        del host_templates[template_name]
-                for template_name in synced_template_names:
-                    if template_name not in host_templates.keys():
-                        logging.info("Going to add template '{}' to host '{}'.".format(template_name, zabbix_host["host"]))
-                        host_templates[template_name] = zabbix_templates[template_name]
+            for template_name in list(host_templates.keys()):
+                if template_name in managed_template_names and template_name not in synced_template_names:
+                    logging.info("Going to remove template '{}' from host '{}'.".format(template_name, zabbix_host["host"]))
+                    host_templates_to_remove[template_name] = host_templates[template_name]
+                    del host_templates[template_name]
+            for template_name in synced_template_names:
+                if template_name not in host_templates.keys():
+                    logging.info("Going to add template '{}' to host '{}'.".format(template_name, zabbix_host["host"]))
+                    host_templates[template_name] = zabbix_templates[template_name]
 
-                if host_templates != old_host_templates:
-                    logging.info("Updating templates on host '{}'. Old: {}. New: {}".format(zabbix_host["host"], ", ".join(old_host_templates.keys()), ", ".join(host_templates.keys())))
-                    if host_templates_to_remove:
-                        self.clear_templates(host_templates_to_remove, zabbix_host)
-                    # TODO: Setting templates might not be necessary if we only removed templates. Consider refactor
-                    # TODO: Setting templates should not be performed if template clearing has failed (will lead to unlink without clear)
-                    self.set_templates(host_templates, zabbix_host)
+            if host_templates != old_host_templates:
+                logging.info("Updating templates on host '{}'. Old: {}. New: {}".format(zabbix_host["host"], ", ".join(old_host_templates.keys()), ", ".join(host_templates.keys())))
+                if host_templates_to_remove:
+                    self.clear_templates(host_templates_to_remove, zabbix_host)
+                # TODO: Setting templates might not be necessary if we only removed templates. Consider refactor
+                # TODO: Setting templates should not be performed if template clearing has failed (will lead to unlink without clear)
+                self.set_templates(host_templates, zabbix_host)
 
 class ZabbixHostgroupUpdater(ZabbixUpdater):
 
@@ -486,46 +489,49 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
 
         for zabbix_host in zabbix_hosts:
+            if "All-manual-hosts" in [group["name"] for group in zabbix_host["groups"]]:
+                logging.debug("Skipping manual host: '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
+                continue
+
             db_host = [host for host in db_hosts if host["hostname"] == zabbix_host["host"]]
             if not db_host:
-                logging.debug("Skipping host. It is unknown in the database. It's probably going to be deleted: '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
+                logging.debug("Skipping host (It is not an enabled in the database): '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
                 continue
             else:
                 db_host = db_host[0]
 
-            if "All-manual-hosts" not in [group["name"] for group in zabbix_host["groups"]]:
-                synced_hostgroup_names = set(["All-hosts"])
-                for role in db_host["roles"]:
-                    if role in self.role_hostgroup_map:
-                        synced_hostgroup_names.update(self.role_hostgroup_map[role])
-                for siteadmin in db_host["siteadmins"]:
-                    if siteadmin in self.siteadmin_hostgroup_map:
-                        synced_hostgroup_names.update(self.siteadmin_hostgroup_map[siteadmin])
-                for source in db_host["sources"]:
-                    synced_hostgroup_names.add(f"Source-{source}")
+            synced_hostgroup_names = set(["All-hosts"])
+            for role in db_host["roles"]:
+                if role in self.role_hostgroup_map:
+                    synced_hostgroup_names.update(self.role_hostgroup_map[role])
+            for siteadmin in db_host["siteadmins"]:
+                if siteadmin in self.siteadmin_hostgroup_map:
+                    synced_hostgroup_names.update(self.siteadmin_hostgroup_map[siteadmin])
+            for source in db_host["sources"]:
+                synced_hostgroup_names.add(f"Source-{source}")
 
-                host_hostgroups = {}
-                for zabbix_hostgroup in zabbix_host["groups"]:
-                    host_hostgroups[zabbix_hostgroup["name"]] = zabbix_hostgroup["groupid"]
+            host_hostgroups = {}
+            for zabbix_hostgroup in zabbix_host["groups"]:
+                host_hostgroups[zabbix_hostgroup["name"]] = zabbix_hostgroup["groupid"]
 
-                old_host_hostgroups = host_hostgroups.copy()
+            old_host_hostgroups = host_hostgroups.copy()
 
-                for hostgroup_name in list(host_hostgroups.keys()):
-                    if hostgroup_name in managed_hostgroup_names and hostgroup_name not in synced_hostgroup_names:
-                        logging.info("Going to remove hostgroup '{}' from host '{}'.".format(hostgroup_name, zabbix_host["host"]))
-                        del host_hostgroups[hostgroup_name]
-                for hostgroup_name in synced_hostgroup_names:
-                    if hostgroup_name not in host_hostgroups.keys():
-                        logging.info("Going to add hostgroup '{}' to host '{}'.".format(hostgroup_name, zabbix_host["host"]))
-                        zabbix_hostgroup_id = zabbix_hostgroups.get(hostgroup_name, None)
-                        if not zabbix_hostgroup_id:
-                            # The hostgroup doesn't exist. We need to create it.
-                            zabbix_hostgroup_id = self.create_hostgroup(hostgroup_name)
-                        host_hostgroups[hostgroup_name] = zabbix_hostgroup_id
+            for hostgroup_name in list(host_hostgroups.keys()):
+                if hostgroup_name in managed_hostgroup_names and hostgroup_name not in synced_hostgroup_names:
+                    logging.info("Going to remove hostgroup '{}' from host '{}'.".format(hostgroup_name, zabbix_host["host"]))
+                    del host_hostgroups[hostgroup_name]
+            for hostgroup_name in synced_hostgroup_names:
+                if hostgroup_name not in host_hostgroups.keys():
+                    logging.info("Going to add hostgroup '{}' to host '{}'.".format(hostgroup_name, zabbix_host["host"]))
+                    zabbix_hostgroup_id = zabbix_hostgroups.get(hostgroup_name, None)
+                    if not zabbix_hostgroup_id:
+                        # The hostgroup doesn't exist. We need to create it.
+                        zabbix_hostgroup_id = self.create_hostgroup(hostgroup_name)
+                    host_hostgroups[hostgroup_name] = zabbix_hostgroup_id
 
-                if host_hostgroups != old_host_hostgroups:
-                    logging.info("Updating hostgroups on host '{}'. Old: {}. New: {}".format(zabbix_host["host"], ", ".join(old_host_hostgroups.keys()), ", ".join(host_hostgroups.keys())))
-                    self.set_hostgroups(host_hostgroups, zabbix_host)
+            if host_hostgroups != old_host_hostgroups:
+                logging.info("Updating hostgroups on host '{}'. Old: {}. New: {}".format(zabbix_host["host"], ", ".join(old_host_hostgroups.keys()), ", ".join(host_hostgroups.keys())))
+                self.set_hostgroups(host_hostgroups, zabbix_host)
 
 
 class ProcessTerminator():
