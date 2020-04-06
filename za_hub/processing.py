@@ -241,7 +241,7 @@ class SourceMergerProcess(multiprocessing.Process):
         logging.info(f"Merged sources in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
 
 class ZabbixUpdater(multiprocessing.Process):
-    def __init__(self, name, stop_event, map_dir, db_uri, zabbix_url, zabbix_username, zabbix_password):
+    def __init__(self, name, stop_event, map_dir, db_uri, zabbix_url, zabbix_username, zabbix_password, dryrun=False):
         super().__init__()
         self.name = name
         self.stop_event = stop_event
@@ -251,6 +251,7 @@ class ZabbixUpdater(multiprocessing.Process):
         self.zabbix_url = zabbix_url
         self.zabbix_username = zabbix_username
         self.zabbix_password = zabbix_password
+        self.dryrun = dryrun
 
         self.update_interval = 60
         self.next_update = None
@@ -305,16 +306,16 @@ class ZabbixUpdater(multiprocessing.Process):
 
 class ZabbixHostUpdater(ZabbixUpdater):
 
-    def disable_host(self, zabbix_host, dryrun=True):
-        if not dryrun:
+    def disable_host(self, zabbix_host):
+        if not self.dryrun:
             manual_hostgroup_id = self.api.hostgroup.get(filter={"name": "All-manual-hosts"})[0]["groupid"]
             self.api.host.update(hostid=zabbix_host["hostid"], status=1, templates=[], groups=[{"groupid": manual_hostgroup_id}])
             logging.info("Disabling host: '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
         else:
             logging.info("DRYRUN: Disabling host: '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
 
-    def enable_host(self, hostname, dryrun=True):
-        if not dryrun:
+    def enable_host(self, hostname):
+        if not self.dryrun:
             hostgroup_id = self.api.hostgroup.get(filter={"name": "All-hosts"})[0]["groupid"]
 
             hosts = self.api.host.get(filter={"name": hostname})
@@ -375,15 +376,15 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
 class ZabbixTemplateUpdater(ZabbixUpdater):
 
-    def clear_templates(self, templates, host, dryrun=True):
+    def clear_templates(self, templates, host):
         logging.debug("Clearing templates on host: '{}'".format(host["host"]))
-        if not dryrun:
+        if not self.dryrun:
             templates = [{"templateid": template_id} for _, template_id in templates.items()]
             self.api.host.update(hostid=host["hostid"], templates_clear=templates)
 
-    def set_templates(self, templates, host, dryrun=True):
+    def set_templates(self, templates, host):
         logging.debug("Setting templates on host: '{}'".format(host["host"]))
-        if not dryrun:
+        if not self.dryrun:
             templates = [{"templateid": template_id} for _, template_id in templates.items()]
             self.api.host.update(hostid=host["hostid"], templates=templates)
 
@@ -439,14 +440,14 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
 
 class ZabbixHostgroupUpdater(ZabbixUpdater):
 
-    def set_hostgroups(self, hostgroups, host, dryrun=True):
+    def set_hostgroups(self, hostgroups, host):
         logging.debug("Setting hostgroups on host: '{}'".format(host["host"]))
-        if not dryrun:
+        if not self.dryrun:
             groups = [{"groupid": hostgroup_id} for _, hostgroup_id in hostgroups.items()]
             self.api.host.update(hostid=host["hostid"], groups=groups)
 
-    def create_hostgroup(self, hostgroup_name, dryrun=True):
-        if not dryrun:
+    def create_hostgroup(self, hostgroup_name):
+        if not self.dryrun:
             result = self.api.hostgroup.create(name=hostgroup_name)
             return result["groupids"][0]
         else:

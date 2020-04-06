@@ -58,6 +58,13 @@ def main():
     logging.basicConfig(format='%(asctime)s %(levelname)s %(processName)s(%(process)d) %(message)s', level=logging.DEBUG)
     multiprocessing_logging.install_mp_handler()
 
+    if config["za-hub"]["dryrun"] == "false":
+        dryrun = False
+    elif config["za-hub"]["dryrun"] == "true":
+        dryrun = True
+    else:
+        raise Exception()
+
     logging.info(f"Main start ({os.getpid()}) version {__version__}")
 
     stop_event = multiprocessing.Event()
@@ -80,15 +87,15 @@ def main():
     process.start()
     processes.append(process)
 
-    process = processing.ZabbixHostUpdater("zabbix-host-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"])
+    process = processing.ZabbixHostUpdater("zabbix-host-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"], dryrun)
     process.start()
     processes.append(process)
 
-    process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"])
+    process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"], dryrun)
     process.start()
     processes.append(process)
 
-    process = processing.ZabbixTemplateUpdater("zabbix-template-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"])
+    process = processing.ZabbixTemplateUpdater("zabbix-template-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"], dryrun)
     process.start()
     processes.append(process)
 
