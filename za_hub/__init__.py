@@ -55,7 +55,7 @@ def get_config():
 def main():
     config = get_config()
 
-    logging.basicConfig(format='%(asctime)s %(levelname)s %(processName)s(%(process)d) %(message)s', level=logging.DEBUG)
+    logging.basicConfig(format='%(asctime)s %(levelname)s %(processName)s(%(process)d) %(name)s %(message)s', level=logging.DEBUG)
     multiprocessing_logging.install_mp_handler()
 
     if config["za-hub"]["dryrun"] == "false":
