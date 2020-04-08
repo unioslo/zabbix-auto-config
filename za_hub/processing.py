@@ -241,7 +241,7 @@ class SourceMergerProcess(multiprocessing.Process):
         logging.info(f"Merged sources in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
 
 class ZabbixUpdater(multiprocessing.Process):
-    def __init__(self, name, stop_event, map_dir, db_uri, zabbix_url, zabbix_username, zabbix_password, dryrun=False):
+    def __init__(self, name, stop_event, map_dir, db_uri, zabbix_url, zabbix_username, zabbix_password, dryrun=False, failsafe=20):
         super().__init__()
         self.name = name
         self.stop_event = stop_event
@@ -252,6 +252,7 @@ class ZabbixUpdater(multiprocessing.Process):
         self.zabbix_username = zabbix_username
         self.zabbix_password = zabbix_password
         self.dryrun = dryrun
+        self.failsafe = failsafe
 
         self.update_interval = 60
         self.next_update = None
@@ -372,6 +373,10 @@ class ZabbixHostUpdater(ZabbixUpdater):
         logging.info("Only in db: {}".format(len(hostnames_to_add)))
         logging.info("Only in db: {}".format(" ".join(hostnames_to_add[:10])))
         logging.info("In both: {}".format(len(hostnames_in_both)))
+
+        if len(hostnames_to_remove) > self.failsafe or len(hostnames_to_add) > self.failsafe:
+            logging.warning("Too many hosts to change (failsafe={}). Remove: {}, Add: {}. Aborting".format(self.failsafe, len(hostnames_to_remove), len(hostnames_to_add)))
+            return
 
         for hostname in hostnames_to_remove:
             zabbix_host = [host for host in zabbix_managed_hosts if hostname == host["host"]][0]
