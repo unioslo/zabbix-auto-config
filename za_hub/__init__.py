@@ -55,7 +55,7 @@ def get_config():
 def main():
     config = get_config()
 
-    logging.basicConfig(format='%(asctime)s %(levelname)s %(processName)s(%(process)d) %(name)s %(message)s', datefmt="%Y-%m-%dT%H:%M:%S%z", level=logging.DEBUG)
+    logging.basicConfig(format='%(asctime)s %(levelname)s [%(processName)s %(process)d] [%(name)s] %(message)s', datefmt="%Y-%m-%dT%H:%M:%S%z", level=logging.DEBUG)
     multiprocessing_logging.install_mp_handler()
     logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
 
