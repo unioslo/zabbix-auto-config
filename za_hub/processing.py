@@ -422,7 +422,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
 
             db_host = [host for host in db_hosts if host["hostname"] == zabbix_host["host"]]
             if not db_host:
-                logging.debug("Skipping host (It is not an enabled in the database): '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
+                logging.debug("Skipping host (It is not enabled in the database): '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
                 continue
             else:
                 db_host = db_host[0]
@@ -500,7 +500,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
             db_host = [host for host in db_hosts if host["hostname"] == zabbix_host["host"]]
             if not db_host:
-                logging.debug("Skipping host (It is not an enabled in the database): '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
+                logging.debug("Skipping host (It is not enabled in the database): '{}' ({})".format(zabbix_host["host"], zabbix_host["hostid"]))
                 continue
             else:
                 db_host = db_host[0]
