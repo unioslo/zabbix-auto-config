@@ -13,7 +13,9 @@ REQUIRES_PYTHON = ">=3.6.0"
 VERSION = None
 
 REQUIRED = [
-    # "requests", "maya", "records",
+    "multiprocessing-logging==0.3.1",
+    "pymongo",
+    "pyzabbix==0.7.5",
 ]
 
 EXTRAS = {
