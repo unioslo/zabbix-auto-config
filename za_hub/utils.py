@@ -25,7 +25,7 @@ def validate_host(host):
         "interfaces",
         "invertory",
         "macros",
-        "roles",
+        "properties",
         "siteadmins",
         "source",
     ]
@@ -58,10 +58,10 @@ def validate_host(host):
     if "macros" in host:
         pass  # TODO: What should macros look like?
 
-    if "roles" in host:
-        assert type(host["roles"]) is list, "'roles' is not a list"
-        for role in host["roles"]:
-            assert type(role) is str, "Found role that isn't a string"
+    if "properties" in host:
+        assert type(host["properties"]) is list, "'properties' is not a list"
+        for _property in host["properties"]:
+            assert type(_property) is str, "Found property that isn't a string"
 
     if "siteadmins" in host:
         assert type(host["siteadmins"]) is list, "'siteadmins' is not a list"

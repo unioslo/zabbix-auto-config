@@ -197,7 +197,7 @@ class SourceMergerProcess(multiprocessing.Process):
                 "interfaces": None, # TODO
                 "inventory": None, # TODO
                 "macros": None, # TODO
-                "roles": sorted(list(set(itertools.chain.from_iterable([host["roles"] for host in hosts if "roles" in host])))),
+                "properties": sorted(list(set(itertools.chain.from_iterable([host["properties"] for host in hosts if "properties" in host])))),
                 "siteadmins": sorted(list(set(itertools.chain.from_iterable([host["siteadmins"] for host in hosts if "siteadmins" in host])))),
                 "sources": sorted(list(set([host["source"] for host in hosts if "source" in host])))
             }
@@ -262,8 +262,8 @@ class ZabbixUpdater(multiprocessing.Process):
 
         self.api = pyzabbix.ZabbixAPI(zabbix_url)
 
-        self.role_template_map = utils.read_map_file(os.path.join(map_dir, "role_template_map.txt"))
-        self.role_hostgroup_map = utils.read_map_file(os.path.join(map_dir, "role_hostgroup_map.txt"))
+        self.property_template_map = utils.read_map_file(os.path.join(map_dir, "property_template_map.txt"))
+        self.property_hostgroup_map = utils.read_map_file(os.path.join(map_dir, "property_hostgroup_map.txt"))
         self.siteadmin_hostgroup_map = utils.read_map_file(os.path.join(map_dir, "siteadmin_hostgroup_map.txt"))
 
     def run(self):
@@ -407,7 +407,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
 
     @utils.handle_database_error
     def work(self):
-        managed_template_names = set(itertools.chain.from_iterable(self.role_template_map.values()))
+        managed_template_names = set(itertools.chain.from_iterable(self.property_template_map.values()))
         zabbix_templates = {}
         for zabbix_template in self.api.template.get(output=["host", "templateid"]):
             zabbix_templates[zabbix_template["host"]] = zabbix_template["templateid"]
@@ -428,9 +428,9 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                 db_host = db_host[0]
 
             synced_template_names = set()
-            for role in db_host["roles"]:
-                if role in self.role_template_map:
-                    synced_template_names.update(self.role_template_map[role])
+            for _property in db_host["properties"]:
+                if _property in self.property_template_map:
+                    synced_template_names.update(self.property_template_map[_property])
             synced_template_names = synced_template_names.intersection(set(zabbix_templates.keys()))  # If the template isn't in zabbix we can't manage it
 
             host_templates = {}
@@ -481,7 +481,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
     @utils.handle_database_error
     def work(self):
-        managed_hostgroup_names = set(itertools.chain.from_iterable(self.role_hostgroup_map.values()))
+        managed_hostgroup_names = set(itertools.chain.from_iterable(self.property_hostgroup_map.values()))
         managed_hostgroup_names.union(set(itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values())))
         zabbix_hostgroups = {}
         for zabbix_hostgroup in self.api.hostgroup.get(output=["name", "groupid"]):
@@ -506,9 +506,9 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 db_host = db_host[0]
 
             synced_hostgroup_names = set(["All-hosts"])
-            for role in db_host["roles"]:
-                if role in self.role_hostgroup_map:
-                    synced_hostgroup_names.update(self.role_hostgroup_map[role])
+            for _property in db_host["properties"]:
+                if _property in self.property_hostgroup_map:
+                    synced_hostgroup_names.update(self.property_hostgroup_map[_property])
             for siteadmin in db_host["siteadmins"]:
                 if siteadmin in self.siteadmin_hostgroup_map:
                     synced_hostgroup_names.update(self.siteadmin_hostgroup_map[siteadmin])
