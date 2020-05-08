@@ -66,6 +66,8 @@ def main():
     else:
         raise Exception()
 
+    failsafe = int(config["za-hub"]["failsafe"])
+
     logging.info(f"Main start ({os.getpid()}) version {__version__}")
 
     stop_event = multiprocessing.Event()
@@ -88,15 +90,15 @@ def main():
     process.start()
     processes.append(process)
 
-    process = processing.ZabbixHostUpdater("zabbix-host-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"], dryrun)
+    process = processing.ZabbixHostUpdater("zabbix-host-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"], dryrun, failsafe)
     process.start()
     processes.append(process)
 
-    process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"], dryrun)
+    process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"], dryrun, failsafe)
     process.start()
     processes.append(process)
 
-    process = processing.ZabbixTemplateUpdater("zabbix-template-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"], dryrun)
+    process = processing.ZabbixTemplateUpdater("zabbix-template-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"], dryrun, failsafe)
     process.start()
     processes.append(process)
 
