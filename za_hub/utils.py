@@ -1,5 +1,4 @@
 import logging
-import sys
 
 
 def validate_host(host):
@@ -17,7 +16,7 @@ def validate_host(host):
         "source",
     ]
 
-    assert type(host) is dict, "Host is not a dictionary"
+    assert isinstance(host, dict), "Host is not a dictionary"
 
     extra_keys = set(host.keys()) - set(known_keys)
     assert len(extra_keys) == 0, f"Host has extra unknown keys: {', '.join(extra_keys)}"
@@ -25,16 +24,16 @@ def validate_host(host):
     # Host must have these keys
 
     assert "enabled" in host, "'enabled' missing from host"
-    assert type(host["enabled"]) is bool, "'enabled' is not a bool"
+    assert isinstance(host["enabled"], bool), "'enabled' is not a bool"
     assert "hostname" in host, "'hostname' missing from host"
-    assert type(host["hostname"]) is str, "'hostname' is not a string"
+    assert isinstance(host["hostname"], str), "'hostname' is not a string"
     assert "source" in host, "'source' missing from host"
-    assert type(host["source"]) is str, "'source' is not a string"
+    assert isinstance(host["source"], str), "'source' is not a string"
 
     # Host may have these keys
 
     if "importance" in host:
-        assert type(host["importance"]) is int, "'importance' is not an integer"
+        assert isinstance(host["importance"], int), "'importance' is not an integer"
 
     if "interfaces" in host:
         pass  # TODO: What should interfaces look like?
@@ -46,14 +45,14 @@ def validate_host(host):
         pass  # TODO: What should macros look like?
 
     if "properties" in host:
-        assert type(host["properties"]) is list, "'properties' is not a list"
+        assert isinstance(host["properties"], list), "'properties' is not a list"
         for _property in host["properties"]:
-            assert type(_property) is str, "Found property that isn't a string"
+            assert isinstance(_property, str), "Found property that isn't a string"
 
     if "siteadmins" in host:
-        assert type(host["siteadmins"]) is list, "'siteadmins' is not a list"
+        assert isinstance(host["siteadmins"], list), "'siteadmins' is not a list"
         for siteadmin in host["siteadmins"]:
-            assert type(siteadmin) is str, "Found siteadmin that isn't a string"
+            assert isinstance(siteadmin, str), "Found siteadmin that isn't a string"
 
 
 def read_map_file(path):

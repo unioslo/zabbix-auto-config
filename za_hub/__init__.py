@@ -29,7 +29,7 @@ def get_source_collectors(config):
         try:
             module = importlib.import_module(source_collector_name)
         except ModuleNotFoundError:
-            logging.error("Unable to find source collector named '{}' in '{}'".format(source_collector_name, source_collector_dir))
+            logging.error("Unable to find source collector named '%s' in '%s'", source_collector_name, source_collector_dir)
             continue
 
         source_collector = {
@@ -68,7 +68,7 @@ def main():
     else:
         raise Exception()
 
-    logging.info(f"Main start ({os.getpid()}) version {__version__}")
+    logging.info("Main start (%d) version %s", os.getpid(), __version__)
 
     stop_event = multiprocessing.Event()
     processes = []
@@ -114,20 +114,20 @@ def main():
                     process_name = process.name
                     process_status = "alive" if process.is_alive() else "dead"
                     process_statuses.append(f"{process_name} is {process_status}")
-                logging.info(f"Process status: {', '.join(process_statuses)}")
+                logging.info("Process status: %s", ', '.join(process_statuses))
 
                 next_status = datetime.datetime.now() + datetime.timedelta(seconds=status_interval)
 
             dead_process_names = [process.name for process in processes if not process.is_alive()]
             if dead_process_names:
-                logging.error(f"A child has died: {', '.join(dead_process_names)}. Exiting")
+                logging.error("A child has died: %s. Exiting", ', '.join(dead_process_names))
                 stop_event.set()
 
             time.sleep(1)
 
         for process in processes:
-            logging.debug("Queues: {}".format(", ".join([str(queue.qsize()) for queue in source_hosts_queues])))
-            logging.info(f"Waiting for: {process.name}({process.pid})")
+            logging.debug("Queues: %s", ", ".join([str(queue.qsize()) for queue in source_hosts_queues]))
+            logging.info("Waiting for: %s(%d)", process.name, process.pid)
             process.join()
 
     logging.info("Main exit")
