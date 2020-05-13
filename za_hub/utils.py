@@ -1,19 +1,6 @@
 import logging
 import sys
 
-import pymongo
-
-
-def handle_database_error(func):
-    def wrap(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except pymongo.errors.ServerSelectionTimeoutError:
-            logging.error("Unable to execute database query")
-            sys.exit(1)
-
-    return wrap
-
 
 def validate_host(host):
     # Host cannot have any other keys than these

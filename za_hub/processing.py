@@ -1,6 +1,7 @@
 import multiprocessing
 import logging
 import datetime
+import json
 import os.path
 import time
 import sys
@@ -8,7 +9,7 @@ import signal
 import itertools
 import queue
 
-import pymongo
+import psycopg2
 import pyzabbix
 
 from . import utils
@@ -75,21 +76,19 @@ class SourceHandlerProcess(multiprocessing.Process):
         self.stop_event = stop_event
 
         self.db_uri = db_uri
+        self.db_source_table = "hosts_source"
         self.source_hosts_queues = source_hosts_queues
 
     def run(self):
         logging.info("Process starting")
 
         try:
-            self.mongo_client = pymongo.MongoClient(self.db_uri)
-            self.mongo_client.admin.command('ismaster')  # Test connection
-        except pymongo.errors.ServerSelectionTimeoutError:
+            self.db_connection = psycopg2.connect(self.db_uri)
+            # TODO: Test connection? Cursor?
+        except psycopg2.OperationalError:
             logging.error("Unable to connect to database. Process exiting with error")
             sys.exit(1)
         
-        self.db = self.mongo_client.get_default_database()
-        self.mongo_collection_hosts_source = self.db["hosts_source"]
-
         while not self.stop_event.is_set():
             for source_hosts_queue in self.source_hosts_queues:
                 try:
@@ -103,7 +102,6 @@ class SourceHandlerProcess(multiprocessing.Process):
 
         logging.info("Process exiting")
 
-    @utils.handle_database_error
     def handle_source_hosts(self, source_hosts):
         source = source_hosts["source"]
         hosts = source_hosts["hosts"]
@@ -111,31 +109,38 @@ class SourceHandlerProcess(multiprocessing.Process):
         start_time = time.time()
         equal_hosts, replaced_hosts, inserted_hosts, removed_hosts = (0, 0, 0, 0)
 
-        source_hostnames = [host["hostname"] for host in hosts]
-        current_hostnames = self.mongo_collection_hosts_source.distinct("hostname", {"source": source})
+        source_hostnames = {host["hostname"] for host in hosts}
+        with self.db_connection.cursor() as db_cursor:
+            db_cursor.execute(f"SELECT DISTINCT data->>'hostname' FROM {self.db_source_table} WHERE data->>'source' = %s", [source])
+            current_hostnames = {t[0] for t in db_cursor.fetchall()}
 
-        removed_hostnames = set(current_hostnames) - set(source_hostnames)
-        for removed_hostname in removed_hostnames:
-            current_hostnames = self.mongo_collection_hosts_source.delete_one({"hostname": removed_hostname, "source": source})
-            removed_hosts += 1
+        removed_hostnames = current_hostnames - source_hostnames
+        with self.db_connection.cursor() as db_cursor:
+            for removed_hostname in removed_hostnames:
+                db_cursor.execute(f"DELETE FROM {self.db_source_table} WHERE data->>'hostname' = %s AND data->>'source' = %s", [removed_hostname, source])
+                removed_hosts += 1
+            self.db_connection.commit()
 
         for host in hosts:
-            mongo_filter = {
-                "hostname": host["hostname"],
-                "source": source
-            }
-            current_host = self.mongo_collection_hosts_source.find_one(mongo_filter, projection={'_id': False})
+            with self.db_connection.cursor() as db_cursor:
+                db_cursor.execute(f"SELECT data FROM {self.db_source_table} WHERE data->>'hostname' = %s AND data->>'source' = %s", [host["hostname"], source])
+                result = db_cursor.fetchall()
+                current_host = result[0][0] if result else None
             
             if current_host:
                 if current_host == host:
                     equal_hosts += 1
                 else:
                     #logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
-                    self.mongo_collection_hosts_source.replace_one(mongo_filter, host)
+                    with self.db_connection.cursor() as db_cursor:
+                        db_cursor.execute(f"UPDATE {self.db_source_table} SET data = %s WHERE data->>'hostname' = %s AND data->>'source' = %s", [json.dumps(host), host["hostname"], source])
+                        self.db_connection.commit()
                     replaced_hosts += 1
             else:
                 #logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
-                self.mongo_collection_hosts_source.insert_one(host)
+                with self.db_connection.cursor() as db_cursor:
+                    db_cursor.execute(f"INSERT INTO {self.db_source_table} (data) VALUES (%s)", [json.dumps(host)])
+                    self.db_connection.commit()
                 inserted_hosts += 1
 
         logging.info(f"Handled hosts from source <{source}> in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
@@ -147,6 +152,8 @@ class SourceMergerProcess(multiprocessing.Process):
         self.stop_event = stop_event
 
         self.db_uri = db_uri
+        self.db_source_table = "hosts_source"
+        self.db_hosts_table = "hosts"
 
         self.update_interval = 60
         self.next_update = None
@@ -154,18 +161,13 @@ class SourceMergerProcess(multiprocessing.Process):
     def run(self):
         logging.info("Process starting")
 
-        self.mongo_client = pymongo.MongoClient(self.db_uri)
-
         try:
-            self.mongo_client.admin.command('ismaster')  # Test connection
-        except pymongo.errors.ServerSelectionTimeoutError:
+            self.db_connection = psycopg2.connect(self.db_uri)
+            # TODO: Test connection? Cursor?
+        except psycopg2.OperationalError:
             logging.error("Unable to connect to database. Process exiting with error")
             sys.exit(1)
         
-        self.mongo_db = self.mongo_client.get_default_database()
-        self.mongo_collection_hosts_source = self.mongo_db["hosts_source"]
-        self.mongo_collection_hosts = self.mongo_db["hosts"]
-
         while not self.stop_event.is_set():
             if self.next_update and self.next_update > datetime.datetime.now():
                 #logging.debug(f"Waiting for next update {self.next_update.isoformat()}")
@@ -178,13 +180,12 @@ class SourceMergerProcess(multiprocessing.Process):
 
             logging.info(f"Merge done. Next update {self.next_update.isoformat()}")
 
-        self.mongo_client.close()
-
         logging.info("Process exiting")
 
-    @utils.handle_database_error
     def merge_hosts(self, hostname):
-        hosts = list(self.mongo_collection_hosts_source.find({"hostname": hostname}, projection={'_id': False}))
+        with self.db_connection.cursor() as db_cursor:
+            db_cursor.execute(f"SELECT data FROM {self.db_source_table} WHERE data->>'hostname' = %s", [hostname])
+            hosts = [t[0] for t in db_cursor.fetchall()]
 
         if len(hosts) == 0:
             # Host not found. TODO: Raise error?
@@ -203,18 +204,22 @@ class SourceMergerProcess(multiprocessing.Process):
             }
             return merged_host
 
-    @utils.handle_database_error
     def merge_sources(self):
         start_time = time.time()
         equal_hosts, replaced_hosts, inserted_hosts, removed_hosts = (0, 0, 0, 0)
 
-        source_hostnames = self.mongo_collection_hosts_source.distinct("hostname")
-        current_hostnames = self.mongo_collection_hosts.distinct("hostname")
+        with self.db_connection.cursor() as db_cursor:
+            db_cursor.execute(f"SELECT DISTINCT data->>'hostname' FROM {self.db_source_table}")
+            source_hostnames = {t[0] for t in db_cursor.fetchall()}
+            db_cursor.execute(f"SELECT DISTINCT data->>'hostname' FROM {self.db_hosts_table}")
+            current_hostnames = {t[0] for t in db_cursor.fetchall()}
 
-        removed_hostnames = set(current_hostnames) - set(source_hostnames)
-        for removed_hostname in removed_hostnames:
-            current_hostnames = self.mongo_collection_hosts.delete_one({"hostname": removed_hostname})
-            removed_hosts += 1
+        removed_hostnames = current_hostnames - source_hostnames
+        with self.db_connection.cursor() as db_cursor:
+            for removed_hostname in removed_hostnames:
+                db_cursor.execute(f"DELETE FROM {self.db_hosts_table} WHERE data->>'hostname' = %s", [removed_hostname])
+                self.db_connection.commit()
+                removed_hosts += 1
         
         for hostname in source_hostnames:
             host = self.merge_hosts(hostname)
@@ -224,19 +229,26 @@ class SourceMergerProcess(multiprocessing.Process):
 
             # TODO: Pass host through modifiers here
 
-            current_host = self.mongo_collection_hosts.find_one({"hostname": hostname}, projection={'_id': False})
-            
+            with self.db_connection.cursor() as db_cursor:
+                db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'hostname' = %s", [hostname])
+                result = db_cursor.fetchall()
+                current_host = result[0][0] if result else None
+
             if current_host:
                 if current_host == host:
                     equal_hosts += 1
                 else:
                     #logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
-                    self.mongo_collection_hosts.replace_one({"hostname": hostname}, host)
-                    replaced_hosts += 1
+                    with self.db_connection.cursor() as db_cursor:
+                        db_cursor.execute(f"UPDATE {self.db_hosts_table} SET data = %s WHERE data->>'hostname' = %s", [json.dumps(host),hostname])
+                        self.db_connection.commit()
+                        replaced_hosts += 1
             else:
                 #logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
-                self.mongo_collection_hosts.insert_one(host)
-                inserted_hosts += 1
+                with self.db_connection.cursor() as db_cursor:
+                    db_cursor.execute(f"INSERT INTO {self.db_hosts_table} (data) VALUES (%s)", [json.dumps(host)])
+                    self.db_connection.commit()
+                    inserted_hosts += 1
 
         logging.info(f"Merged sources in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
 
@@ -248,6 +260,7 @@ class ZabbixUpdater(multiprocessing.Process):
 
         self.map_dir = map_dir
         self.db_uri = db_uri
+        self.db_hosts_table = "hosts"
         self.zabbix_url = zabbix_url
         self.zabbix_username = zabbix_username
         self.zabbix_password = zabbix_password
@@ -275,16 +288,12 @@ class ZabbixUpdater(multiprocessing.Process):
             logging.error("Unable to login to Zabbix API: %s", str(e))
             sys.exit(1)
 
-        self.mongo_client = pymongo.MongoClient(self.db_uri)
-
         try:
-            self.mongo_client.admin.command('ismaster')  # Test connection
-        except pymongo.errors.ServerSelectionTimeoutError:
+            self.db_connection = psycopg2.connect(self.db_uri)
+            # TODO: Test connection? Cursor?
+        except psycopg2.OperationalError:
             logging.error("Unable to connect to database. Process exiting with error")
             sys.exit(1)
-
-        self.mongo_db = self.mongo_client.get_default_database()
-        self.mongo_collection_hosts = self.mongo_db["hosts"]
 
         while not self.stop_event.is_set():
             if self.next_update and self.next_update > datetime.datetime.now():
@@ -297,8 +306,6 @@ class ZabbixUpdater(multiprocessing.Process):
             self.work()
 
             logging.info(f"Zabbix update done. Next update {self.next_update.isoformat()}")
-
-        self.mongo_client.close()
 
         logging.info("Process exiting")
 
@@ -344,9 +351,10 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             logging.info("DRYRUN: Enabling host: '{}'".format(hostname))
 
-    @utils.handle_database_error
     def work(self):
-        db_hosts = list(self.mongo_collection_hosts.find({"enabled": True}, projection={'_id': False}))
+        with self.db_connection.cursor() as db_cursor:
+            db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
+            db_hosts = [t[0] for t in db_cursor.fetchall()]
         # status:0 = monitored, flags:0 = non-discovered host
         zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host", "status", "flags"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
         zabbix_managed_hosts = []
@@ -405,14 +413,15 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
             except pyzabbix.ZabbixAPIException as e:
                 logging.error("Error when setting templates on host '{}': {}".format(host["host"], e.args))
 
-    @utils.handle_database_error
     def work(self):
         managed_template_names = set(itertools.chain.from_iterable(self.property_template_map.values()))
         zabbix_templates = {}
         for zabbix_template in self.api.template.get(output=["host", "templateid"]):
             zabbix_templates[zabbix_template["host"]] = zabbix_template["templateid"]
         managed_template_names = managed_template_names.intersection(set(zabbix_templates.keys()))  # If the template isn't in zabbix we can't manage it
-        db_hosts = list(self.mongo_collection_hosts.find({"enabled": True}, projection={'_id': False}))
+        with self.db_connection.cursor() as db_cursor:
+            db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
+            db_hosts = [t[0] for t in db_cursor.fetchall()]
         zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
 
         for zabbix_host in zabbix_hosts:
@@ -479,7 +488,6 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         else:
             return "-1"
 
-    @utils.handle_database_error
     def work(self):
         managed_hostgroup_names = set(itertools.chain.from_iterable(self.property_hostgroup_map.values()))
         managed_hostgroup_names.union(set(itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values())))
@@ -490,7 +498,9 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 managed_hostgroup_names.add(zabbix_hostgroup["name"])
         managed_hostgroup_names.update(["All-hosts"])
 
-        db_hosts = list(self.mongo_collection_hosts.find({"enabled": True}, projection={'_id': False}))
+        with self.db_connection.cursor() as db_cursor:
+            db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
+            db_hosts = [t[0] for t in db_cursor.fetchall()]
         zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
 
         for zabbix_host in zabbix_hosts:

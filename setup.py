@@ -14,7 +14,7 @@ VERSION = None
 
 REQUIRED = [
     "multiprocessing-logging==0.3.1",
-    "pymongo",
+    "psycopg2",
     "pyzabbix==0.7.5",
 ]
 
