@@ -15,13 +15,15 @@ import pyzabbix
 from . import utils
 
 class SourceCollectorProcess(multiprocessing.Process):
-    def __init__(self, name, module, update_interval, source_hosts_queue, stop_event):
+    def __init__(self, name, module, config, source_hosts_queue, stop_event):
         super().__init__() 
         self.name = name
         self.module = module
-        self.update_interval = update_interval
+        self.config = config
         self.source_hosts_queue = source_hosts_queue
         self.stop_event = stop_event
+
+        self.update_interval = int(self.config["update_interval"])
 
         self.next_update = None
 
@@ -39,7 +41,7 @@ class SourceCollectorProcess(multiprocessing.Process):
             start_time = time.time()
 
             try:
-                hosts = self.module.collect()
+                hosts = self.module.collect(**self.config)
                 assert type(hosts) is list, "Collect module did not return a list"
             except (AssertionError, Exception) as e:
                 logging.warning(f"Error when collecting hosts: {str(e)}")

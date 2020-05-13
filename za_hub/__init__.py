@@ -35,7 +35,7 @@ def get_source_collectors(config):
         source_collector = {
             "name": source_collector_name,
             "module": module,
-            "update_interval": int(config[source_collector_section].get("update_interval", "3600"))
+            "config": dict(config[source_collector_section])
         }
 
         source_collectors.append(source_collector)
@@ -77,7 +77,7 @@ def main():
     source_collectors = get_source_collectors(config)
     for source_collector in source_collectors:
         source_hosts_queue = multiprocessing.Queue()
-        process = processing.SourceCollectorProcess(source_collector["name"], source_collector["module"], source_collector["update_interval"], source_hosts_queue, stop_event)
+        process = processing.SourceCollectorProcess(source_collector["name"], source_collector["module"], source_collector["config"], source_hosts_queue, stop_event)
         source_hosts_queues.append(source_hosts_queue)
         processes.append(process)
         process.start()
