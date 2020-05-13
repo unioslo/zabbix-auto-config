@@ -64,7 +64,7 @@ def main():
     if zabbix_config["dryrun"] == "false":
         zabbix_config["dryrun"] = False
     elif zabbix_config["dryrun"] == "true":
-        zabbix_config["dryrun"] = False
+        zabbix_config["dryrun"] = True
     else:
         raise Exception()
 
