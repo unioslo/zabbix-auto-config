@@ -253,19 +253,20 @@ class SourceMergerProcess(multiprocessing.Process):
         logging.info(f"Merged sources in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
 
 class ZabbixUpdater(multiprocessing.Process):
-    def __init__(self, name, stop_event, map_dir, db_uri, zabbix_url, zabbix_username, zabbix_password, dryrun=False, failsafe=20):
+    def __init__(self, name, stop_event, db_uri, zabbix_config):
         super().__init__()
         self.name = name
         self.stop_event = stop_event
 
-        self.map_dir = map_dir
         self.db_uri = db_uri
         self.db_hosts_table = "hosts"
-        self.zabbix_url = zabbix_url
-        self.zabbix_username = zabbix_username
-        self.zabbix_password = zabbix_password
-        self.dryrun = dryrun
-        self.failsafe = failsafe
+
+        self.map_dir = zabbix_config["map_dir"]
+        self.zabbix_url = zabbix_config["url"]
+        self.zabbix_username = zabbix_config["username"]
+        self.zabbix_password = zabbix_config["password"]
+        self.dryrun = zabbix_config["dryrun"]
+        self.failsafe = zabbix_config["failsafe"]
 
         self.update_interval = 60
         self.next_update = None
@@ -273,11 +274,11 @@ class ZabbixUpdater(multiprocessing.Process):
         pyzabbix_logger = logging.getLogger("pyzabbix")
         pyzabbix_logger.setLevel(logging.ERROR)
 
-        self.api = pyzabbix.ZabbixAPI(zabbix_url)
+        self.api = pyzabbix.ZabbixAPI(self.zabbix_url)
 
-        self.property_template_map = utils.read_map_file(os.path.join(map_dir, "property_template_map.txt"))
-        self.property_hostgroup_map = utils.read_map_file(os.path.join(map_dir, "property_hostgroup_map.txt"))
-        self.siteadmin_hostgroup_map = utils.read_map_file(os.path.join(map_dir, "siteadmin_hostgroup_map.txt"))
+        self.property_template_map = utils.read_map_file(os.path.join(self.map_dir, "property_template_map.txt"))
+        self.property_hostgroup_map = utils.read_map_file(os.path.join(self.map_dir, "property_hostgroup_map.txt"))
+        self.siteadmin_hostgroup_map = utils.read_map_file(os.path.join(self.map_dir, "siteadmin_hostgroup_map.txt"))
 
     def run(self):
         logging.info("Process starting")

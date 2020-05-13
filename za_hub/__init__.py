@@ -59,14 +59,14 @@ def main():
     multiprocessing_logging.install_mp_handler()
     logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
 
-    if config["za-hub"]["dryrun"] == "false":
-        dryrun = False
-    elif config["za-hub"]["dryrun"] == "true":
-        dryrun = True
+    zabbix_config = dict(config["zabbix"])
+    zabbix_config["failsafe"] = int(zabbix_config.get("failsafe", "20"))
+    if zabbix_config["dryrun"] == "false":
+        zabbix_config["dryrun"] = False
+    elif zabbix_config["dryrun"] == "true":
+        zabbix_config["dryrun"] = False
     else:
         raise Exception()
-
-    failsafe = int(config["za-hub"]["failsafe"])
 
     logging.info(f"Main start ({os.getpid()}) version {__version__}")
 
@@ -90,15 +90,15 @@ def main():
     process.start()
     processes.append(process)
 
-    process = processing.ZabbixHostUpdater("zabbix-host-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"], dryrun, failsafe)
+    process = processing.ZabbixHostUpdater("zabbix-host-updater", stop_event, config["za-hub"]["db_uri"], zabbix_config)
     process.start()
     processes.append(process)
 
-    process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"], dryrun, failsafe)
+    process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", stop_event, config["za-hub"]["db_uri"], zabbix_config)
     process.start()
     processes.append(process)
 
-    process = processing.ZabbixTemplateUpdater("zabbix-template-updater", stop_event, config["za-hub"]["zabbix_map_dir"], config["za-hub"]["db_uri"], config["za-hub"]["zabbix_url"], config["za-hub"]["zabbix_username"], config["za-hub"]["zabbix_password"], dryrun, failsafe)
+    process = processing.ZabbixTemplateUpdater("zabbix-template-updater", stop_event, config["za-hub"]["db_uri"], zabbix_config)
     process.start()
     processes.append(process)
 
