@@ -52,6 +52,17 @@ def get_config():
     return config
 
 
+def log_process_status(processes):
+    process_statuses = []
+
+    for process in processes:
+        process_name = process.name
+        process_status = "alive" if process.is_alive() else "dead"
+        process_statuses.append(f"{process_name} is {process_status}")
+
+    logging.debug("Process status: %s", ', '.join(process_statuses))
+
+
 def main():
     config = get_config()
 
@@ -77,45 +88,38 @@ def main():
     source_collectors = get_source_collectors(config)
     for source_collector in source_collectors:
         source_hosts_queue = multiprocessing.Queue()
-        process = processing.SourceCollectorProcess(source_collector["name"], source_collector["module"], source_collector["config"], source_hosts_queue, stop_event)
+        process = processing.SourceCollectorProcess(source_collector["name"], source_collector["module"], source_collector["config"], source_hosts_queue)
         source_hosts_queues.append(source_hosts_queue)
         processes.append(process)
         process.start()
 
-    process = processing.SourceHandlerProcess("source-handler", stop_event, config["za-hub"]["db_uri"], source_hosts_queues)
+    process = processing.SourceHandlerProcess("source-handler", config["za-hub"]["db_uri"], source_hosts_queues)
     process.start()
     processes.append(process)
 
-    process = processing.SourceMergerProcess("source-merger", stop_event, config["za-hub"]["db_uri"])
+    process = processing.SourceMergerProcess("source-merger", config["za-hub"]["db_uri"])
     process.start()
     processes.append(process)
 
-    process = processing.ZabbixHostUpdater("zabbix-host-updater", stop_event, config["za-hub"]["db_uri"], zabbix_config)
+    process = processing.ZabbixHostUpdater("zabbix-host-updater", config["za-hub"]["db_uri"], zabbix_config)
     process.start()
     processes.append(process)
 
-    process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", stop_event, config["za-hub"]["db_uri"], zabbix_config)
+    process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", config["za-hub"]["db_uri"], zabbix_config)
     process.start()
     processes.append(process)
 
-    process = processing.ZabbixTemplateUpdater("zabbix-template-updater", stop_event, config["za-hub"]["db_uri"], zabbix_config)
+    process = processing.ZabbixTemplateUpdater("zabbix-template-updater", config["za-hub"]["db_uri"], zabbix_config)
     process.start()
     processes.append(process)
 
-    with processing.ProcessTerminator(stop_event):
+    with processing.SignalHandler(stop_event):
         status_interval = 60
         next_status = datetime.datetime.now()
 
         while not stop_event.is_set():
             if next_status < datetime.datetime.now():
-                process_statuses = []
-
-                for process in processes:
-                    process_name = process.name
-                    process_status = "alive" if process.is_alive() else "dead"
-                    process_statuses.append(f"{process_name} is {process_status}")
-                logging.info("Process status: %s", ', '.join(process_statuses))
-
+                log_process_status(processes)
                 next_status = datetime.datetime.now() + datetime.timedelta(seconds=status_interval)
 
             dead_process_names = [process.name for process in processes if not process.is_alive()]
@@ -125,9 +129,22 @@ def main():
 
             time.sleep(1)
 
+        logging.debug("Queues: %s", ", ".join([str(queue.qsize()) for queue in source_hosts_queues]))
+
         for process in processes:
-            logging.debug("Queues: %s", ", ".join([str(queue.qsize()) for queue in source_hosts_queues]))
+            logging.info("Terminating: %s(%d)", process.name, process.pid)
+            process.terminate()
+
+        alive_processes = [process for process in processes if process.is_alive()]
+        while alive_processes:
+            process = alive_processes[0]
             logging.info("Waiting for: %s(%d)", process.name, process.pid)
-            process.join()
+            log_process_status(processes)  # TODO: Too verbose?
+            process.join(10)
+            if process.exitcode is None:
+                logging.warning("Process hanging. Signaling new terminate: %s(%d)", process.name, process.pid)
+                process.terminate()
+            time.sleep(1)
+            alive_processes = [process for process in processes if process.is_alive()]
 
     logging.info("Main exit")

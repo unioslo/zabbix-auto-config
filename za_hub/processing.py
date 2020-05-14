@@ -15,96 +15,130 @@ import pyzabbix
 from . import utils
 
 
-class SourceCollectorProcess(multiprocessing.Process):
-    def __init__(self, name, module, config, source_hosts_queue, stop_event):
+class BaseProcess(multiprocessing.Process):
+    def __init__(self, sleep_interval=1):
+        super().__init__()
+        self.sleep_interval = sleep_interval
+
+        self.stop_event = multiprocessing.Event()
+
+    def run(self):
+        logging.info("Process starting")
+
+        with SignalHandler(self.stop_event):
+            while not self.stop_event.is_set():
+                self.work()
+                time.sleep(self.sleep_interval)
+
+        logging.info("Process exiting")
+
+    def work(self):
+        pass
+
+
+class SignalHandler():
+    def __init__(self, event):
+        self.event = event
+
+    def __enter__(self):
+        self.old_sigint_handler = signal.signal(signal.SIGINT, self._handler)
+        self.old_sigterm_handler = signal.signal(signal.SIGTERM, self._handler)
+
+    def __exit__(self, *args):
+        signal.signal(signal.SIGINT, self.old_sigint_handler)
+        signal.signal(signal.SIGTERM, self.old_sigterm_handler)
+
+    def _handler(self, signum, frame):
+        logging.info("Received signal: %s", signal.Signals(signum).name)
+        self.event.set()
+
+
+class SourceCollectorProcess(BaseProcess):
+    def __init__(self, name, module, config, source_hosts_queue):
         super().__init__()
         self.name = name
         self.module = module
         self.config = config
         self.source_hosts_queue = source_hosts_queue
-        self.stop_event = stop_event
+        self.source_hosts_queue.cancel_join_thread()  # Don't wait for empty queue when exiting
 
         self.update_interval = int(self.config["update_interval"])
-
         self.next_update = None
 
-    def run(self):
-        logging.info("Process starting")
+    def work(self):
+        if self.next_update and self.next_update > datetime.datetime.now():
+            # logging.debug(f"Waiting for next update {self.next_update.isoformat()}")
+            return
 
-        while not self.stop_event.is_set():
-            if self.next_update and self.next_update > datetime.datetime.now():
-                # logging.debug(f"Waiting for next update {self.next_update.isoformat()}")
-                time.sleep(1)
-                continue
+        self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
 
-            self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
+        start_time = time.time()
 
-            start_time = time.time()
+        try:
+            hosts = self.module.collect(**self.config)
+            assert isinstance(hosts, list), "Collect module did not return a list"
+        except (AssertionError, Exception) as e:
+            logging.warning("Error when collecting hosts: %s", str(e))
+            # TODO: Do more? Die?
+            return
 
+        valid_hosts = []
+        for host in hosts:
+            if self.stop_event.is_set():
+                logging.debug("Told to stop. Breaking")
+                break
             try:
-                hosts = self.module.collect(**self.config)
-                assert isinstance(hosts, list), "Collect module did not return a list"
-            except (AssertionError, Exception) as e:
-                logging.warning("Error when collecting hosts: %s", str(e))
-                continue
+                host["source"] = self.name
+                utils.validate_host(host)
+                valid_hosts.append(host)
+            except AssertionError as e:
+                if "hostname" in host:
+                    logging.error("Host <%s> is invalid: %s", host['hostname'], str(e))
+                else:
+                    logging.error("Host object is invalid: %s", str(e))
 
-            valid_hosts = []
-            for host in hosts:
-                try:
-                    host["source"] = self.name
-                    utils.validate_host(host)
-                    valid_hosts.append(host)
-                except AssertionError as e:
-                    if "hostname" in host:
-                        logging.error("Host <%s> is invalid: %s", host['hostname'], str(e))
-                    else:
-                        logging.error("Host object is invalid: %s", str(e))
+        source_hosts = {
+            "source": self.name,
+            "hosts": valid_hosts,
+        }
 
-            source_hosts = {
-                "source": self.name,
-                "hosts": valid_hosts,
-            }
+        self.source_hosts_queue.put(source_hosts)
 
-            self.source_hosts_queue.put(source_hosts)
-
-            logging.info(f"Collected hosts ({len(valid_hosts)}) from source <{self.name}> in {time.time() - start_time:.2f}s. Next update {self.next_update.isoformat()}")
-
-        self.source_hosts_queue.cancel_join_thread()  # Don't wait for empty queue
-        logging.info("Process exiting")
+        logging.info(f"Collected hosts ({len(valid_hosts)}) from source <{self.name}> in {time.time() - start_time:.2f}s. Next update {self.next_update.isoformat()}")
 
 
-class SourceHandlerProcess(multiprocessing.Process):
-    def __init__(self, name, stop_event, db_uri, source_hosts_queues):
+class SourceHandlerProcess(BaseProcess):
+    def __init__(self, name, db_uri, source_hosts_queues):
         super().__init__()
         self.name = name
-        self.stop_event = stop_event
 
         self.db_uri = db_uri
         self.db_source_table = "hosts_source"
-        self.source_hosts_queues = source_hosts_queues
-
-    def run(self):
-        logging.info("Process starting")
 
         try:
             self.db_connection = psycopg2.connect(self.db_uri)
             # TODO: Test connection? Cursor?
-        except psycopg2.OperationalError:
-            logging.error("Unable to connect to database. Process exiting with error")
-            sys.exit(1)
+        except psycopg2.OperationalError as e:
+            logging.error("Unable to connect to database.")
+            raise e
 
-        while not self.stop_event.is_set():
-            for source_hosts_queue in self.source_hosts_queues:
-                try:
-                    source_hosts = source_hosts_queue.get_nowait()
-                except queue.Empty:
-                    continue
+        self.source_hosts_queues = source_hosts_queues
+        for source_hosts_queue in self.source_hosts_queues:
+            source_hosts_queue.cancel_join_thread()  # Don't wait for empty queue when exiting
 
-                self.handle_source_hosts(source_hosts)
+    def work(self):
+        for source_hosts_queue in self.source_hosts_queues:
+            if self.stop_event.is_set():
+                logging.debug("Told to stop. Breaking")
+                break
 
-            time.sleep(1)
+            try:
+                source_hosts = source_hosts_queue.get_nowait()
+            except queue.Empty:
+                continue
 
-        logging.info("Process exiting")
+            logging.debug("Handling source from queue")
+            self.handle_source_hosts(source_hosts)
 
     def handle_source_hosts(self, source_hosts):
         source = source_hosts["source"]
@@ -150,21 +184,14 @@ class SourceHandlerProcess(multiprocessing.Process):
         logging.info(f"Handled hosts from source <{source}> in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
 
 
-class SourceMergerProcess(multiprocessing.Process):
-    def __init__(self, name, stop_event, db_uri):
+class SourceMergerProcess(BaseProcess):
+    def __init__(self, name, db_uri):
         super().__init__()
         self.name = name
-        self.stop_event = stop_event
 
         self.db_uri = db_uri
         self.db_source_table = "hosts_source"
         self.db_hosts_table = "hosts"
-
-        self.update_interval = 60
-        self.next_update = None
-
-    def run(self):
-        logging.info("Process starting")
 
         try:
             self.db_connection = psycopg2.connect(self.db_uri)
@@ -173,19 +200,22 @@ class SourceMergerProcess(multiprocessing.Process):
             logging.error("Unable to connect to database. Process exiting with error")
             sys.exit(1)
 
-        while not self.stop_event.is_set():
-            if self.next_update and self.next_update > datetime.datetime.now():
-                # logging.debug(f"Waiting for next update {self.next_update.isoformat()}")
-                time.sleep(1)
-                continue
+        self.update_interval = 60
+        self.next_update = None
 
-            self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
+    def work(self):
+        if self.next_update and self.next_update > datetime.datetime.now():
+            # logging.debug(f"Waiting for next update {self.next_update.isoformat()}")
+            return
 
-            self.merge_sources()
+        self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
 
-            logging.info("Merge done. Next update %s", self.next_update.isoformat())
+        logging.info("Merge starting")
+        self.merge_sources()
+        logging.info("Merge done. Next update %s", self.next_update.isoformat())
 
-        logging.info("Process exiting")
+        if self.next_update < datetime.datetime.now():
+            logging.warning("Next update is in the past. Interval too short? Lagging behind? Next update: %s", self.next_update.isoformat())
 
     def merge_hosts(self, hostname):
         with self.db_connection.cursor() as db_cursor:
@@ -223,11 +253,17 @@ class SourceMergerProcess(multiprocessing.Process):
         removed_hostnames = current_hostnames - source_hostnames
         with self.db_connection.cursor() as db_cursor:
             for removed_hostname in removed_hostnames:
+                if self.stop_event.is_set():
+                    logging.debug("Told to stop. Breaking")
+                    break
                 db_cursor.execute(f"DELETE FROM {self.db_hosts_table} WHERE data->>'hostname' = %s", [removed_hostname])
                 self.db_connection.commit()
                 removed_hosts += 1
 
         for hostname in source_hostnames:
+            if self.stop_event.is_set():
+                logging.debug("Told to stop. Breaking")
+                break
             host = self.merge_hosts(hostname)
             if not host:
                 # TODO: Raise error? How to handle? Handle inside merge_hosts?
@@ -259,14 +295,20 @@ class SourceMergerProcess(multiprocessing.Process):
         logging.info(f"Merged sources in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
 
 
-class ZabbixUpdater(multiprocessing.Process):
-    def __init__(self, name, stop_event, db_uri, zabbix_config):
+class ZabbixUpdater(BaseProcess):
+    def __init__(self, name, db_uri, zabbix_config):
         super().__init__()
         self.name = name
-        self.stop_event = stop_event
 
         self.db_uri = db_uri
         self.db_hosts_table = "hosts"
+
+        try:
+            self.db_connection = psycopg2.connect(self.db_uri)
+            # TODO: Test connection? Cursor?
+        except psycopg2.OperationalError as e:
+            logging.error("Unable to connect to database. Process exiting with error")
+            raise e
 
         self.map_dir = zabbix_config["map_dir"]
         self.zabbix_url = zabbix_config["url"]
@@ -282,42 +324,29 @@ class ZabbixUpdater(multiprocessing.Process):
         pyzabbix_logger.setLevel(logging.ERROR)
 
         self.api = pyzabbix.ZabbixAPI(self.zabbix_url)
+        try:
+            self.api.login(self.zabbix_username, self.zabbix_password)
+        except pyzabbix.ZabbixAPIException as e:
+            logging.error("Unable to login to Zabbix API: %s", str(e))
+            raise e
 
         self.property_template_map = utils.read_map_file(os.path.join(self.map_dir, "property_template_map.txt"))
         self.property_hostgroup_map = utils.read_map_file(os.path.join(self.map_dir, "property_hostgroup_map.txt"))
         self.siteadmin_hostgroup_map = utils.read_map_file(os.path.join(self.map_dir, "siteadmin_hostgroup_map.txt"))
 
-    def run(self):
-        logging.info("Process starting")
-
-        try:
-            self.api.login(self.zabbix_username, self.zabbix_password)
-        except pyzabbix.ZabbixAPIException as e:
-            logging.error("Unable to login to Zabbix API: %s", str(e))
-            sys.exit(1)
-
-        try:
-            self.db_connection = psycopg2.connect(self.db_uri)
-            # TODO: Test connection? Cursor?
-        except psycopg2.OperationalError:
-            logging.error("Unable to connect to database. Process exiting with error")
-            sys.exit(1)
-
-        while not self.stop_event.is_set():
-            if self.next_update and self.next_update > datetime.datetime.now():
-                # logging.debug(f"Waiting for next update {self.next_update.isoformat()}")
-                time.sleep(1)
-                continue
-
-            self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
-
-            self.work()
-
-            logging.info("Zabbix update done. Next update %s", self.next_update.isoformat())
-
-        logging.info("Process exiting")
-
     def work(self):
+        if self.next_update and self.next_update > datetime.datetime.now():
+            # logging.debug(f"Waiting for next update {self.next_update.isoformat()}")
+            return
+
+        self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
+        self.do_update()
+        logging.info("Zabbix update done. Next update %s", self.next_update.isoformat())
+
+        if self.next_update < datetime.datetime.now():
+            logging.warning("Next update is in the past. Interval too short? Lagging behind? Next update: %s", self.next_update.isoformat())
+
+    def do_update(self):
         pass
 
 
@@ -360,7 +389,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             logging.info("DRYRUN: Enabling host: '%s'", hostname)
 
-    def work(self):
+    def do_update(self):
         with self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
             db_hosts = [t[0] for t in db_cursor.fetchall()]
@@ -370,6 +399,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
         zabbix_manual_hosts = []
 
         for host in zabbix_hosts:
+            if self.stop_event.is_set():
+                logging.debug("Told to stop. Breaking")
+                break
             hostgroup_names = [group["name"] for group in host["groups"]]
             if "All-manual-hosts" in hostgroup_names:
                 zabbix_manual_hosts.append(host)
@@ -395,10 +427,16 @@ class ZabbixHostUpdater(ZabbixUpdater):
             return
 
         for hostname in hostnames_to_remove:
+            if self.stop_event.is_set():
+                logging.debug("Told to stop. Breaking")
+                break
             zabbix_host = [host for host in zabbix_managed_hosts if hostname == host["host"]][0]
             self.disable_host(zabbix_host)
 
         for hostname in hostnames_to_add:
+            if self.stop_event.is_set():
+                logging.debug("Told to stop. Breaking")
+                break
             self.enable_host(hostname)
 
 
@@ -422,7 +460,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
             except pyzabbix.ZabbixAPIException as e:
                 logging.error("Error when setting templates on host '%s': %s", host["host"], e.args)
 
-    def work(self):
+    def do_update(self):
         managed_template_names = set(itertools.chain.from_iterable(self.property_template_map.values()))
         zabbix_templates = {}
         for zabbix_template in self.api.template.get(output=["host", "templateid"]):
@@ -434,6 +472,10 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
 
         for zabbix_host in zabbix_hosts:
+            if self.stop_event.is_set():
+                logging.debug("Told to stop. Breaking")
+                break
+
             if "All-manual-hosts" in [group["name"] for group in zabbix_host["groups"]]:
                 logging.debug("Skipping manual host: '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
                 continue
@@ -499,7 +541,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         else:
             return "-1"
 
-    def work(self):
+    def do_update(self):
         managed_hostgroup_names = set(itertools.chain.from_iterable(self.property_hostgroup_map.values()))
         managed_hostgroup_names.union(set(itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values())))
         zabbix_hostgroups = {}
@@ -515,6 +557,10 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
 
         for zabbix_host in zabbix_hosts:
+            if self.stop_event.is_set():
+                logging.debug("Told to stop. Breaking")
+                break
+
             if "All-manual-hosts" in [group["name"] for group in zabbix_host["groups"]]:
                 logging.debug("Skipping manual host: '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
                 continue
@@ -559,20 +605,3 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             if host_hostgroups != old_host_hostgroups:
                 logging.info("Updating hostgroups on host '%s'. Old: %s. New: %s", zabbix_host["host"], ", ".join(old_host_hostgroups.keys()), ", ".join(host_hostgroups.keys()))
                 self.set_hostgroups(host_hostgroups, zabbix_host)
-
-
-class ProcessTerminator():
-    def __init__(self, stop_event):
-        self.stop_event = stop_event
-
-    def __enter__(self):
-        self.old_sigint_handler = signal.signal(signal.SIGINT, self._handler)
-        self.old_sigterm_handler = signal.signal(signal.SIGTERM, self._handler)
-
-    def __exit__(self, *args):
-        signal.signal(signal.SIGINT, self.old_sigint_handler)
-        signal.signal(signal.SIGTERM, self.old_sigterm_handler)
-
-    def _handler(self, signum, frame):
-        logging.info("Received signal: %s", signal.Signals(signum).name)  # https://github.com/PyCQA/pylint/issues/2804 pylint: disable=E1101
-        self.stop_event.set()
