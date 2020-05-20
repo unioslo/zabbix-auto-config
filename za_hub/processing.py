@@ -503,7 +503,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
 
             for template_name in list(host_templates.keys()):
                 if template_name in managed_template_names and template_name not in synced_template_names:
-                    logging.info("Going to remove template '%s'' from host '%s'.", template_name, zabbix_host["host"])
+                    logging.info("Going to remove template '%s' from host '%s'.", template_name, zabbix_host["host"])
                     host_templates_to_remove[template_name] = host_templates[template_name]
                     del host_templates[template_name]
             for template_name in synced_template_names:
