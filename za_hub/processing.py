@@ -409,13 +409,14 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 zabbix_managed_hosts.append(host)
 
         db_hostnames = {host["hostname"] for host in db_hosts}
-        zabbix_hostnames = {host["host"] for host in zabbix_managed_hosts}
+        zabbix_managed_hostnames = {host["host"] for host in zabbix_managed_hosts}
+        zabbix_manual_hostnames = {host["host"] for host in zabbix_manual_hosts}
 
-        hostnames_to_remove = list(zabbix_hostnames - db_hostnames)
-        hostnames_to_add = list(db_hostnames - zabbix_hostnames)
-        hostnames_in_both = list(db_hostnames.intersection(zabbix_hostnames))
+        hostnames_to_remove = list(zabbix_managed_hostnames - db_hostnames - zabbix_manual_hostnames)
+        hostnames_to_add = list(db_hostnames - zabbix_managed_hostnames - zabbix_manual_hostnames)
+        hostnames_in_both = list(db_hostnames.intersection(zabbix_managed_hostnames) - zabbix_manual_hostnames)
 
-        logging.info("Manual in zabbix: %d", len(zabbix_manual_hosts))
+        logging.info("Manual in zabbix: %d", len(zabbix_manual_hostnames))
         logging.info("Only in zabbix: %d", len(hostnames_to_remove))
         logging.info("Only in zabbix: %s", " ".join(hostnames_to_remove[:10]))
         logging.info("Only in db: %d", len(hostnames_to_add))
