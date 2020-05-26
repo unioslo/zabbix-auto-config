@@ -148,19 +148,18 @@ class SourceHandlerProcess(BaseProcess):
         equal_hosts, replaced_hosts, inserted_hosts, removed_hosts = (0, 0, 0, 0)
 
         source_hostnames = {host["hostname"] for host in hosts}
-        with self.db_connection.cursor() as db_cursor:
+        with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT DISTINCT data->>'hostname' FROM {self.db_source_table} WHERE data->>'source' = %s", [source])
             current_hostnames = {t[0] for t in db_cursor.fetchall()}
 
         removed_hostnames = current_hostnames - source_hostnames
-        with self.db_connection.cursor() as db_cursor:
+        with self.db_connection, self.db_connection.cursor() as db_cursor:
             for removed_hostname in removed_hostnames:
                 db_cursor.execute(f"DELETE FROM {self.db_source_table} WHERE data->>'hostname' = %s AND data->>'source' = %s", [removed_hostname, source])
                 removed_hosts += 1
-            self.db_connection.commit()
 
         for host in hosts:
-            with self.db_connection.cursor() as db_cursor:
+            with self.db_connection, self.db_connection.cursor() as db_cursor:
                 db_cursor.execute(f"SELECT data FROM {self.db_source_table} WHERE data->>'hostname' = %s AND data->>'source' = %s", [host["hostname"], source])
                 result = db_cursor.fetchall()
                 current_host = result[0][0] if result else None
@@ -170,15 +169,13 @@ class SourceHandlerProcess(BaseProcess):
                     equal_hosts += 1
                 else:
                     # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
-                    with self.db_connection.cursor() as db_cursor:
+                    with self.db_connection, self.db_connection.cursor() as db_cursor:
                         db_cursor.execute(f"UPDATE {self.db_source_table} SET data = %s WHERE data->>'hostname' = %s AND data->>'source' = %s", [json.dumps(host), host["hostname"], source])
-                        self.db_connection.commit()
                     replaced_hosts += 1
             else:
                 # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
-                with self.db_connection.cursor() as db_cursor:
+                with self.db_connection, self.db_connection.cursor() as db_cursor:
                     db_cursor.execute(f"INSERT INTO {self.db_source_table} (data) VALUES (%s)", [json.dumps(host)])
-                    self.db_connection.commit()
                 inserted_hosts += 1
 
         logging.info(f"Handled hosts from source <{source}> in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
@@ -218,7 +215,7 @@ class SourceMergerProcess(BaseProcess):
             logging.warning("Next update is in the past. Interval too short? Lagging behind? Next update: %s", self.next_update.isoformat())
 
     def merge_hosts(self, hostname):
-        with self.db_connection.cursor() as db_cursor:
+        with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_source_table} WHERE data->>'hostname' = %s", [hostname])
             hosts = [t[0] for t in db_cursor.fetchall()]
 
@@ -244,20 +241,19 @@ class SourceMergerProcess(BaseProcess):
         start_time = time.time()
         equal_hosts, replaced_hosts, inserted_hosts, removed_hosts = (0, 0, 0, 0)
 
-        with self.db_connection.cursor() as db_cursor:
+        with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT DISTINCT data->>'hostname' FROM {self.db_source_table}")
             source_hostnames = {t[0] for t in db_cursor.fetchall()}
             db_cursor.execute(f"SELECT DISTINCT data->>'hostname' FROM {self.db_hosts_table}")
             current_hostnames = {t[0] for t in db_cursor.fetchall()}
 
         removed_hostnames = current_hostnames - source_hostnames
-        with self.db_connection.cursor() as db_cursor:
+        with self.db_connection, self.db_connection.cursor() as db_cursor:
             for removed_hostname in removed_hostnames:
                 if self.stop_event.is_set():
                     logging.debug("Told to stop. Breaking")
                     break
                 db_cursor.execute(f"DELETE FROM {self.db_hosts_table} WHERE data->>'hostname' = %s", [removed_hostname])
-                self.db_connection.commit()
                 removed_hosts += 1
 
         for hostname in source_hostnames:
@@ -271,7 +267,7 @@ class SourceMergerProcess(BaseProcess):
 
             # TODO: Pass host through modifiers here
 
-            with self.db_connection.cursor() as db_cursor:
+            with self.db_connection, self.db_connection.cursor() as db_cursor:
                 db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'hostname' = %s", [hostname])
                 result = db_cursor.fetchall()
                 current_host = result[0][0] if result else None
@@ -281,15 +277,13 @@ class SourceMergerProcess(BaseProcess):
                     equal_hosts += 1
                 else:
                     # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
-                    with self.db_connection.cursor() as db_cursor:
+                    with self.db_connection, self.db_connection.cursor() as db_cursor:
                         db_cursor.execute(f"UPDATE {self.db_hosts_table} SET data = %s WHERE data->>'hostname' = %s", [json.dumps(host), hostname])
-                        self.db_connection.commit()
                         replaced_hosts += 1
             else:
                 # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
-                with self.db_connection.cursor() as db_cursor:
+                with self.db_connection, self.db_connection.cursor() as db_cursor:
                     db_cursor.execute(f"INSERT INTO {self.db_hosts_table} (data) VALUES (%s)", [json.dumps(host)])
-                    self.db_connection.commit()
                     inserted_hosts += 1
 
         logging.info(f"Merged sources in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
@@ -390,7 +384,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             logging.info("DRYRUN: Enabling host: '%s'", hostname)
 
     def do_update(self):
-        with self.db_connection.cursor() as db_cursor:
+        with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
             db_hosts = [t[0] for t in db_cursor.fetchall()]
         # status:0 = monitored, flags:0 = non-discovered host
@@ -467,7 +461,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         for zabbix_template in self.api.template.get(output=["host", "templateid"]):
             zabbix_templates[zabbix_template["host"]] = zabbix_template["templateid"]
         managed_template_names = managed_template_names.intersection(set(zabbix_templates.keys()))  # If the template isn't in zabbix we can't manage it
-        with self.db_connection.cursor() as db_cursor:
+        with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
             db_hosts = [t[0] for t in db_cursor.fetchall()]
         zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
@@ -552,7 +546,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 managed_hostgroup_names.add(zabbix_hostgroup["name"])
         managed_hostgroup_names.update(["All-hosts"])
 
-        with self.db_connection.cursor() as db_cursor:
+        with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
             db_hosts = [t[0] for t in db_cursor.fetchall()]
         zabbix_hosts = self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])
