@@ -411,12 +411,12 @@ class ZabbixHostUpdater(ZabbixUpdater):
         hostnames_to_add = list(db_hostnames - zabbix_managed_hostnames - zabbix_manual_hostnames)
         hostnames_in_both = list(db_hostnames.intersection(zabbix_managed_hostnames) - zabbix_manual_hostnames)
 
-        logging.info("Manual in zabbix: %d", len(zabbix_manual_hostnames))
-        logging.info("Only in zabbix: %d", len(hostnames_to_remove))
-        logging.info("Only in zabbix: %s", " ".join(hostnames_to_remove[:10]))
-        logging.info("Only in db: %d", len(hostnames_to_add))
-        logging.info("Only in db: %s", " ".join(hostnames_to_add[:10]))
-        logging.info("In both: %d", len(hostnames_in_both))
+        logging.debug("Manual in zabbix: %d", len(zabbix_manual_hostnames))
+        logging.debug("Only in zabbix: %d", len(hostnames_to_remove))
+        logging.debug("Only in zabbix: %s", " ".join(hostnames_to_remove[:10]))
+        logging.debug("Only in db: %d", len(hostnames_to_add))
+        logging.debug("Only in db: %s", " ".join(hostnames_to_add[:10]))
+        logging.debug("In both: %d", len(hostnames_in_both))
 
         if len(hostnames_to_remove) > self.failsafe or len(hostnames_to_add) > self.failsafe:
             logging.warning("Too many hosts to change (failsafe=%d). Remove: %d, Add: %d. Aborting", self.failsafe, len(hostnames_to_remove), len(hostnames_to_add))
@@ -498,12 +498,12 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
 
             for template_name in list(host_templates.keys()):
                 if template_name in managed_template_names and template_name not in synced_template_names:
-                    logging.info("Going to remove template '%s' from host '%s'.", template_name, zabbix_hostname)
+                    logging.debug("Going to remove template '%s' from host '%s'.", template_name, zabbix_hostname)
                     host_templates_to_remove[template_name] = host_templates[template_name]
                     del host_templates[template_name]
             for template_name in synced_template_names:
                 if template_name not in host_templates.keys():
-                    logging.info("Going to add template '%s' to host '%s'.", template_name, zabbix_hostname)
+                    logging.debug("Going to add template '%s' to host '%s'.", template_name, zabbix_hostname)
                     host_templates[template_name] = zabbix_templates[template_name]
 
             if host_templates != old_host_templates:
@@ -584,11 +584,11 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
             for hostgroup_name in list(host_hostgroups.keys()):
                 if hostgroup_name in managed_hostgroup_names and hostgroup_name not in synced_hostgroup_names:
-                    logging.info("Going to remove hostgroup '%s' from host '%s'.", hostgroup_name, zabbix_hostname)
+                    logging.debug("Going to remove hostgroup '%s' from host '%s'.", hostgroup_name, zabbix_hostname)
                     del host_hostgroups[hostgroup_name]
             for hostgroup_name in synced_hostgroup_names:
                 if hostgroup_name not in host_hostgroups.keys():
-                    logging.info("Going to add hostgroup '%s' to host '%s'.", hostgroup_name, zabbix_hostname)
+                    logging.debug("Going to add hostgroup '%s' to host '%s'.", hostgroup_name, zabbix_hostname)
                     zabbix_hostgroup_id = zabbix_hostgroups.get(hostgroup_name, None)
                     if not zabbix_hostgroup_id:
                         # The hostgroup doesn't exist. We need to create it.
