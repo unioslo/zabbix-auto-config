@@ -3,6 +3,8 @@ import logging
 import datetime
 import json
 import os.path
+import random
+import re
 import time
 import sys
 import signal
@@ -234,6 +236,12 @@ class SourceMergerProcess(BaseProcess):
             "siteadmins": sorted(list(set(itertools.chain.from_iterable([host["siteadmins"] for host in hosts if "siteadmins" in host])))),
             "sources": sorted(list({host["source"] for host in hosts if "source" in host}))
         }
+        proxy_patterns = list(set([host["proxy_pattern"] for host in hosts if "proxy_pattern" in host]))
+        if proxy_patterns:
+            # TODO: Refactor? Selecting a random pattern might lead to proxy flopping if "bad" patterns are provided.
+            merged_host["proxy_pattern"] = random.choice(proxy_patterns)
+        else:
+            merged_host["proxy_pattern"] = None
 
         return merged_host
 
@@ -358,6 +366,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             logging.info("DRYRUN: Disabling host: '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
 
     def enable_host(self, db_host):
+        # TODO: Set correct proxy when enabling
         hostname = db_host["hostname"]
         if not self.dryrun:
             try:
@@ -384,12 +393,27 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             logging.info("DRYRUN: Enabling host: '%s'", hostname)
 
+    def clear_proxy(self, zabbix_host):
+        if not self.dryrun:
+            self.api.host.update(hostid=zabbix_host["hostid"], proxy_hostid="0")
+            logging.info("Clearing proxy on host: '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
+        else:
+            logging.info("DRYRUN: Clearing proxy on host: '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
+
+    def set_proxy(self, zabbix_host, zabbix_proxy):
+        if not self.dryrun:
+            self.api.host.update(hostid=zabbix_host["hostid"], proxy_hostid=zabbix_proxy["proxyid"])
+            logging.info("Setting proxy (%s) on host: '%s' (%s)", zabbix_proxy["host"], zabbix_host["host"], zabbix_host["hostid"])
+        else:
+            logging.info("DRYRUN: Setting proxy (%s) on host: '%s' (%s)", zabbix_proxy["host"], zabbix_host["host"], zabbix_host["hostid"])
+
     def do_update(self):
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
             db_hosts = {t[0]["hostname"]:t[0] for t in db_cursor.fetchall()}
         # status:0 = monitored, flags:0 = non-discovered host
-        zabbix_hosts = {host["host"]:host for host in self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host", "status", "flags"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])}
+        zabbix_hosts = {host["host"]:host for host in self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host", "status", "flags", "proxy_hostid"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])}
+        zabbix_proxies = {proxy["host"]:proxy for proxy in self.api.proxy.get(output=["proxyid", "host", "status"])}
         zabbix_managed_hosts = []
         zabbix_manual_hosts = []
 
@@ -435,6 +459,37 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 break
             db_host = db_hosts[hostname]
             self.enable_host(db_host)
+
+        for hostname in hostnames_in_both:
+            # Check if these hosts are good
+
+            if self.stop_event.is_set():
+                logging.debug("Told to stop. Breaking")
+                break
+
+            db_host = db_hosts[hostname]
+            zabbix_host = zabbix_hosts[hostname]
+
+            # Check proxy. A host with proxy_pattern should get a proxy that matches the pattern.
+            zabbix_proxy_id = zabbix_host["proxy_hostid"]
+            zabbix_proxy = [proxy for proxy in zabbix_proxies.values() if proxy["proxyid"] == zabbix_proxy_id]
+            current_zabbix_proxy = zabbix_proxy[0] if zabbix_proxy else None
+            if db_host["proxy_pattern"]:
+                possible_proxies = [proxy for proxy in zabbix_proxies.values() if re.match(db_host["proxy_pattern"], proxy["host"])]
+                if not possible_proxies:
+                    logging.error("Proxy pattern ('%s') for host, '%s' (%s), doesn't match any proxies.", db_host["proxy_pattern"], hostname, zabbix_host["hostid"])
+                else:
+                    new_proxy = random.choice(possible_proxies)
+                    if current_zabbix_proxy and not re.match(db_host["proxy_pattern"], current_zabbix_proxy["host"]):
+                        # Wrong proxy, set new
+                        self.set_proxy(zabbix_host, new_proxy)
+                    elif not current_zabbix_proxy:
+                        # Missing proxy, set new
+                        self.set_proxy(zabbix_host, new_proxy)
+            elif not db_host["proxy_pattern"]:
+                if current_zabbix_proxy:
+                    # Should not have proxy, remove
+                    self.clear_proxy(zabbix_host)
 
 
 class ZabbixTemplateUpdater(ZabbixUpdater):

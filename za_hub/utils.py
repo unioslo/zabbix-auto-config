@@ -1,5 +1,12 @@
 import logging
+import re
 
+def is_valid_regexp(pattern):
+    try:
+        re.compile(pattern)
+        return True
+    except re.error:
+        return False
 
 def validate_host(host):
     # Host cannot have any other keys than these
@@ -12,6 +19,7 @@ def validate_host(host):
         "invertory",
         "macros",
         "properties",
+        "proxy_pattern",
         "siteadmins",
         "source",
     ]
@@ -48,6 +56,9 @@ def validate_host(host):
         assert isinstance(host["properties"], list), "'properties' is not a list"
         for _property in host["properties"]:
             assert isinstance(_property, str), "Found property that isn't a string"
+
+    if "proxy_pattern" in host:
+        assert is_valid_regexp(host["proxy_pattern"])
 
     if "siteadmins" in host:
         assert isinstance(host["siteadmins"], list), "'siteadmins' is not a list"
