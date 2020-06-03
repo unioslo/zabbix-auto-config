@@ -16,7 +16,7 @@ def validate_host(host):
         "hostname",
         "importance",
         "interfaces",
-        "invertory",
+        "inventory",
         "macros",
         "properties",
         "proxy_pattern",
