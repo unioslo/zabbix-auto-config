@@ -383,8 +383,11 @@ class ZabbixUpdater(BaseProcess):
             return
 
         self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
+
+        start_time = time.time()
+        logging.info("Zabbix update starting.")
         self.do_update()
-        logging.info("Zabbix update done. Next update %s", self.next_update.isoformat())
+        logging.info(f"Zabbix update done in {time.time() - start_time:.2f}s. Next update: %s", self.next_update.isoformat())
 
         if self.next_update < datetime.datetime.now():
             logging.warning("Next update is in the past. Interval too short? Lagging behind? Next update: %s", self.next_update.isoformat())
