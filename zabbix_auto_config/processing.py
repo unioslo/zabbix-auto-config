@@ -153,18 +153,18 @@ class SourceHandlerProcess(BaseProcess):
 
         source_hostnames = {host["hostname"] for host in hosts}
         with self.db_connection, self.db_connection.cursor() as db_cursor:
-            db_cursor.execute(f"SELECT DISTINCT data->>'hostname' FROM {self.db_source_table} WHERE data->>'source' = %s", [source])
+            db_cursor.execute(f"SELECT DISTINCT data->>'hostname' FROM {self.db_source_table} WHERE data->'sources' ? %s", [source])
             current_hostnames = {t[0] for t in db_cursor.fetchall()}
 
         removed_hostnames = current_hostnames - source_hostnames
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             for removed_hostname in removed_hostnames:
-                db_cursor.execute(f"DELETE FROM {self.db_source_table} WHERE data->>'hostname' = %s AND data->>'source' = %s", [removed_hostname, source])
+                db_cursor.execute(f"DELETE FROM {self.db_source_table} WHERE data->>'hostname' = %s AND data->'sources' ? %s", [removed_hostname, source])
                 removed_hosts += 1
 
         for host in hosts:
             with self.db_connection, self.db_connection.cursor() as db_cursor:
-                db_cursor.execute(f"SELECT data FROM {self.db_source_table} WHERE data->>'hostname' = %s AND data->>'source' = %s", [host["hostname"], source])
+                db_cursor.execute(f"SELECT data FROM {self.db_source_table} WHERE data->>'hostname' = %s AND data->'sources' ? %s", [host["hostname"], source])
                 result = db_cursor.fetchall()
                 current_host = result[0][0] if result else None
 
@@ -174,7 +174,7 @@ class SourceHandlerProcess(BaseProcess):
                 else:
                     # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
                     with self.db_connection, self.db_connection.cursor() as db_cursor:
-                        db_cursor.execute(f"UPDATE {self.db_source_table} SET data = %s WHERE data->>'hostname' = %s AND data->>'source' = %s", [json.dumps(host), host["hostname"], source])
+                        db_cursor.execute(f"UPDATE {self.db_source_table} SET data = %s WHERE data->>'hostname' = %s AND data->'sources' ? %s", [json.dumps(host), host["hostname"], source])
                     replaced_hosts += 1
             else:
                 # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
