@@ -83,7 +83,7 @@ def read_map_file(path):
                 values = [s.strip() for s in values.split(",")]
                 key = key.strip()
             except ValueError:
-                logging.warning("Unable to read line in map file: '{line}'")
+                logging.warning(f"Unable to read line in map file: '{line}'")
                 continue
 
             if key in _map:
