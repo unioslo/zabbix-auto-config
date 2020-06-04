@@ -1,7 +1,9 @@
 import multiprocessing
 import logging
 import datetime
+import importlib
 import json
+import os
 import os.path
 import random
 import re
@@ -184,13 +186,17 @@ class SourceHandlerProcess(BaseProcess):
 
 
 class SourceMergerProcess(BaseProcess):
-    def __init__(self, name, db_uri):
+    def __init__(self, name, db_uri, host_modifier_dir):
         super().__init__()
         self.name = name
 
         self.db_uri = db_uri
         self.db_source_table = "hosts_source"
         self.db_hosts_table = "hosts"
+        self.host_modifier_dir = host_modifier_dir
+
+        self.host_modifiers = self.get_host_modifiers()
+        logging.info("Loaded %d host modifiers: %s", len(self.host_modifiers), ", ".join([repr(modifier["name"]) for modifier in self.host_modifiers]))
 
         try:
             self.db_connection = psycopg2.connect(self.db_uri)
@@ -201,6 +207,31 @@ class SourceMergerProcess(BaseProcess):
 
         self.update_interval = 60
         self.next_update = None
+
+    def get_host_modifiers(self):
+        sys.path.append(self.host_modifier_dir)
+
+        module_names = [filename[:-3] for filename in os.listdir(self.host_modifier_dir) if filename.endswith(".py")]
+
+        host_modifiers = []
+
+        for module_name in module_names:
+            module = importlib.import_module(module_name)
+
+            try:
+                assert callable(module.modify)
+            except (AttributeError, AssertionError):
+                logging.warning("Host modifier is missing 'modify' callable. Skipping: '%s'", module_name)
+                continue
+
+            host_modifier = {
+                "name": module_name,
+                "module": module
+            }
+
+            host_modifiers.append(host_modifier)
+
+        return host_modifiers
 
     def work(self):
         if self.next_update and self.next_update > datetime.datetime.now():
@@ -273,7 +304,17 @@ class SourceMergerProcess(BaseProcess):
                 # TODO: Raise error? How to handle? Handle inside merge_hosts?
                 continue
 
-            # TODO: Pass host through modifiers here
+            for host_modifier in self.host_modifiers:
+                modified_host = host_modifier["module"].modify(host.copy())
+                try:
+                    assert hostname == modified_host["hostname"], f"Modifier changed the hostname, '{hostname}' -> '{modified_host['hostname']}'"
+                    utils.validate_host(modified_host, merged=True)
+                    host = modified_host
+                except AssertionError as e:
+                    logging.warning("Host, '%s', was modified to be invalid by modifier: '%s'. Error: %s", hostname, host_modifier["name"], str(e))
+                except Exception as e:
+                    logging.warning("Error when modifying host, '%s': %s", hostname, str(e))
+                    # TODO: Do more?
 
             with self.db_connection, self.db_connection.cursor() as db_cursor:
                 db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'hostname' = %s", [hostname])

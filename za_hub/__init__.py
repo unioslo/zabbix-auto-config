@@ -97,7 +97,7 @@ def main():
     process.start()
     processes.append(process)
 
-    process = processing.SourceMergerProcess("source-merger", config["za-hub"]["db_uri"])
+    process = processing.SourceMergerProcess("source-merger", config["za-hub"]["db_uri"], config["za-hub"]["host_modifier_dir"])
     process.start()
     processes.append(process)
 
