@@ -4,8 +4,8 @@
 import os
 import setuptools
 
-NAME = "za-hub"
-DESCRIPTION = "Zabbix automation hub"
+NAME = "zabbix-auto-config"
+DESCRIPTION = "Zabbix auto config - ZAC"
 URL = "https://example.com"
 EMAIL = "me@example.com"
 AUTHOR = "Me"
@@ -52,7 +52,7 @@ setuptools.setup(
     url=URL,
     packages=setuptools.find_packages(exclude=["tests", "*.tests", "*.tests.*", "tests.*"]),
     entry_points={
-        "console_scripts": ["za-hub=za_hub:main"],
+        "console_scripts": ["zac=zabbix_auto_config:main"],
     },
     install_requires=REQUIRED,
     extras_require=EXTRAS,

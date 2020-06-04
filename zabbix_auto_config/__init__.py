@@ -15,7 +15,7 @@ from . import processing
 
 
 def get_source_collectors(config):
-    source_collector_dir = config["za-hub"]["source_collector_dir"]
+    source_collector_dir = config["zac"]["source_collector_dir"]
     sys.path.append(source_collector_dir)
 
     section_prefix = "source-collector-"
@@ -93,23 +93,23 @@ def main():
         processes.append(process)
         process.start()
 
-    process = processing.SourceHandlerProcess("source-handler", config["za-hub"]["db_uri"], source_hosts_queues)
+    process = processing.SourceHandlerProcess("source-handler", config["zac"]["db_uri"], source_hosts_queues)
     process.start()
     processes.append(process)
 
-    process = processing.SourceMergerProcess("source-merger", config["za-hub"]["db_uri"], config["za-hub"]["host_modifier_dir"])
+    process = processing.SourceMergerProcess("source-merger", config["zac"]["db_uri"], config["zac"]["host_modifier_dir"])
     process.start()
     processes.append(process)
 
-    process = processing.ZabbixHostUpdater("zabbix-host-updater", config["za-hub"]["db_uri"], zabbix_config)
+    process = processing.ZabbixHostUpdater("zabbix-host-updater", config["zac"]["db_uri"], zabbix_config)
     process.start()
     processes.append(process)
 
-    process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", config["za-hub"]["db_uri"], zabbix_config)
+    process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", config["zac"]["db_uri"], zabbix_config)
     process.start()
     processes.append(process)
 
-    process = processing.ZabbixTemplateUpdater("zabbix-template-updater", config["za-hub"]["db_uri"], zabbix_config)
+    process = processing.ZabbixTemplateUpdater("zabbix-template-updater", config["zac"]["db_uri"], zabbix_config)
     process.start()
     processes.append(process)
 
