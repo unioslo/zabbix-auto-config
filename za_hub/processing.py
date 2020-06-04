@@ -92,7 +92,7 @@ class SourceCollectorProcess(BaseProcess):
                 logging.debug("Told to stop. Breaking")
                 break
             try:
-                host["source"] = self.name
+                host["sources"] = [self.name]
                 utils.validate_host(host)
                 valid_hosts.append(host)
             except AssertionError as e:
@@ -265,7 +265,7 @@ class SourceMergerProcess(BaseProcess):
             "macros": None,  # TODO
             "properties": sorted(list(set(itertools.chain.from_iterable([host["properties"] for host in hosts if "properties" in host])))),
             "siteadmins": sorted(list(set(itertools.chain.from_iterable([host["siteadmins"] for host in hosts if "siteadmins" in host])))),
-            "sources": sorted(list({host["source"] for host in hosts if "source" in host}))
+            "sources": sorted(list(set(itertools.chain.from_iterable([host["sources"] for host in hosts if "sources" in host]))))
         }
         proxy_patterns = list(set([host["proxy_pattern"] for host in hosts if "proxy_pattern" in host]))
         if proxy_patterns:
@@ -308,7 +308,7 @@ class SourceMergerProcess(BaseProcess):
                 modified_host = host_modifier["module"].modify(host.copy())
                 try:
                     assert hostname == modified_host["hostname"], f"Modifier changed the hostname, '{hostname}' -> '{modified_host['hostname']}'"
-                    utils.validate_host(modified_host, merged=True)
+                    utils.validate_host(modified_host)
                     host = modified_host
                 except AssertionError as e:
                     logging.warning("Host, '%s', was modified to be invalid by modifier: '%s'. Error: %s", hostname, host_modifier["name"], str(e))

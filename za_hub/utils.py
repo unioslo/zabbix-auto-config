@@ -8,7 +8,7 @@ def is_valid_regexp(pattern):
     except re.error:
         return False
 
-def validate_host(host, merged=False):
+def validate_host(host):
     # Host cannot have any other keys than these
 
     known_keys = [
@@ -21,12 +21,8 @@ def validate_host(host, merged=False):
         "properties",
         "proxy_pattern",
         "siteadmins",
+        "sources"
     ]
-
-    if merged:
-        known_keys.append("sources")
-    else:
-        known_keys.append("source")
 
     assert isinstance(host, dict), "Host is not a dictionary"
 
@@ -37,17 +33,14 @@ def validate_host(host, merged=False):
 
     assert "enabled" in host, "'enabled' missing from host"
     assert isinstance(host["enabled"], bool), "'enabled' is not a bool"
+
     assert "hostname" in host, "'hostname' missing from host"
     assert isinstance(host["hostname"], str), "'hostname' is not a string"
 
-    if merged:
-        assert "sources" in host, "'sources' missing from host"
-        assert isinstance(host["sources"], list), "'source' is not a string"
-        for source in host["sources"]:
-            assert isinstance(source, str), "Found source that isn't a string"
-    else:
-        assert "source" in host, "'source' missing from host"
-        assert isinstance(host["source"], str), "'source' is not a string"
+    assert "sources" in host, "'sources' missing from host"
+    assert isinstance(host["sources"], list), "'source' is not a string"
+    for source in host["sources"]:
+        assert isinstance(source, str), "Found source that isn't a string"
 
     # Host may have these keys
 
