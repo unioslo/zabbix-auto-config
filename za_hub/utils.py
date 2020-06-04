@@ -38,7 +38,7 @@ def validate_host(host):
     assert isinstance(host["hostname"], str), "'hostname' is not a string"
 
     assert "sources" in host, "'sources' missing from host"
-    assert isinstance(host["sources"], list), "'source' is not a string"
+    assert isinstance(host["sources"], list), "'sources' is not a list"
     for source in host["sources"]:
         assert isinstance(source, str), "Found source that isn't a string"
 
