@@ -265,7 +265,7 @@ class SourceMergerProcess(BaseProcess):
             "macros": None,  # TODO
             "properties": sorted(list(set(itertools.chain.from_iterable([host["properties"] for host in hosts if "properties" in host])))),
             "siteadmins": sorted(list(set(itertools.chain.from_iterable([host["siteadmins"] for host in hosts if "siteadmins" in host])))),
-            "sources": sorted(list(set(itertools.chain.from_iterable([host["sources"] for host in hosts if "sources" in host]))))
+            "sources": sorted(list(set(itertools.chain.from_iterable([host["sources"] for host in hosts]))))
         }
         proxy_patterns = list(set([host["proxy_pattern"] for host in hosts if "proxy_pattern" in host]))
         if proxy_patterns:
