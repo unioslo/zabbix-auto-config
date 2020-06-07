@@ -141,13 +141,13 @@ class SourceHandlerProcess(BaseProcess):
             except queue.Empty:
                 continue
 
-            logging.debug("Handling source from queue")
-            self.handle_source_hosts(source_hosts)
+            source = source_hosts["source"]
+            hosts = source_hosts["hosts"]
 
-    def handle_source_hosts(self, source_hosts):
-        source = source_hosts["source"]
-        hosts = source_hosts["hosts"]
+            logging.debug("Handling %d hosts from source, '%s', from queue. Current queue size: %d", len(source_hosts["hosts"]), source, source_hosts_queue.qsize())
+            self.handle_source_hosts(source, hosts)
 
+    def handle_source_hosts(self, source, hosts):
         start_time = time.time()
         equal_hosts, replaced_hosts, inserted_hosts, removed_hosts = (0, 0, 0, 0)
 
