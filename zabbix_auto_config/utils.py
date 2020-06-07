@@ -1,12 +1,14 @@
 import logging
 import re
 
+
 def is_valid_regexp(pattern):
     try:
         re.compile(pattern)
         return True
     except re.error:
         return False
+
 
 def validate_host(host):
     # Host cannot have any other keys than these

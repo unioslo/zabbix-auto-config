@@ -267,7 +267,7 @@ class SourceMergerProcess(BaseProcess):
             "siteadmins": sorted(list(set(itertools.chain.from_iterable([host["siteadmins"] for host in hosts if "siteadmins" in host])))),
             "sources": sorted(list(set(itertools.chain.from_iterable([host["sources"] for host in hosts]))))
         }
-        proxy_patterns = list(set([host["proxy_pattern"] for host in hosts if "proxy_pattern" in host]))
+        proxy_patterns = list({host["proxy_pattern"] for host in hosts if "proxy_pattern" in host})
         if proxy_patterns:
             # TODO: Refactor? Selecting a random pattern might lead to proxy flopping if "bad" patterns are provided.
             merged_host["proxy_pattern"] = random.choice(proxy_patterns)
@@ -305,8 +305,8 @@ class SourceMergerProcess(BaseProcess):
                 continue
 
             for host_modifier in self.host_modifiers:
-                modified_host = host_modifier["module"].modify(host.copy())
                 try:
+                    modified_host = host_modifier["module"].modify(host.copy())
                     assert hostname == modified_host["hostname"], f"Modifier changed the hostname, '{hostname}' -> '{modified_host['hostname']}'"
                     utils.validate_host(modified_host)
                     host = modified_host
@@ -454,10 +454,10 @@ class ZabbixHostUpdater(ZabbixUpdater):
     def do_update(self):
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
-            db_hosts = {t[0]["hostname"]:t[0] for t in db_cursor.fetchall()}
+            db_hosts = {t[0]["hostname"]: t[0] for t in db_cursor.fetchall()}
         # status:0 = monitored, flags:0 = non-discovered host
-        zabbix_hosts = {host["host"]:host for host in self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host", "status", "flags", "proxy_hostid"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])}
-        zabbix_proxies = {proxy["host"]:proxy for proxy in self.api.proxy.get(output=["proxyid", "host", "status"])}
+        zabbix_hosts = {host["host"]: host for host in self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host", "status", "flags", "proxy_hostid"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])}
+        zabbix_proxies = {proxy["host"]: proxy for proxy in self.api.proxy.get(output=["proxyid", "host", "status"])}
         zabbix_managed_hosts = []
         zabbix_manual_hosts = []
 
@@ -471,7 +471,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             else:
                 zabbix_managed_hosts.append(host)
 
-        db_hostnames = {hostname for hostname in db_hosts.keys()}
+        db_hostnames = set(db_hosts.keys())
         zabbix_managed_hostnames = {host["host"] for host in zabbix_managed_hosts}
         zabbix_manual_hostnames = {host["host"] for host in zabbix_manual_hosts}
 
@@ -564,8 +564,8 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         managed_template_names = managed_template_names.intersection(set(zabbix_templates.keys()))  # If the template isn't in zabbix we can't manage it
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
-            db_hosts = {t[0]["hostname"]:t[0] for t in db_cursor.fetchall()}
-        zabbix_hosts = {host["host"]:host for host in self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])}
+            db_hosts = {t[0]["hostname"]: t[0] for t in db_cursor.fetchall()}
+        zabbix_hosts = {host["host"]: host for host in self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])}
 
         for zabbix_hostname, zabbix_host in zabbix_hosts.items():
             if self.stop_event.is_set():
@@ -647,8 +647,8 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
-            db_hosts = {t[0]["hostname"]:t[0] for t in db_cursor.fetchall()}
-        zabbix_hosts = {host["host"]:host for host in self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])}
+            db_hosts = {t[0]["hostname"]: t[0] for t in db_cursor.fetchall()}
+        zabbix_hosts = {host["host"]: host for host in self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])}
 
         for zabbix_hostname, zabbix_host in zabbix_hosts.items():
             if self.stop_event.is_set():
