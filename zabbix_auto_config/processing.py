@@ -646,6 +646,8 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             zabbix_hostgroups[zabbix_hostgroup["name"]] = zabbix_hostgroup["groupid"]
             if zabbix_hostgroup["name"].startswith("Source-"):
                 managed_hostgroup_names.add(zabbix_hostgroup["name"])
+            if zabbix_hostgroup["name"].startswith("Importance-"):
+                managed_hostgroup_names.add(zabbix_hostgroup["name"])
         managed_hostgroup_names.update(["All-hosts"])
 
         with self.db_connection, self.db_connection.cursor() as db_cursor:
@@ -677,6 +679,8 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                     synced_hostgroup_names.update(self.siteadmin_hostgroup_map[siteadmin])
             for source in db_host["sources"]:
                 synced_hostgroup_names.add(f"Source-{source}")
+            if "importance" in db_host:
+                synced_hostgroup_names.add(f"Importance-{db_host['importance']}")
 
             host_hostgroups = {}
             for zabbix_hostgroup in zabbix_host["groups"]:
