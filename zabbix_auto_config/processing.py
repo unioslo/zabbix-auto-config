@@ -259,7 +259,6 @@ class SourceMergerProcess(BaseProcess):
         merged_host = {
             "enabled": any([host["enabled"] for host in hosts]),
             "hostname": hostname,
-            "importance": min([host.get("importance", 6) for host in hosts]),
             "interfaces": None,  # TODO
             "inventory": None,  # TODO
             "macros": None,  # TODO
@@ -267,6 +266,10 @@ class SourceMergerProcess(BaseProcess):
             "siteadmins": sorted(list(set(itertools.chain.from_iterable([host["siteadmins"] for host in hosts if "siteadmins" in host])))),
             "sources": sorted(list(set(itertools.chain.from_iterable([host["sources"] for host in hosts]))))
         }
+        importances = [host["importance"] for host in hosts if "importance" in host]
+        if importances:
+            merged_host["importance"] = min(importances)
+
         proxy_patterns = list({host["proxy_pattern"] for host in hosts if "proxy_pattern" in host})
         if proxy_patterns:
             # TODO: Refactor? Selecting a random pattern might lead to proxy flopping if "bad" patterns are provided.
