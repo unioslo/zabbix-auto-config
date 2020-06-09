@@ -681,6 +681,8 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 synced_hostgroup_names.add(f"Source-{source}")
             if "importance" in db_host:
                 synced_hostgroup_names.add(f"Importance-{db_host['importance']}")
+            else:
+                synced_hostgroup_names.add(f"Importance-X")
 
             host_hostgroups = {}
             for zabbix_hostgroup in zabbix_host["groups"]:
