@@ -274,8 +274,6 @@ class SourceMergerProcess(BaseProcess):
         if proxy_patterns:
             # TODO: Refactor? Selecting a random pattern might lead to proxy flopping if "bad" patterns are provided.
             merged_host["proxy_pattern"] = random.choice(proxy_patterns)
-        else:
-            merged_host["proxy_pattern"] = None
 
         return merged_host
 
@@ -521,7 +519,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             zabbix_proxy_id = zabbix_host["proxy_hostid"]
             zabbix_proxy = [proxy for proxy in zabbix_proxies.values() if proxy["proxyid"] == zabbix_proxy_id]
             current_zabbix_proxy = zabbix_proxy[0] if zabbix_proxy else None
-            if db_host["proxy_pattern"]:
+            if "proxy_pattern" in db_host:
                 possible_proxies = [proxy for proxy in zabbix_proxies.values() if re.match(db_host["proxy_pattern"], proxy["host"])]
                 if not possible_proxies:
                     logging.error("Proxy pattern ('%s') for host, '%s' (%s), doesn't match any proxies.", db_host["proxy_pattern"], hostname, zabbix_host["hostid"])
@@ -533,10 +531,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
                     elif not current_zabbix_proxy:
                         # Missing proxy, set new
                         self.set_proxy(zabbix_host, new_proxy)
-            elif not db_host["proxy_pattern"]:
-                if current_zabbix_proxy:
-                    # Should not have proxy, remove
-                    self.clear_proxy(zabbix_host)
+            elif not "proxy_pattern" in db_host and current_zabbix_proxy:
+                # Should not have proxy, remove
+                self.clear_proxy(zabbix_host)
 
 
 class ZabbixTemplateUpdater(ZabbixUpdater):
