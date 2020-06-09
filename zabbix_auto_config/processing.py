@@ -479,8 +479,11 @@ class ZabbixHostUpdater(ZabbixUpdater):
         hostnames_to_remove = list(zabbix_managed_hostnames - db_hostnames - zabbix_manual_hostnames)
         hostnames_to_add = list(db_hostnames - zabbix_managed_hostnames - zabbix_manual_hostnames)
         hostnames_in_both = list(db_hostnames.intersection(zabbix_managed_hostnames) - zabbix_manual_hostnames)
+        hostnames_in_manual_and_source = list(db_hostnames.intersection(zabbix_manual_hostnames))
 
         logging.debug("Manual in zabbix: %d", len(zabbix_manual_hostnames))
+        logging.debug("Manual and in source: %d", len(hostnames_in_manual_and_source))
+        logging.debug("Manual and in source: %s", " ".join(hostnames_in_manual_and_source[:10]))
         logging.debug("Only in zabbix: %d", len(hostnames_to_remove))
         logging.debug("Only in zabbix: %s", " ".join(hostnames_to_remove[:10]))
         logging.debug("Only in db: %d", len(hostnames_to_add))
