@@ -6,7 +6,7 @@ def is_valid_regexp(pattern):
     try:
         re.compile(pattern)
         return True
-    except re.error:
+    except (re.error, TypeError):
         return False
 
 
@@ -64,7 +64,7 @@ def validate_host(host):
             assert isinstance(_property, str), "Found property that isn't a string"
 
     if "proxy_pattern" in host:
-        assert is_valid_regexp(host["proxy_pattern"])
+        assert is_valid_regexp(host["proxy_pattern"]), f"'proxy_pattern' is an invalid regexp: '{str(host['proxy_pattern'])}'"
 
     if "siteadmins" in host:
         assert isinstance(host["siteadmins"], list), "'siteadmins' is not a list"
