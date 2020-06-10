@@ -259,13 +259,20 @@ class SourceMergerProcess(BaseProcess):
         merged_host = {
             "enabled": any([host["enabled"] for host in hosts]),
             "hostname": hostname,
-            "interfaces": None,  # TODO
             "inventory": None,  # TODO
             "macros": None,  # TODO
             "properties": sorted(list(set(itertools.chain.from_iterable([host["properties"] for host in hosts if "properties" in host])))),
             "siteadmins": sorted(list(set(itertools.chain.from_iterable([host["siteadmins"] for host in hosts if "siteadmins" in host])))),
             "sources": sorted(list(set(itertools.chain.from_iterable([host["sources"] for host in hosts]))))
         }
+        interfaces = sorted(itertools.chain.from_iterable([host["interfaces"] for host in hosts if "interfaces" in host]), key=lambda e: e["type"])
+        if interfaces:
+            interface_types = [i["type"] for i in interfaces]
+            if len(interface_types) == len(set(interface_types)):
+                merged_host["interfaces"] = interfaces
+            else:
+                logging.warning("There are multiple interfaces of same type. Source interfaces can't be selected for host: %s", hostname)
+
         importances = [host["importance"] for host in hosts if "importance" in host]
         if importances:
             merged_host["importance"] = min(importances)
@@ -445,6 +452,31 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             logging.info("DRYRUN: Clearing proxy on host: '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
 
+    def set_interface(self, zabbix_host, interface, useip, old_id):
+        if not self.dryrun:
+            parameters = {
+                "hostid": zabbix_host["hostid"],
+                "main": 1,
+                "port": interface["port"],
+                "type": interface["type"],
+                "useip": int(useip),
+            }
+            if useip:
+                parameters["dns"] = ""
+                parameters["ip"] = interface["endpoint"]
+            else:
+                parameters["dns"] = interface["endpoint"]
+                parameters["ip"] = ""
+
+            if old_id:
+                self.api.hostinterface.update(interfaceid=old_id, **parameters)
+                logging.info("Updating old interface (type: %s) on host: '%s' (%s)", interface["type"], zabbix_host["host"], zabbix_host["hostid"])
+            else:
+                self.api.hostinterface.create(**parameters)
+                logging.info("Creating new interface (type: %s) on host: '%s' (%s)", interface["type"], zabbix_host["host"], zabbix_host["hostid"])
+        else:
+            logging.info("DRYRUN: Setting interface (type: %d) on host: '%s' (%s)", interface["type"], zabbix_host["host"], zabbix_host["hostid"])
+
     def set_proxy(self, zabbix_host, zabbix_proxy):
         if not self.dryrun:
             self.api.host.update(hostid=zabbix_host["hostid"], proxy_hostid=zabbix_proxy["proxyid"])
@@ -457,7 +489,12 @@ class ZabbixHostUpdater(ZabbixUpdater):
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
             db_hosts = {t[0]["hostname"]: t[0] for t in db_cursor.fetchall()}
         # status:0 = monitored, flags:0 = non-discovered host
-        zabbix_hosts = {host["host"]: host for host in self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host", "status", "flags", "proxy_hostid"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])}
+        zabbix_hosts = {host["host"]: host for host in self.api.host.get(filter={"status": 0, "flags": 0},
+                                                                         output=["hostid", "host", "status", "flags", "proxy_hostid"],
+                                                                         selectGroups=["groupid", "name"],
+                                                                         selectInterfaces=["dns", "interfaceid", "ip", "main", "port", "type", "useip"],
+                                                                         selectParentTemplates=["templateid", "host"],
+                                                                         )}
         zabbix_proxies = {proxy["host"]: proxy for proxy in self.api.proxy.get(output=["proxyid", "host", "status"])}
         zabbix_managed_hosts = []
         zabbix_manual_hosts = []
@@ -537,6 +574,36 @@ class ZabbixHostUpdater(ZabbixUpdater):
             elif not "proxy_pattern" in db_host and current_zabbix_proxy:
                 # Should not have proxy, remove
                 self.clear_proxy(zabbix_host)
+
+            # Check the main/default interfaces
+            if "interfaces" in db_host:
+                zabbix_interfaces = zabbix_host["interfaces"]
+
+                # The API doesn't return the proper, documented types. We need to fix these types
+                # https://www.zabbix.com/documentation/current/manual/api/reference/hostinterface/object
+                for zabbix_interface in zabbix_interfaces:
+                    zabbix_interface["type"] = int(zabbix_interface["type"])
+                    zabbix_interface["main"] = int(zabbix_interface["main"])
+                    zabbix_interface["useip"] = int(zabbix_interface["useip"])
+
+                # Restructure object, and filter non main/default interfaces
+                zabbix_interfaces = {i["type"]: i for i in zabbix_host["interfaces"] if i["main"] == 1}
+
+                for interface in db_host["interfaces"]:
+                    # We assume that we're using an IP if the endpoint is a valid IP
+                    useip = utils.is_valid_ip(interface["endpoint"])
+                    if interface["type"] in zabbix_interfaces:
+                        # This interface type exists on the current zabbix host
+                        zabbix_interface = zabbix_interfaces[interface["type"]]
+                        if useip and (zabbix_interface["ip"] != interface["endpoint"] or zabbix_interface["port"] != interface["port"] or zabbix_interface["useip"] != useip):
+                            # This IP interface is configured wrong, set it
+                            self.set_interface(zabbix_host, interface, useip, zabbix_interface["interfaceid"])
+                        elif not useip and (zabbix_interface["dns"] != interface["endpoint"] or zabbix_interface["port"] != interface["port"] or zabbix_interface["useip"] != useip):
+                            # This DNS interface is configured wrong, set it
+                            self.set_interface(zabbix_host, interface, useip, zabbix_interface["interfaceid"])
+                    else:
+                        # This interface is missing, set it
+                        self.set_interface(zabbix_host, interface, useip, None)
 
 
 class ZabbixTemplateUpdater(ZabbixUpdater):

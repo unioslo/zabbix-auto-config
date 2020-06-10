@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 import re
 
@@ -7,6 +8,13 @@ def is_valid_regexp(pattern):
         re.compile(pattern)
         return True
     except (re.error, TypeError):
+        return False
+
+def is_valid_ip(ip):
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
         return False
 
 
@@ -50,7 +58,14 @@ def validate_host(host):
         assert isinstance(host["importance"], int), "'importance' is not an integer"
 
     if "interfaces" in host:
-        pass  # TODO: What should interfaces look like?
+        assert isinstance(host["interfaces"], list), "'interfaces' is not a list"
+        for interface in host["interfaces"]:
+            assert "endpoint" in interface, "'endpoint' is missing from interface"
+            assert isinstance(interface["endpoint"], str), "'endpoint' is not a string"
+            assert "type" in interface, "'type' is missing from interface"
+            assert isinstance(interface["type"], int) and 1 <= interface["type"] <= 4, "'type' is not in range 1-4"
+            assert "port" in interface, "'port' is missing from interface"
+            assert isinstance(interface["port"], str), "'port' is not a string"
 
     if "inventory" in host:
         pass  # TODO: What should inventory look like?
