@@ -10,6 +10,7 @@ def is_valid_regexp(pattern):
     except (re.error, TypeError):
         return False
 
+
 def is_valid_ip(ip):
     try:
         ipaddress.ip_address(ip)

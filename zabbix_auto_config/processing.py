@@ -571,7 +571,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                     elif not current_zabbix_proxy:
                         # Missing proxy, set new
                         self.set_proxy(zabbix_host, new_proxy)
-            elif not "proxy_pattern" in db_host and current_zabbix_proxy:
+            elif "proxy_pattern" not in db_host and current_zabbix_proxy:
                 # Should not have proxy, remove
                 self.clear_proxy(zabbix_host)
 
