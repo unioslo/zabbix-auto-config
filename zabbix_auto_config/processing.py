@@ -510,6 +510,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 zabbix_managed_hosts.append(host)
 
         db_hostnames = set(db_hosts.keys())
+        zabbix_hostnames = set(zabbix_hosts.keys())
         zabbix_managed_hostnames = {host["host"] for host in zabbix_managed_hosts}
         zabbix_manual_hostnames = {host["host"] for host in zabbix_manual_hosts}
 
@@ -518,6 +519,8 @@ class ZabbixHostUpdater(ZabbixUpdater):
         hostnames_in_both = list(db_hostnames.intersection(zabbix_managed_hostnames) - zabbix_manual_hostnames)
         hostnames_in_manual_and_source = list(db_hostnames.intersection(zabbix_manual_hostnames))
 
+        logging.debug("Total in zabbix: %d", len(zabbix_hostnames))
+        logging.debug("Total in db: %d", len(db_hostnames))
         logging.debug("Manual in zabbix: %d", len(zabbix_manual_hostnames))
         logging.debug("Manual and in source: %d", len(hostnames_in_manual_and_source))
         logging.debug("Manual and in source: %s", " ".join(hostnames_in_manual_and_source[:10]))
