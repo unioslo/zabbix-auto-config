@@ -25,11 +25,12 @@ def get_source_collectors(config):
 
     for source_collector_section in source_collector_sections:
         source_collector_name = source_collector_section[len(section_prefix):]
+        source_collector_module_name = config[source_collector_section]["module_name"]
 
         try:
-            module = importlib.import_module(source_collector_name)
+            module = importlib.import_module(source_collector_module_name)
         except ModuleNotFoundError:
-            logging.error("Unable to find source collector named '%s' in '%s'", source_collector_name, source_collector_dir)
+            logging.error("Unable to find source collector named '%s' in '%s'", source_collector_module_name, source_collector_dir)
             continue
 
         source_collector = {
