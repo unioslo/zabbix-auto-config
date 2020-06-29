@@ -477,6 +477,13 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             logging.info("DRYRUN: Setting interface (type: %d) on host: '%s' (%s)", interface["type"], zabbix_host["host"], zabbix_host["hostid"])
 
+    def set_inventory(self, zabbix_host, inventory_mode):
+        if not self.dryrun:
+            self.api.host.update(hostid=zabbix_host["hostid"], inventory_mode=inventory_mode)
+            logging.info("Setting inventory (%d) on host: '%s' (%s)", inventory_mode, zabbix_host["host"], zabbix_host["hostid"])
+        else:
+            logging.info("DRYRUN: Setting inventory (%d) on host: '%s' (%s)", inventory_mode, zabbix_host["host"], zabbix_host["hostid"])
+
     def set_proxy(self, zabbix_host, zabbix_proxy):
         if not self.dryrun:
             self.api.host.update(hostid=zabbix_host["hostid"], proxy_hostid=zabbix_proxy["proxyid"])
@@ -493,6 +500,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                                                                          output=["hostid", "host", "status", "flags", "proxy_hostid"],
                                                                          selectGroups=["groupid", "name"],
                                                                          selectInterfaces=["dns", "interfaceid", "ip", "main", "port", "type", "useip"],
+                                                                         selectInventory=["inventory_mode"],
                                                                          selectParentTemplates=["templateid", "host"],
                                                                          )}
         zabbix_proxies = {proxy["host"]: proxy for proxy in self.api.proxy.get(output=["proxyid", "host", "status"])}
@@ -607,6 +615,10 @@ class ZabbixHostUpdater(ZabbixUpdater):
                     else:
                         # This interface is missing, set it
                         self.set_interface(zabbix_host, interface, useip, None)
+
+            # Check the inventory
+            if zabbix_host["inventory"]["inventory_mode"] != "1":
+                self.set_inventory(zabbix_host, 1)
 
 
 class ZabbixTemplateUpdater(ZabbixUpdater):
