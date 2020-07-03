@@ -20,7 +20,7 @@ It is currently assumed that you have the following hostgroups in Zabbix. You sh
 * All-auto-disabled-hosts
 * All-hosts
 
-For automatic linking/membershipts in templates you could create the templates:
+For automatic linking in templates you could create the templates:
 
 * Template-barry
 * Template-pizza
