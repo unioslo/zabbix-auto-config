@@ -8,7 +8,7 @@ Note: This is only tested with Zabbix 4.0 LTS.
 
 ## Containers
 
-```
+```bash
 podman run -d -p 80:80 zabbix/zabbix-appliance:ubuntu-4.0-latest
 podman run -d --name postgres -p 5432:5432 -e POSTGRES_USER=username -e POSTGRES_DB=mydatabase -e POSTGRES_PASSWORD=secret library/postgres:latest
 ```
@@ -27,7 +27,7 @@ For automatic linking in templates you could create the templates:
 
 ## Database
 
-```
+```bash
 PGPASSWORD=secret psql -h localhost -U postgres -p 5432 -U username mydatabase << EOF
 CREATE TABLE hosts (
     data jsonb
@@ -40,7 +40,7 @@ EOF
 
 ## Application
 
-```
+```bash
 python3 -m venv venv
 . venv/bin/activate
 pip install -e .
@@ -88,7 +88,7 @@ EOF
 
 Run the application:
 
-```
+```bash
 zac
 ```
 
@@ -96,7 +96,7 @@ zac
 
 You could run this as a systemd service:
 
-```
+```ini
 [Unit]
 Description=Zabbix auto config
 After=network.target
