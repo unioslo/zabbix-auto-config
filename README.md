@@ -6,7 +6,11 @@ Note: This is only tested with Zabbix 4.0 LTS.
 
 # Quick start
 
+This is a crash course in how to quickly get this application up and running in a local test environment:
+
 ## Containers
+
+Use podman/docker.
 
 ```bash
 podman run -d -p 80:80 zabbix/zabbix-appliance:ubuntu-4.0-latest
