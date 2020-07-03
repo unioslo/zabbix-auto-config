@@ -6,9 +6,9 @@ import setuptools
 
 NAME = "zabbix-auto-config"
 DESCRIPTION = "Zabbix auto config - ZAC"
-URL = "https://example.com"
-EMAIL = "me@example.com"
-AUTHOR = "Me"
+URL = "https://www.usit.uio.no/"
+EMAIL = "noreply@usit.uio.no"
+AUTHOR = "University of Oslo, University Center for Information Technology"
 REQUIRES_PYTHON = ">=3.6.0"
 VERSION = None
 
