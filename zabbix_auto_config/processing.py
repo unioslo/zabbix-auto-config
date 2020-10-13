@@ -497,7 +497,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             db_hosts = {t[0]["hostname"]: t[0] for t in db_cursor.fetchall()}
         # status:0 = monitored, flags:0 = non-discovered host
         zabbix_hosts = {host["host"]: host for host in self.api.host.get(filter={"status": 0, "flags": 0},
-                                                                         output=["hostid", "host", "status", "flags", "proxy_hostid"],
+                                                                         output=["hostid", "host", "status", "flags", "proxy_hostid", "inventory_mode"],
                                                                          selectGroups=["groupid", "name"],
                                                                          selectInterfaces=["dns", "interfaceid", "ip", "main", "port", "type", "useip"],
                                                                          selectInventory=["inventory_mode"],
@@ -617,8 +617,15 @@ class ZabbixHostUpdater(ZabbixUpdater):
                         self.set_interface(zabbix_host, interface, useip, None)
 
             # Check the inventory
-            if zabbix_host["inventory"]["inventory_mode"] != "1":
-                self.set_inventory(zabbix_host, 1)
+            # inventory object lacks inventory_mode attr. in api >= 4.4
+            # if api ver >= 4.4
+            if "inventory_mode" in zabbix_host.keys():
+                if zabbix_host["inventory_mode"] != "1":
+                    self.set_inventory(zabbix_host, 1)
+            # else api ver. < 4.4
+            else:
+                if zabbix_host["inventory"]["inventory_mode"] != "1":
+                    self.set_inventory(zabbix_host, 1)
 
 
 class ZabbixTemplateUpdater(ZabbixUpdater):
