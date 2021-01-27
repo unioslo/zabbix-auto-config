@@ -468,6 +468,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 parameters["dns"] = interface["endpoint"]
                 parameters["ip"] = ""
 
+            if "details" in interface:
+                parameters["details"] = interface["details"]
+
             if old_id:
                 self.api.hostinterface.update(interfaceid=old_id, **parameters)
                 logging.info("Updating old interface (type: %s) on host: '%s' (%s)", interface["type"], zabbix_host["host"], zabbix_host["hostid"])
@@ -499,7 +502,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         zabbix_hosts = {host["host"]: host for host in self.api.host.get(filter={"status": 0, "flags": 0},
                                                                          output=["hostid", "host", "status", "flags", "proxy_hostid", "inventory_mode"],
                                                                          selectGroups=["groupid", "name"],
-                                                                         selectInterfaces=["dns", "interfaceid", "ip", "main", "port", "type", "useip"],
+                                                                         selectInterfaces=["dns", "interfaceid", "ip", "main", "port", "type", "useip", "details"],
                                                                          selectInventory=["inventory_mode"],
                                                                          selectParentTemplates=["templateid", "host"],
                                                                          )}
@@ -612,6 +615,18 @@ class ZabbixHostUpdater(ZabbixUpdater):
                         elif not useip and (zabbix_interface["dns"] != interface["endpoint"] or zabbix_interface["port"] != interface["port"] or zabbix_interface["useip"] != useip):
                             # This DNS interface is configured wrong, set it
                             self.set_interface(zabbix_host, interface, useip, zabbix_interface["interfaceid"])
+                        if interface["type"] == 2:
+                            # Check that the interface details are correct.  Note
+                            # that responses from the Zabbix API are quoted, so we
+                            # need to convert our natively typed values to strings.
+                            # Also note that the Zabbix API response may include more
+                            # information than our back-end; ignore such keys.
+                            # TODO: this is terrible and should be implemented
+                            # using dataclasses for the interface and host types.
+                            if not all(zabbix_interface["details"].get(k, None) ==
+                                       str(v) for k,v in interface["details"].items()):
+                                # This SNMP interface is configured wrong, set it.
+                                self.set_interface(zabbix_host, interface, useip, zabbix_interface["interfaceid"])
                     else:
                         # This interface is missing, set it
                         self.set_interface(zabbix_host, interface, useip, None)

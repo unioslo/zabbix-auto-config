@@ -63,8 +63,16 @@ def validate_host(host):
         for interface in host["interfaces"]:
             assert "endpoint" in interface, "'endpoint' is missing from interface"
             assert isinstance(interface["endpoint"], str), "'endpoint' is not a string"
+
             assert "type" in interface, "'type' is missing from interface"
             assert isinstance(interface["type"], int) and 1 <= interface["type"] <= 4, "'type' is not in range 1-4"
+            if interface["type"] == 2:
+                # SNMP interfaces require a 'details' parameter since Zabbix 5.0.
+                assert "details" in interface, "'details' is missing from interface"
+                assert isinstance(interface["details"], dict), "'details' is not a dictionary"
+            else:
+                assert "details" not in interface, "'details' is present on non-SNMP interface"
+
             assert "port" in interface, "'port' is missing from interface"
             assert isinstance(interface["port"], str), "'port' is not a string"
 
