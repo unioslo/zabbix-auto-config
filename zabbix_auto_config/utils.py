@@ -32,7 +32,8 @@ def validate_host(host):
         "properties",
         "proxy_pattern",
         "siteadmins",
-        "sources"
+        "sources",
+        "tags"
     ]
 
     assert isinstance(host, dict), "Host is not a dictionary"
@@ -95,6 +96,10 @@ def validate_host(host):
         for siteadmin in host["siteadmins"]:
             assert isinstance(siteadmin, str), "Found siteadmin that isn't a string"
 
+    if "tags" in host:
+        assert isinstance(host["tags"], list), "'tags' is not a list"
+        for tag in host["tags"]:
+            assert isinstance(tag, dict), "tag is not a dictionary"
 
 def read_map_file(path):
     _map = {}

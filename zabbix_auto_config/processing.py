@@ -262,6 +262,7 @@ class SourceMergerProcess(BaseProcess):
             "inventory": None,  # TODO
             "macros": None,  # TODO
             "properties": sorted(list(set(itertools.chain.from_iterable([host["properties"] for host in hosts if "properties" in host])))),
+            "tags": sorted(list(set(itertools.chain.from_iterable([host["tags"] for host in hosts if "tags" in host])))),
             "siteadmins": sorted(list(set(itertools.chain.from_iterable([host["siteadmins"] for host in hosts if "siteadmins" in host])))),
             "sources": sorted(list(set(itertools.chain.from_iterable([host["sources"] for host in hosts]))))
         }
@@ -445,6 +446,13 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             logging.info("DRYRUN: Enabling host: '%s'", hostname)
 
+    def tag_host(self, zabbix_host):
+        if not self.dryrun:
+            self.api.host.update(hostid=zabbix_host["hostid"], tags=zabbix_host["tags"])
+            logging.info("Adding tags to host: '%s' (%s)", zabbix_host["host"], zabbix_host["tags"])
+        else:
+            logging.info("DRYRUN: Adding tags to host: '%s' (%s)", zabbix_host["host"], zabbix_host["tags"])
+
     def clear_proxy(self, zabbix_host):
         if not self.dryrun:
             self.api.host.update(hostid=zabbix_host["hostid"], proxy_hostid="0")
@@ -505,6 +513,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                                                                          selectInterfaces=["dns", "interfaceid", "ip", "main", "port", "type", "useip", "details"],
                                                                          selectInventory=["inventory_mode"],
                                                                          selectParentTemplates=["templateid", "host"],
+                                                                         selectTags=["tag","value"],
                                                                          )}
         zabbix_proxies = {proxy["host"]: proxy for proxy in self.api.proxy.get(output=["proxyid", "host", "status"])}
         zabbix_managed_hosts = []
@@ -642,6 +651,18 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 if zabbix_host["inventory"]["inventory_mode"] != "1":
                     self.set_inventory(zabbix_host, 1)
 
+            if "tags" in db_host and len(db_host["tags"]) > 0:
+                zabbix_host_tags = set(tuple(sorted(d.items())) for d in zabbix_host["tags"])
+                db_host_tags = set(tuple(sorted(d.items())) for d in db_host["tags"])
+
+                if not db_host_tags.issubset(zabbix_host_tags):
+                    # merging tags added by user via Zabbix gui and tags from zabbix automatic
+                    merged_tags = zabbix_host_tags.union(db_host_tags)
+                    merged_tags_list = []
+                    for tuple_element in merged_tags:
+                        merged_tags_list.append(dict((k,v) for k,v in tuple_element))
+                    zabbix_host["tags"] = merged_tags_list
+                    self.tag_host(zabbix_host)
 
 class ZabbixTemplateUpdater(ZabbixUpdater):
 
