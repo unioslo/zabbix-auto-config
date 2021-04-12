@@ -100,6 +100,7 @@ def validate_host(host):
         assert isinstance(host["tags"], list), "'tags' is not a list"
         for tag in host["tags"]:
             assert isinstance(tag, dict), "tag is not a dictionary"
+            assert tag["tag"].startswith("_"), "tag name doesn't start with _"
 
 def read_map_file(path):
     _map = {}
