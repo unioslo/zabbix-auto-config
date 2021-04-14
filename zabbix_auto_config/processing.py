@@ -263,7 +263,8 @@ class SourceMergerProcess(BaseProcess):
             "macros": None,  # TODO
             "properties": sorted(list(set(itertools.chain.from_iterable([host["properties"] for host in hosts if "properties" in host])))),
             "siteadmins": sorted(list(set(itertools.chain.from_iterable([host["siteadmins"] for host in hosts if "siteadmins" in host])))),
-            "sources": sorted(list(set(itertools.chain.from_iterable([host["sources"] for host in hosts]))))
+            "sources": sorted(list(set(itertools.chain.from_iterable([host["sources"] for host in hosts])))),
+            "tags": list(set(map(tuple, itertools.chain.from_iterable([host["tags"] for host in hosts if "tags" in host])))),
         }
         interfaces = sorted(itertools.chain.from_iterable([host["interfaces"] for host in hosts if "interfaces" in host]), key=lambda e: e["type"])
         if interfaces:
@@ -367,6 +368,7 @@ class ZabbixUpdater(BaseProcess):
         self.zabbix_password = zabbix_config["password"]
         self.dryrun = zabbix_config["dryrun"]
         self.failsafe = zabbix_config["failsafe"]
+        self.tags_prefix = zabbix_config["tags_prefix"]
 
         self.update_interval = 60
         self.next_update = None
@@ -494,6 +496,14 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             logging.info("DRYRUN: Setting proxy (%s) on host: '%s' (%s)", zabbix_proxy["host"], zabbix_host["host"], zabbix_host["hostid"])
 
+    def set_tags(self, zabbix_host, tags):
+        if not self.dryrun:
+            zabbix_tags = utils.zac_tags2zabbix_tags(tags)
+            self.api.host.update(hostid=zabbix_host["hostid"], tags=zabbix_tags)
+            logging.info("Setting tags (%s) on host: '%s' (%s)", tags, zabbix_host["host"], zabbix_host["hostid"])
+        else:
+            logging.info("DRYRUN: Setting tags (%s) on host: '%s' (%s)", tags, zabbix_host["host"], zabbix_host["hostid"])
+
     def do_update(self):
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
@@ -505,6 +515,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                                                                          selectInterfaces=["dns", "interfaceid", "ip", "main", "port", "type", "useip", "details"],
                                                                          selectInventory=["inventory_mode"],
                                                                          selectParentTemplates=["templateid", "host"],
+                                                                         selectTags=["tag", "value"],
                                                                          )}
         zabbix_proxies = {proxy["host"]: proxy for proxy in self.api.proxy.get(output=["proxyid", "host", "status"])}
         zabbix_managed_hosts = []
@@ -630,6 +641,25 @@ class ZabbixHostUpdater(ZabbixUpdater):
                     else:
                         # This interface is missing, set it
                         self.set_interface(zabbix_host, interface, useip, None)
+
+            # Check current tags and apply db tags
+            other_zabbix_tags = utils.zabbix_tags2zac_tags([tag for tag in zabbix_host["tags"] if not tag["tag"].startswith(self.tags_prefix)])  # These are tags outside our namespace/prefix. Keep them.
+            current_tags = utils.zabbix_tags2zac_tags([tag for tag in zabbix_host["tags"] if tag["tag"].startswith(self.tags_prefix)])
+            db_tags = set(map(tuple, db_host["tags"]))
+            ignored_tags = set(filter(lambda tag: not tag[0].startswith(self.tags_prefix), db_tags))
+            if ignored_tags:
+                db_tags = db_tags - ignored_tags
+                logging.warning("Tags (%s) not matching tags prefix ('%s') is configured on host '%s'. They will be ignored.", ignored_tags, self.tags_prefix, zabbix_host["host"])
+
+            tags_to_remove = current_tags - db_tags
+            tags_to_add = db_tags - current_tags
+            tags = db_tags.union(other_zabbix_tags)
+            if tags_to_remove or tags_to_add:
+                if tags_to_remove:
+                    logging.debug("Going to remove tags '%s' from host '%s'.", tags_to_remove, zabbix_host["host"])
+                if tags_to_add:
+                    logging.debug("Going to add tags '%s' to host '%s'.", tags_to_add, zabbix_host["host"])
+                self.set_tags(zabbix_host, tags)
 
             # Check the inventory
             # inventory object lacks inventory_mode attr. in api >= 4.4
