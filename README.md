@@ -10,11 +10,11 @@ This is a crash course in how to quickly get this application up and running in 
 
 ## Containers
 
-Use podman/docker.
+Use podman. Beware: There is a bug in podman 2.2.x. Use older/newer version.
 
 ```bash
-podman run -d -p 80:80 zabbix/zabbix-appliance:ubuntu-4.0-latest
-podman run -d --name postgres -p 5432:5432 -e POSTGRES_USER=username -e POSTGRES_DB=mydatabase -e POSTGRES_PASSWORD=secret library/postgres:latest
+ZABBIX_PASSWORD=secret envsubst < zabbix.template.yaml > zabbix.yaml
+podman play kube zabbix.yaml
 ```
 
 ## Zabbix web
@@ -32,7 +32,9 @@ For automatic linking in templates you could create the templates:
 ## Database
 
 ```bash
-PGPASSWORD=secret psql -h localhost -U postgres -p 5432 -U username mydatabase << EOF
+PGPASSWORD=secret psql -h localhost -U postgres -p 5432 -U zabbix << EOF
+CREATE DATABASE zac;
+\c zac
 CREATE TABLE hosts (
     data jsonb
 );
@@ -48,7 +50,8 @@ EOF
 python3 -m venv venv
 . venv/bin/activate
 pip install -e .
-cat config.sample.ini | perl -pe 's/^dryrun = true$/dryrun = false/g' > config.ini
+cat config.sample.ini > config.ini
+sed -i 's/^dryrun = true$/dryrun = false/g' config.ini
 mkdir -p /path/to/source_collector_dir/ /path/to/host_modifier_dir/ /path/to/map_dir/
 cat > /path/to/source_collector_dir/mysource.py << EOF
 HOSTS = [
