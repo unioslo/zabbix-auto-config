@@ -19,6 +19,15 @@ def is_valid_ip(ip):
         return False
 
 
+def zabbix_tags2zac_tags(zabbix_tags):
+    return {tuple(tag.values()) for tag in zabbix_tags}
+
+
+def zac_tags2zabbix_tags(zac_tags):
+    zabbix_tags = [{"tag": tag[0], "value": tag[1]} for tag in zac_tags]
+    return zabbix_tags
+
+
 def validate_host(host):
     # Host cannot have any other keys than these
 
@@ -32,7 +41,8 @@ def validate_host(host):
         "properties",
         "proxy_pattern",
         "siteadmins",
-        "sources"
+        "sources",
+        "tags",
     ]
 
     assert isinstance(host, dict), "Host is not a dictionary"
@@ -94,6 +104,12 @@ def validate_host(host):
         assert isinstance(host["siteadmins"], list), "'siteadmins' is not a list"
         for siteadmin in host["siteadmins"]:
             assert isinstance(siteadmin, str), "Found siteadmin that isn't a string"
+
+    if "tags" in host:
+        assert isinstance(host["tags"], list), "'tags' is not a list"
+        for tag in host["tags"]:
+            assert len(tag) == 2, f"Found tag that isn't a key/value pair. Length: {len(tag)}"
+            assert all(isinstance(item, str) for item in tag), f"Found nonstring in tag: {tag}"
 
 
 def read_map_file(path):
