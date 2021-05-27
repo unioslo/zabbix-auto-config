@@ -493,12 +493,12 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             logging.info("DRYRUN: Setting inventory (%d) on host: '%s' (%s)", inventory_mode, zabbix_host["host"], zabbix_host["hostid"])
 
-    def set_inventories(self, zabbix_host, inventory):
+    def set_inventories(self, zabbix_host, inventories):
         if not self.dryrun:
-            self.api.host.update(hostid=zabbix_host["hostid"], inventory=inventory)
-            logging.info("Setting inventory (%s) on host: '%s'", inventory, zabbix_host["host"])
+            self.api.host.update(hostid=zabbix_host["hostid"], inventory=inventories)
+            logging.info("Setting inventory (%s) on host: '%s'", inventories, zabbix_host["host"])
         else:
-            logging.info("DRYRUN: Setting inventory (%s) on host: '%s'", inventory, zabbix_host["host"])
+            logging.info("DRYRUN: Setting inventory (%s) on host: '%s'", inventories, zabbix_host["host"])
 
     def set_proxy(self, zabbix_host, zabbix_proxy):
         if not self.dryrun:
