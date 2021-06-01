@@ -259,7 +259,6 @@ class SourceMergerProcess(BaseProcess):
         merged_host = {
             "enabled": any([host["enabled"] for host in hosts]),
             "hostname": hostname,
-            "inventory": dict(itertools.chain.from_iterable(host["inventory"].items() for host in hosts if "inventory" in host)),
             "macros": None,  # TODO
             "properties": sorted(list(set(itertools.chain.from_iterable([host["properties"] for host in hosts if "properties" in host])))),
             "siteadmins": sorted(list(set(itertools.chain.from_iterable([host["siteadmins"] for host in hosts if "siteadmins" in host])))),
@@ -282,6 +281,16 @@ class SourceMergerProcess(BaseProcess):
         if proxy_patterns:
             # TODO: Refactor? Selecting a random pattern might lead to proxy flopping if "bad" patterns are provided.
             merged_host["proxy_pattern"] = random.choice(proxy_patterns)
+
+        inventory = hosts[0]["inventory"] if "inventory" in hosts[0] else {}
+        for host in hosts[1:]:
+            if "inventory" in host:
+                for k, v in host["inventory"].items():
+                    if k in inventory and v != inventory[k]:
+                        logging.warning("Same inventory ('%s') set multiple times for host: '%s'", k, hostname)
+                    else:
+                        inventory[k] = v
+        merged_host["inventory"] = inventory
 
         return merged_host
 
@@ -369,10 +378,10 @@ class ZabbixUpdater(BaseProcess):
         self.dryrun = zabbix_config["dryrun"]
         self.failsafe = zabbix_config["failsafe"]
         self.tags_prefix = zabbix_config["tags_prefix"]
-        if "managed_inventories" in zabbix_config:
-            self.managed_inventories = zabbix_config["managed_inventories"].split(",")
+        if "managed_inventory" in zabbix_config:
+            self.managed_inventory = [managed_inventory.strip() for managed_inventory in zabbix_config["managed_inventory"].split(",") if managed_inventory.strip() != ""]
         else:
-            self.managed_inventories = []
+            self.managed_inventory = []
 
         self.update_interval = 60
         self.next_update = None
@@ -489,16 +498,16 @@ class ZabbixHostUpdater(ZabbixUpdater):
     def set_inventory_mode(self, zabbix_host, inventory_mode):
         if not self.dryrun:
             self.api.host.update(hostid=zabbix_host["hostid"], inventory_mode=inventory_mode)
-            logging.info("Setting inventory (%d) on host: '%s' (%s)", inventory_mode, zabbix_host["host"], zabbix_host["hostid"])
+            logging.info("Setting inventory_mode (%d) on host: '%s' (%s)", inventory_mode, zabbix_host["host"], zabbix_host["hostid"])
         else:
-            logging.info("DRYRUN: Setting inventory (%d) on host: '%s' (%s)", inventory_mode, zabbix_host["host"], zabbix_host["hostid"])
+            logging.info("DRYRUN: Setting inventory_mode (%d) on host: '%s' (%s)", inventory_mode, zabbix_host["host"], zabbix_host["hostid"])
 
-    def set_inventories(self, zabbix_host, inventories):
+    def set_inventory(self, zabbix_host, inventory):
         if not self.dryrun:
-            self.api.host.update(hostid=zabbix_host["hostid"], inventory=inventories)
-            logging.info("Setting inventory (%s) on host: '%s'", inventories, zabbix_host["host"])
+            self.api.host.update(hostid=zabbix_host["hostid"], inventory=inventory)
+            logging.info("Setting inventory (%s) on host: '%s'", inventory, zabbix_host["host"])
         else:
-            logging.info("DRYRUN: Setting inventory (%s) on host: '%s'", inventories, zabbix_host["host"])
+            logging.info("DRYRUN: Setting inventory (%s) on host: '%s'", inventory, zabbix_host["host"])
 
     def set_proxy(self, zabbix_host, zabbix_proxy):
         if not self.dryrun:
@@ -524,7 +533,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                                                                          output=["hostid", "host", "status", "flags", "proxy_hostid", "inventory_mode"],
                                                                          selectGroups=["groupid", "name"],
                                                                          selectInterfaces=["dns", "interfaceid", "ip", "main", "port", "type", "useip", "details"],
-                                                                         selectInventory=self.managed_inventories,
+                                                                         selectInventory=self.managed_inventory,
                                                                          selectParentTemplates=["templateid", "host"],
                                                                          selectTags=["tag", "value"],
                                                                          )}
@@ -672,32 +681,25 @@ class ZabbixHostUpdater(ZabbixUpdater):
                     logging.debug("Going to add tags '%s' to host '%s'.", tags_to_add, zabbix_host["host"])
                 self.set_tags(zabbix_host, tags)
 
-            # Check the inventory
-            # inventory object lacks inventory_mode attr. in api >= 4.4
-            # if api ver >= 4.4
-            if "inventory_mode" in zabbix_host.keys():
-                if zabbix_host["inventory_mode"] != "1":
-                    self.set_inventory_mode(zabbix_host, 1)
-            # else api ver. < 4.4
-            else:
-                if zabbix_host["inventory"]["inventory_mode"] != "1":
-                    self.set_inventory_mode(zabbix_host, 1)
+            if zabbix_host["inventory_mode"] != "1":
+                self.set_inventory_mode(zabbix_host, 1)
 
             if db_host["inventory"]:
                 if zabbix_host["inventory"]:
-                    inventories_to_add = dict(set(db_host["inventory"].items()).difference(set(zabbix_host["inventory"].items())))
+                    changed_inventory = {k: v for k, v in db_host["inventory"].items() if db_host["inventory"][k] != zabbix_host["inventory"].get(k, None)}
                 else:
-                    inventories_to_add = db_host["inventory"]
+                    changed_inventory = db_host["inventory"]
 
-                if inventories_to_add:
+                if changed_inventory:
                     # inventory outside of zac management
-                    ignored_inventories = {k: v for k, v in inventories_to_add.items() if k not in self.managed_inventories}
+                    ignored_inventory = {k: v for k, v in changed_inventory.items() if k not in self.managed_inventory}
+
                     # inventories managed by zac and to be updated
-                    inventories = {k: v for k, v in inventories_to_add.items() if k in self.managed_inventories}
-                    if inventories:
-                        self.set_inventories(zabbix_host, inventories)
-                    else:
-                        logging.debug("Zac is not configured to manage inventory properties: '%s'.", ignored_inventories)
+                    inventory = {k: v for k, v in changed_inventory.items() if k in self.managed_inventory}
+                    if inventory:
+                        self.set_inventory(zabbix_host, inventory)
+                    if ignored_inventory:
+                        logging.warning("Zac is not configured to manage inventory properties: '%s'.", ignored_inventory)
 
 
 class ZabbixTemplateUpdater(ZabbixUpdater):
