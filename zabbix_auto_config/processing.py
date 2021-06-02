@@ -681,7 +681,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                     logging.debug("Going to add tags '%s' to host '%s'.", tags_to_add, zabbix_host["host"])
                 self.set_tags(zabbix_host, tags)
 
-            if zabbix_host["inventory_mode"] != "1":
+            if int(zabbix_host["inventory_mode"]) != 1:
                 self.set_inventory_mode(zabbix_host, 1)
 
             if db_host["inventory"]:
