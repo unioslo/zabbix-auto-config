@@ -87,7 +87,9 @@ def validate_host(host):
             assert isinstance(interface["port"], str), "'port' is not a string"
 
     if "inventory" in host:
-        pass  # TODO: What should inventory look like?
+        assert isinstance(host["inventory"], dict), "'inventory' is not a dictionary"
+        for key, value in host["inventory"].items():
+            assert isinstance(key, str) and isinstance(value, str), f"Found nonstring value in inventory: {key!r}=>{value!r}"
 
     if "macros" in host:
         pass  # TODO: What should macros look like?
