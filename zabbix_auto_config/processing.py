@@ -803,7 +803,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
     def do_update(self):
         managed_hostgroup_names = set(itertools.chain.from_iterable(self.property_hostgroup_map.values()))
-        managed_hostgroup_names.union(set(itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values())))
+        managed_hostgroup_names.update(itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values()))
         zabbix_hostgroups = {}
         for zabbix_hostgroup in self.api.hostgroup.get(output=["name", "groupid"]):
             zabbix_hostgroups[zabbix_hostgroup["name"]] = zabbix_hostgroup["groupid"]
