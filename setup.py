@@ -15,7 +15,7 @@ VERSION = None
 REQUIRED = [
     "multiprocessing-logging==0.3.1",
     "psycopg2",
-    "pyzabbix==0.8.2",
+    "pyzabbix",
 ]
 
 EXTRAS = {
