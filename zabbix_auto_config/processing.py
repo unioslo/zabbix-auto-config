@@ -33,6 +33,10 @@ class BaseProcess(multiprocessing.Process):
             while not self.stop_event.is_set():
                 self.work()
                 time.sleep(self.sleep_interval)
+                if not multiprocessing.parent_process().is_alive():
+                    logging.error("Parent is dead. Stopping")
+                    self.stop_event.set()
+
 
         logging.info("Process exiting")
 
