@@ -11,6 +11,7 @@ import time
 import multiprocessing_logging
 
 from .__version__ import __version__
+from . import exceptions
 from . import processing
 
 
@@ -92,27 +93,28 @@ def main():
         process = processing.SourceCollectorProcess(source_collector["name"], source_collector["module"], source_collector["config"], source_hosts_queue)
         source_hosts_queues.append(source_hosts_queue)
         processes.append(process)
+
+    try:
+        process = processing.SourceHandlerProcess("source-handler", config["zac"]["db_uri"], source_hosts_queues)
+        processes.append(process)
+
+        process = processing.SourceMergerProcess("source-merger", config["zac"]["db_uri"], config["zac"]["host_modifier_dir"])
+        processes.append(process)
+
+        process = processing.ZabbixHostUpdater("zabbix-host-updater", config["zac"]["db_uri"], zabbix_config)
+        processes.append(process)
+
+        process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", config["zac"]["db_uri"], zabbix_config)
+        processes.append(process)
+
+        process = processing.ZabbixTemplateUpdater("zabbix-template-updater", config["zac"]["db_uri"], zabbix_config)
+        processes.append(process)
+    except exceptions.ZACException as e:
+        logging.error("Failed to initialize child processes. Exiting: %s", str(e))
+        sys.exit(1)
+
+    for process in processes:
         process.start()
-
-    process = processing.SourceHandlerProcess("source-handler", config["zac"]["db_uri"], source_hosts_queues)
-    process.start()
-    processes.append(process)
-
-    process = processing.SourceMergerProcess("source-merger", config["zac"]["db_uri"], config["zac"]["host_modifier_dir"])
-    process.start()
-    processes.append(process)
-
-    process = processing.ZabbixHostUpdater("zabbix-host-updater", config["zac"]["db_uri"], zabbix_config)
-    process.start()
-    processes.append(process)
-
-    process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", config["zac"]["db_uri"], zabbix_config)
-    process.start()
-    processes.append(process)
-
-    process = processing.ZabbixTemplateUpdater("zabbix-template-updater", config["zac"]["db_uri"], zabbix_config)
-    process.start()
-    processes.append(process)
 
     with processing.SignalHandler(stop_event):
         status_interval = 60
