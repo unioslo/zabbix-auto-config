@@ -16,7 +16,8 @@ REQUIRED = [
     "multiprocessing-logging==0.3.1",
     "psycopg2",
     "pydantic",
-    "pyzabbix==0.7.5",
+    "pyzabbix",
+    "requests",
 ]
 
 EXTRAS = {

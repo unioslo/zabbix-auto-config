@@ -15,8 +15,10 @@ import queue
 
 import psycopg2
 import pyzabbix
+import requests.exceptions
 
 from . import models
+from . import exceptions
 from . import utils
 
 
@@ -34,6 +36,10 @@ class BaseProcess(multiprocessing.Process):
             while not self.stop_event.is_set():
                 self.work()
                 time.sleep(self.sleep_interval)
+                if not multiprocessing.parent_process().is_alive():
+                    logging.error("Parent is dead. Stopping")
+                    self.stop_event.set()
+
 
         logging.info("Process exiting")
 
@@ -122,7 +128,7 @@ class SourceHandlerProcess(BaseProcess):
             # TODO: Test connection? Cursor?
         except psycopg2.OperationalError as e:
             logging.error("Unable to connect to database.")
-            raise e
+            raise exceptions.ZACException(*e.args)
 
         self.source_hosts_queues = source_hosts_queues
         for source_hosts_queue in self.source_hosts_queues:
@@ -335,7 +341,7 @@ class ZabbixUpdater(BaseProcess):
             # TODO: Test connection? Cursor?
         except psycopg2.OperationalError as e:
             logging.error("Unable to connect to database. Process exiting with error")
-            raise e
+            raise exceptions.ZACException(*e.args)
 
         self.map_dir = zabbix_config["map_dir"]
         self.zabbix_url = zabbix_config["url"]
@@ -358,9 +364,12 @@ class ZabbixUpdater(BaseProcess):
         self.api = pyzabbix.ZabbixAPI(self.zabbix_url)
         try:
             self.api.login(self.zabbix_username, self.zabbix_password)
-        except pyzabbix.ZabbixAPIException as e:
+        except requests.exceptions.ConnectionError as e:
+            logging.error("Error while connecting to Zabbix: %s", self.zabbix_url)
+            raise exceptions.ZACException(*e.args)
+        except (pyzabbix.ZabbixAPIException, requests.exceptions.HTTPError) as e:
             logging.error("Unable to login to Zabbix API: %s", str(e))
-            raise e
+            raise exceptions.ZACException(*e.args)
 
         self.property_template_map = utils.read_map_file(os.path.join(self.map_dir, "property_template_map.txt"))
         self.property_hostgroup_map = utils.read_map_file(os.path.join(self.map_dir, "property_hostgroup_map.txt"))
@@ -770,7 +779,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
     def do_update(self):
         managed_hostgroup_names = set(itertools.chain.from_iterable(self.property_hostgroup_map.values()))
-        managed_hostgroup_names.union(set(itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values())))  # TODO: This is a bug? Set isn't updated
+        managed_hostgroup_names.update(itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values()))
         zabbix_hostgroups = {}
         for zabbix_hostgroup in self.api.hostgroup.get(output=["name", "groupid"]):
             zabbix_hostgroups[zabbix_hostgroup["name"]] = zabbix_hostgroup["groupid"]
