@@ -18,6 +18,7 @@ import pyzabbix
 import requests.exceptions
 
 from . import exceptions
+from . import models
 from . import utils
 
 
@@ -98,14 +99,11 @@ class SourceCollectorProcess(BaseProcess):
                 logging.debug("Told to stop. Breaking")
                 break
             try:
-                host["sources"] = [self.name]
-                utils.validate_host(host)
+                assert isinstance(host, models.Host), f"Collected object is not a proper Host: {host!r}"
+                host.sources = [self.name]
                 valid_hosts.append(host)
             except AssertionError as e:
-                if "hostname" in host:
-                    logging.error("Host <%s> is invalid: %s", host['hostname'], str(e))
-                else:
-                    logging.error("Host object is invalid: %s", str(e))
+                logging.error("Host object is invalid: %s", str(e))
 
         source_hosts = {
             "source": self.name,
@@ -157,7 +155,7 @@ class SourceHandlerProcess(BaseProcess):
         start_time = time.time()
         equal_hosts, replaced_hosts, inserted_hosts, removed_hosts = (0, 0, 0, 0)
 
-        source_hostnames = {host["hostname"] for host in hosts}
+        source_hostnames = {host.hostname for host in hosts}
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT DISTINCT data->>'hostname' FROM {self.db_source_table} WHERE data->'sources' ? %s", [source])
             current_hostnames = {t[0] for t in db_cursor.fetchall()}
@@ -170,9 +168,9 @@ class SourceHandlerProcess(BaseProcess):
 
         for host in hosts:
             with self.db_connection, self.db_connection.cursor() as db_cursor:
-                db_cursor.execute(f"SELECT data FROM {self.db_source_table} WHERE data->>'hostname' = %s AND data->'sources' ? %s", [host["hostname"], source])
+                db_cursor.execute(f"SELECT data FROM {self.db_source_table} WHERE data->>'hostname' = %s AND data->'sources' ? %s", [host.hostname, source])
                 result = db_cursor.fetchall()
-                current_host = result[0][0] if result else None
+                current_host = models.Host(**result[0][0]) if result else None
 
             if current_host:
                 if current_host == host:
@@ -180,12 +178,12 @@ class SourceHandlerProcess(BaseProcess):
                 else:
                     # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
                     with self.db_connection, self.db_connection.cursor() as db_cursor:
-                        db_cursor.execute(f"UPDATE {self.db_source_table} SET data = %s WHERE data->>'hostname' = %s AND data->'sources' ? %s", [json.dumps(host), host["hostname"], source])
+                        db_cursor.execute(f"UPDATE {self.db_source_table} SET data = %s WHERE data->>'hostname' = %s AND data->'sources' ? %s", [host.json(), host.hostname, source])
                     replaced_hosts += 1
             else:
                 # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
                 with self.db_connection, self.db_connection.cursor() as db_cursor:
-                    db_cursor.execute(f"INSERT INTO {self.db_source_table} (data) VALUES (%s)", [json.dumps(host)])
+                    db_cursor.execute(f"INSERT INTO {self.db_source_table} (data) VALUES (%s)", [host.json()])
                 inserted_hosts += 1
 
         logging.info(f"Handled hosts from source <{source}> in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
@@ -256,47 +254,15 @@ class SourceMergerProcess(BaseProcess):
     def merge_hosts(self, hostname):
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_source_table} WHERE data->>'hostname' = %s", [hostname])
-            hosts = [t[0] for t in db_cursor.fetchall()]
+            hosts = [models.Host(**t[0]) for t in db_cursor.fetchall()]
 
         if len(hosts) == 0:
             # Host not found. TODO: Raise error?
             return None
 
-        merged_host = {
-            "enabled": any([host["enabled"] for host in hosts]),
-            "hostname": hostname,
-            "macros": None,  # TODO
-            "properties": sorted(list(set(itertools.chain.from_iterable([host["properties"] for host in hosts if "properties" in host])))),
-            "siteadmins": sorted(list(set(itertools.chain.from_iterable([host["siteadmins"] for host in hosts if "siteadmins" in host])))),
-            "sources": sorted(list(set(itertools.chain.from_iterable([host["sources"] for host in hosts])))),
-            "tags": list(set(map(tuple, itertools.chain.from_iterable([host["tags"] for host in hosts if "tags" in host])))),
-        }
-        interfaces = sorted(itertools.chain.from_iterable([host["interfaces"] for host in hosts if "interfaces" in host]), key=lambda e: e["type"])
-        if interfaces:
-            interface_types = [i["type"] for i in interfaces]
-            if len(interface_types) == len(set(interface_types)):
-                merged_host["interfaces"] = interfaces
-            else:
-                logging.warning("There are multiple interfaces of same type. Source interfaces can't be selected for host: %s", hostname)
-
-        importances = [host["importance"] for host in hosts if "importance" in host]
-        if importances:
-            merged_host["importance"] = min(importances)
-
-        proxy_patterns = list({host["proxy_pattern"] for host in hosts if "proxy_pattern" in host})
-        if proxy_patterns:
-            # TODO: Refactor? Selecting a random pattern might lead to proxy flopping if "bad" patterns are provided.
-            merged_host["proxy_pattern"] = random.choice(proxy_patterns)
-
-        inventory = hosts[0]["inventory"] if "inventory" in hosts[0] else {}
+        merged_host = hosts[0]
         for host in hosts[1:]:
-            if "inventory" in host:
-                for k, v in host["inventory"].items():
-                    if k in inventory and v != inventory[k]:
-                        logging.warning("Same inventory ('%s') set multiple times for host: '%s'", k, hostname)
-                    else:
-                        inventory[k] = v
-        merged_host["inventory"] = inventory
+            merged_host.merge(host)
 
         return merged_host
 
@@ -330,9 +296,9 @@ class SourceMergerProcess(BaseProcess):
 
             for host_modifier in self.host_modifiers:
                 try:
-                    modified_host = host_modifier["module"].modify(host.copy())
-                    assert hostname == modified_host["hostname"], f"Modifier changed the hostname, '{hostname}' -> '{modified_host['hostname']}'"
-                    utils.validate_host(modified_host)
+                    modified_host = host_modifier["module"].modify(host.copy(deep=True))
+                    assert isinstance(modified_host, models.Host)
+                    assert hostname == modified_host.hostname, f"Modifier changed the hostname, '{hostname}' -> '{modified_host.hostname}'"
                     host = modified_host
                 except AssertionError as e:
                     logging.warning("Host, '%s', was modified to be invalid by modifier: '%s'. Error: %s", hostname, host_modifier["name"], str(e))
@@ -343,7 +309,7 @@ class SourceMergerProcess(BaseProcess):
             with self.db_connection, self.db_connection.cursor() as db_cursor:
                 db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'hostname' = %s", [hostname])
                 result = db_cursor.fetchall()
-                current_host = result[0][0] if result else None
+                current_host = models.Host(**result[0][0]) if result else None
 
             if current_host:
                 if current_host == host:
@@ -351,12 +317,12 @@ class SourceMergerProcess(BaseProcess):
                 else:
                     # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
                     with self.db_connection, self.db_connection.cursor() as db_cursor:
-                        db_cursor.execute(f"UPDATE {self.db_hosts_table} SET data = %s WHERE data->>'hostname' = %s", [json.dumps(host), hostname])
+                        db_cursor.execute(f"UPDATE {self.db_hosts_table} SET data = %s WHERE data->>'hostname' = %s", [host.json(), hostname])
                         replaced_hosts += 1
             else:
                 # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
                 with self.db_connection, self.db_connection.cursor() as db_cursor:
-                    db_cursor.execute(f"INSERT INTO {self.db_hosts_table} (data) VALUES (%s)", [json.dumps(host)])
+                    db_cursor.execute(f"INSERT INTO {self.db_hosts_table} (data) VALUES (%s)", [host.json()])
                     inserted_hosts += 1
 
         logging.info(f"Merged sources in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
@@ -443,7 +409,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
     def enable_host(self, db_host):
         # TODO: Set correct proxy when enabling
-        hostname = db_host["hostname"]
+        hostname = db_host.hostname
         if not self.dryrun:
             try:
                 hostgroup_id = self.api.hostgroup.get(filter={"name": "All-hosts"})[0]["groupid"]
@@ -481,28 +447,28 @@ class ZabbixHostUpdater(ZabbixUpdater):
             parameters = {
                 "hostid": zabbix_host["hostid"],
                 "main": 1,
-                "port": interface["port"],
-                "type": interface["type"],
+                "port": interface.port,
+                "type": interface.type,
                 "useip": int(useip),
             }
             if useip:
                 parameters["dns"] = ""
-                parameters["ip"] = interface["endpoint"]
+                parameters["ip"] = interface.endpoint
             else:
-                parameters["dns"] = interface["endpoint"]
+                parameters["dns"] = interface.endpoint
                 parameters["ip"] = ""
 
             if "details" in interface:
-                parameters["details"] = interface["details"]
+                parameters["details"] = interface.details
 
             if old_id:
                 self.api.hostinterface.update(interfaceid=old_id, **parameters)
-                logging.info("Updating old interface (type: %s) on host: '%s' (%s)", interface["type"], zabbix_host["host"], zabbix_host["hostid"])
+                logging.info("Updating old interface (type: %s) on host: '%s' (%s)", interface.type, zabbix_host["host"], zabbix_host["hostid"])
             else:
                 self.api.hostinterface.create(**parameters)
-                logging.info("Creating new interface (type: %s) on host: '%s' (%s)", interface["type"], zabbix_host["host"], zabbix_host["hostid"])
+                logging.info("Creating new interface (type: %s) on host: '%s' (%s)", interface.type, zabbix_host["host"], zabbix_host["hostid"])
         else:
-            logging.info("DRYRUN: Setting interface (type: %d) on host: '%s' (%s)", interface["type"], zabbix_host["host"], zabbix_host["hostid"])
+            logging.info("DRYRUN: Setting interface (type: %d) on host: '%s' (%s)", interface.type, zabbix_host["host"], zabbix_host["hostid"])
 
     def set_inventory_mode(self, zabbix_host, inventory_mode):
         if not self.dryrun:
@@ -536,7 +502,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
     def do_update(self):
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
-            db_hosts = {t[0]["hostname"]: t[0] for t in db_cursor.fetchall()}
+            db_hosts = {t[0]["hostname"]: models.Host(**t[0]) for t in db_cursor.fetchall()}
         # status:0 = monitored, flags:0 = non-discovered host
         zabbix_hosts = {host["host"]: host for host in self.api.host.get(filter={"status": 0, "flags": 0},
                                                                          output=["hostid", "host", "status", "flags", "proxy_hostid", "inventory_mode"],
@@ -613,24 +579,24 @@ class ZabbixHostUpdater(ZabbixUpdater):
             zabbix_proxy_id = zabbix_host["proxy_hostid"]
             zabbix_proxy = [proxy for proxy in zabbix_proxies.values() if proxy["proxyid"] == zabbix_proxy_id]
             current_zabbix_proxy = zabbix_proxy[0] if zabbix_proxy else None
-            if "proxy_pattern" in db_host:
-                possible_proxies = [proxy for proxy in zabbix_proxies.values() if re.match(db_host["proxy_pattern"], proxy["host"])]
+            if db_host.proxy_pattern:
+                possible_proxies = [proxy for proxy in zabbix_proxies.values() if re.match(db_host.proxy_pattern, proxy["host"])]
                 if not possible_proxies:
-                    logging.error("Proxy pattern ('%s') for host, '%s' (%s), doesn't match any proxies.", db_host["proxy_pattern"], hostname, zabbix_host["hostid"])
+                    logging.error("Proxy pattern ('%s') for host, '%s' (%s), doesn't match any proxies.", db_host.proxy_pattern, hostname, zabbix_host["hostid"])
                 else:
                     new_proxy = random.choice(possible_proxies)
-                    if current_zabbix_proxy and not re.match(db_host["proxy_pattern"], current_zabbix_proxy["host"]):
+                    if current_zabbix_proxy and not re.match(db_host.proxy_pattern, current_zabbix_proxy["host"]):
                         # Wrong proxy, set new
                         self.set_proxy(zabbix_host, new_proxy)
                     elif not current_zabbix_proxy:
                         # Missing proxy, set new
                         self.set_proxy(zabbix_host, new_proxy)
-            elif "proxy_pattern" not in db_host and current_zabbix_proxy:
+            elif not db_host.proxy_pattern and current_zabbix_proxy:
                 # Should not have proxy, remove
                 self.clear_proxy(zabbix_host)
 
             # Check the main/default interfaces
-            if "interfaces" in db_host:
+            if db_host.interfaces:
                 zabbix_interfaces = zabbix_host["interfaces"]
 
                 # The API doesn't return the proper, documented types. We need to fix these types
@@ -643,19 +609,20 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 # Restructure object, and filter non main/default interfaces
                 zabbix_interfaces = {i["type"]: i for i in zabbix_host["interfaces"] if i["main"] == 1}
 
-                for interface in db_host["interfaces"]:
+                for interface in db_host.interfaces:
                     # We assume that we're using an IP if the endpoint is a valid IP
-                    useip = utils.is_valid_ip(interface["endpoint"])
-                    if interface["type"] in zabbix_interfaces:
+                    useip = utils.is_valid_ip(interface.endpoint)
+                    if interface.type in zabbix_interfaces:
                         # This interface type exists on the current zabbix host
-                        zabbix_interface = zabbix_interfaces[interface["type"]]
-                        if useip and (zabbix_interface["ip"] != interface["endpoint"] or zabbix_interface["port"] != interface["port"] or zabbix_interface["useip"] != useip):
+                        # TODO: This logic could probably be simplified and should be refactored
+                        zabbix_interface = zabbix_interfaces[interface.type]
+                        if useip and (zabbix_interface["ip"] != interface.endpoint or zabbix_interface["port"] != interface.port or zabbix_interface["useip"] != useip):
                             # This IP interface is configured wrong, set it
                             self.set_interface(zabbix_host, interface, useip, zabbix_interface["interfaceid"])
-                        elif not useip and (zabbix_interface["dns"] != interface["endpoint"] or zabbix_interface["port"] != interface["port"] or zabbix_interface["useip"] != useip):
+                        elif not useip and (zabbix_interface["dns"] != interface.endpoint or zabbix_interface["port"] != interface.port or zabbix_interface["useip"] != useip):
                             # This DNS interface is configured wrong, set it
                             self.set_interface(zabbix_host, interface, useip, zabbix_interface["interfaceid"])
-                        if interface["type"] == 2:
+                        if interface.type == 2:
                             # Check that the interface details are correct.  Note
                             # that responses from the Zabbix API are quoted, so we
                             # need to convert our natively typed values to strings.
@@ -664,7 +631,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                             # TODO: this is terrible and should be implemented
                             # using dataclasses for the interface and host types.
                             if not all(zabbix_interface["details"].get(k, None) ==
-                                       str(v) for k,v in interface["details"].items()):
+                                       str(v) for k,v in interface.details.items()):
                                 # This SNMP interface is configured wrong, set it.
                                 self.set_interface(zabbix_host, interface, useip, zabbix_interface["interfaceid"])
                     else:
@@ -674,7 +641,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             # Check current tags and apply db tags
             other_zabbix_tags = utils.zabbix_tags2zac_tags([tag for tag in zabbix_host["tags"] if not tag["tag"].startswith(self.tags_prefix)])  # These are tags outside our namespace/prefix. Keep them.
             current_tags = utils.zabbix_tags2zac_tags([tag for tag in zabbix_host["tags"] if tag["tag"].startswith(self.tags_prefix)])
-            db_tags = set(map(tuple, db_host["tags"]))
+            db_tags = db_host.tags
             ignored_tags = set(filter(lambda tag: not tag[0].startswith(self.tags_prefix), db_tags))
             if ignored_tags:
                 db_tags = db_tags - ignored_tags
@@ -693,11 +660,11 @@ class ZabbixHostUpdater(ZabbixUpdater):
             if int(zabbix_host["inventory_mode"]) != 1:
                 self.set_inventory_mode(zabbix_host, 1)
 
-            if db_host["inventory"]:
+            if db_host.inventory:
                 if zabbix_host["inventory"]:
-                    changed_inventory = {k: v for k, v in db_host["inventory"].items() if db_host["inventory"][k] != zabbix_host["inventory"].get(k, None)}
+                    changed_inventory = {k: v for k, v in db_host.inventory.items() if db_host.inventory[k] != zabbix_host["inventory"].get(k, None)}
                 else:
-                    changed_inventory = db_host["inventory"]
+                    changed_inventory = db_host.inventory
 
                 if changed_inventory:
                     # inventory outside of zac management
@@ -739,7 +706,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         managed_template_names = managed_template_names.intersection(set(zabbix_templates.keys()))  # If the template isn't in zabbix we can't manage it
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
-            db_hosts = {t[0]["hostname"]: t[0] for t in db_cursor.fetchall()}
+            db_hosts = {t[0]["hostname"]: models.Host(**t[0]) for t in db_cursor.fetchall()}
         zabbix_hosts = {host["host"]: host for host in self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])}
 
         for zabbix_hostname, zabbix_host in zabbix_hosts.items():
@@ -758,7 +725,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
             db_host = db_hosts[zabbix_hostname]
 
             synced_template_names = set()
-            for _property in db_host["properties"]:
+            for _property in db_host.properties:
                 if _property in self.property_template_map:
                     synced_template_names.update(self.property_template_map[_property])
             synced_template_names = synced_template_names.intersection(set(zabbix_templates.keys()))  # If the template isn't in zabbix we can't manage it
@@ -824,7 +791,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
-            db_hosts = {t[0]["hostname"]: t[0] for t in db_cursor.fetchall()}
+            db_hosts = {t[0]["hostname"]: models.Host(**t[0]) for t in db_cursor.fetchall()}
         zabbix_hosts = {host["host"]: host for host in self.api.host.get(filter={"status": 0, "flags": 0}, output=["hostid", "host"], selectGroups=["groupid", "name"], selectParentTemplates=["templateid", "host"])}
 
         for zabbix_hostname, zabbix_host in zabbix_hosts.items():
@@ -843,16 +810,16 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             db_host = db_hosts[zabbix_hostname]
 
             synced_hostgroup_names = set(["All-hosts"])
-            for _property in db_host["properties"]:
+            for _property in db_host.properties:
                 if _property in self.property_hostgroup_map:
                     synced_hostgroup_names.update(self.property_hostgroup_map[_property])
-            for siteadmin in db_host["siteadmins"]:
+            for siteadmin in db_host.siteadmins:
                 if siteadmin in self.siteadmin_hostgroup_map:
                     synced_hostgroup_names.update(self.siteadmin_hostgroup_map[siteadmin])
-            for source in db_host["sources"]:
+            for source in db_host.sources:
                 synced_hostgroup_names.add(f"Source-{source}")
-            if "importance" in db_host:
-                synced_hostgroup_names.add(f"Importance-{db_host['importance']}")
+            if db_host.importance != None:
+                synced_hostgroup_names.add(f"Importance-{db_host.importance}")
             else:
                 synced_hostgroup_names.add(f"Importance-X")
 
@@ -863,6 +830,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             old_host_hostgroups = host_hostgroups.copy()
 
             for hostgroup_name in list(host_hostgroups.keys()):
+                # TODO: Here lies a bug due to managed_hostgroup_names not being properly updated above?
                 if hostgroup_name in managed_hostgroup_names and hostgroup_name not in synced_hostgroup_names:
                     logging.debug("Going to remove hostgroup '%s' from host '%s'.", hostgroup_name, zabbix_hostname)
                     del host_hostgroups[hostgroup_name]

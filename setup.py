@@ -15,6 +15,7 @@ VERSION = None
 REQUIRED = [
     "multiprocessing-logging==0.3.1",
     "psycopg2",
+    "pydantic",
     "pyzabbix",
     "requests",
 ]
