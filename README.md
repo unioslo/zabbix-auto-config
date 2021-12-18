@@ -53,6 +53,8 @@ cat config.sample.ini > config.ini
 sed -i 's/^dryrun = true$/dryrun = false/g' config.ini
 mkdir -p path/to/source_collector_dir/ path/to/host_modifier_dir/ path/to/map_dir/
 cat > path/to/source_collector_dir/mysource.py << EOF
+import zabbix_auto_config.models
+
 HOSTS = [
     {
         "hostname": "foo.example.com",
@@ -63,6 +65,7 @@ HOSTS = [
 ]
 
 def collect(*args, **kwargs):
+    hosts = []
     for host in HOSTS:
         host["enabled"] = True
         host["siteadmins"] = ["bob@example.com"]
@@ -70,14 +73,18 @@ def collect(*args, **kwargs):
         source = kwargs.get("source")
         if source:
             host["properties"].append(source)
+        hosts.append(zabbix_auto_config.models.Host(**host))
 
-    return HOSTS
+    return hosts
+
+if __name__ == "__main__":
+    for host in collect():
+        print(host.json())
 EOF
 cat > path/to/host_modifier_dir/mod.py << EOF
 def modify(host):
-    if host["hostname"] == "bar.example.com":
-        host["properties"].append("barry")
-        host["properties"] = sorted(host["properties"])
+    if host.hostname == "bar.example.com":
+        host.properties.add("barry")
     return host
 EOF
 cat > path/to/map_dir/property_template_map.txt << EOF
