@@ -8,16 +8,15 @@ Note: This is only tested with Zabbix 5.0 LTS.
 
 This is a crash course in how to quickly get this application up and running in a local test environment:
 
-## Containers
+## Zabbix test instance
 
-Use podman. Beware: There is a bug in podman 2.2.x. Use older/newer version.
+Setup a Zabbix test instance with [podman](https://podman.io/) and [podman-compose](https://github.com/containers/podman-compose/).
 
 ```bash
-ZABBIX_PASSWORD=secret envsubst < zabbix.template.yaml > zabbix.yaml
-podman play kube zabbix.yaml
+TAG=alpine-5.0-latest ZABBIX_PASSWORD=secret podman-compose up -d
 ```
 
-## Zabbix web
+## Zabbix prerequisites
 
 It is currently assumed that you have the following hostgroups in Zabbix. You should logon to Zabbix and create them:
 
