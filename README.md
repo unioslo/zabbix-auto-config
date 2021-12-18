@@ -51,8 +51,8 @@ python3 -m venv venv
 pip install -e .
 cat config.sample.ini > config.ini
 sed -i 's/^dryrun = true$/dryrun = false/g' config.ini
-mkdir -p /path/to/source_collector_dir/ /path/to/host_modifier_dir/ /path/to/map_dir/
-cat > /path/to/source_collector_dir/mysource.py << EOF
+mkdir -p path/to/source_collector_dir/ path/to/host_modifier_dir/ path/to/map_dir/
+cat > path/to/source_collector_dir/mysource.py << EOF
 HOSTS = [
     {
         "hostname": "foo.example.com",
@@ -73,21 +73,21 @@ def collect(*args, **kwargs):
 
     return HOSTS
 EOF
-cat > /path/to/host_modifier_dir/mod.py << EOF
+cat > path/to/host_modifier_dir/mod.py << EOF
 def modify(host):
     if host["hostname"] == "bar.example.com":
         host["properties"].append("barry")
         host["properties"] = sorted(host["properties"])
     return host
 EOF
-cat > /path/to/map_dir/property_template_map.txt << EOF
+cat > path/to/map_dir/property_template_map.txt << EOF
 pizza:Template-pizza
 barry:Template-barry
 EOF
-cat > /path/to/map_dir/property_hostgroup_map.txt << EOF
+cat > path/to/map_dir/property_hostgroup_map.txt << EOF
 other:Hostgroup-other-hosts
 EOF
-cat > /path/to/map_dir/siteadmin_hostgroup_map.txt << EOF
+cat > path/to/map_dir/siteadmin_hostgroup_map.txt << EOF
 bob@example.com:Hostgroup-bob-hosts
 EOF
 ```
