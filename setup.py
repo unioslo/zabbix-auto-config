@@ -9,7 +9,7 @@ DESCRIPTION = "Zabbix auto config - ZAC"
 URL = "https://www.usit.uio.no/"
 EMAIL = "noreply@usit.uio.no"
 AUTHOR = "University of Oslo, University Center for Information Technology"
-REQUIRES_PYTHON = ">=3.6.0"
+REQUIRES_PYTHON = ">=3.8.0"
 VERSION = None
 
 REQUIRED = [
@@ -66,6 +66,8 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
     ],
 )
