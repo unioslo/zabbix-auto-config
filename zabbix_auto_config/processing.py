@@ -23,13 +23,15 @@ from . import utils
 
 
 class BaseProcess(multiprocessing.Process):
-    def __init__(self, name):
+    def __init__(self, name, state):
         super().__init__()
         self.name = name
+        self.state = state
 
         self.update_interval = 1
         self.next_update = datetime.datetime.now()
 
+        self.state["ok"] = True
         self.stop_event = multiprocessing.Event()
 
     def run(self):
@@ -49,11 +51,16 @@ class BaseProcess(multiprocessing.Process):
 
                 self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
 
-                self.work()
+                try:
+                    self.work()
+                    self.state["ok"] = True
+                except exceptions.ZACException as e:
+                    logging.error("Work exception: %s", str(e))
+                    self.state["ok"] = False
 
                 if self.update_interval > 1 and self.next_update < datetime.datetime.now():
                     # Only log warning when update_interval is actually changed from default
-                    logging.warning("Next update is in the past. Interval too short? Lagging behind? Next update: %s", self.next_update.isoformat(timespec="seconds"))
+                    logging.warning("Next update is in the past. Interval too short? Lagging behind? Next update was: %s", self.next_update.isoformat(timespec="seconds"))
 
         logging.info("Process exiting")
 
@@ -79,8 +86,8 @@ class SignalHandler():
 
 
 class SourceCollectorProcess(BaseProcess):
-    def __init__(self, name, module, config, source_hosts_queue):
-        super().__init__(name)
+    def __init__(self, name, state, module, config, source_hosts_queue):
+        super().__init__(name, state)
         self.module = module
         self.config = config
         self.source_hosts_queue = source_hosts_queue
@@ -90,15 +97,13 @@ class SourceCollectorProcess(BaseProcess):
 
     def work(self):
         start_time = time.time()
-        logging.info("Collection starting.")
+        logging.info("Collection starting")
 
         try:
             hosts = self.module.collect(**self.config)
             assert isinstance(hosts, list), "Collect module did not return a list"
         except (AssertionError, Exception) as e:
-            logging.warning("Error when collecting hosts: %s", str(e))
-            # TODO: Do more? Die?
-            return
+            raise exceptions.ZACException(f"Unable to collect from module ({self.config['module_name']}): {str(e)}")
 
         valid_hosts = []
         for host in hosts:
@@ -124,8 +129,8 @@ class SourceCollectorProcess(BaseProcess):
 
 
 class SourceHandlerProcess(BaseProcess):
-    def __init__(self, name, db_uri, source_hosts_queues):
-        super().__init__(name)
+    def __init__(self, name, state, db_uri, source_hosts_queues):
+        super().__init__(name, state)
 
         self.db_uri = db_uri
         self.db_source_table = "hosts_source"
@@ -197,8 +202,8 @@ class SourceHandlerProcess(BaseProcess):
 
 
 class SourceMergerProcess(BaseProcess):
-    def __init__(self, name, db_uri, host_modifier_dir):
-        super().__init__(name)
+    def __init__(self, name, state, db_uri, host_modifier_dir):
+        super().__init__(name, state)
 
         self.db_uri = db_uri
         self.db_source_table = "hosts_source"
@@ -324,8 +329,8 @@ class SourceMergerProcess(BaseProcess):
 
 
 class ZabbixUpdater(BaseProcess):
-    def __init__(self, name, db_uri, zabbix_config):
-        super().__init__(name)
+    def __init__(self, name, state, db_uri, zabbix_config):
+        super().__init__(name, state)
 
         self.db_uri = db_uri
         self.db_hosts_table = "hosts"
@@ -370,7 +375,7 @@ class ZabbixUpdater(BaseProcess):
 
     def work(self):
         start_time = time.time()
-        logging.info("Zabbix update starting.")
+        logging.info("Zabbix update starting")
         self.do_update()
         logging.info("Done with zabbix update in %.2f seconds. Next update: %s", time.time() - start_time, self.next_update.isoformat(timespec="seconds"))
 
@@ -533,7 +538,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
         if len(hostnames_to_remove) > self.failsafe or len(hostnames_to_add) > self.failsafe:
             logging.warning("Too many hosts to change (failsafe=%d). Remove: %d, Add: %d. Aborting", self.failsafe, len(hostnames_to_remove), len(hostnames_to_add))
-            return
+            raise exceptions.ZACException("Failsafe triggered")
 
         for hostname in hostnames_to_remove:
             if self.stop_event.is_set():
