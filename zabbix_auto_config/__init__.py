@@ -1,6 +1,7 @@
 import configparser
 import datetime
 import importlib
+import json
 import logging
 import multiprocessing
 import os
@@ -54,6 +55,40 @@ def get_config():
     return config
 
 
+def write_health(health_file, processes, queues):
+    now = datetime.datetime.now()
+    health = {
+        "date": now.isoformat(timespec="seconds"),
+        "date_unixtime": int(now.timestamp()),
+        "pid": os.getpid(),
+        "cwd": os.getcwd(),
+        "all_ok": True,
+        "processes": [],
+        "queues": [],
+    }
+
+    for process in processes:
+        health["processes"].append({
+            "name": process.name,
+            "pid": process.pid,
+            "alive": process.is_alive(),
+            "ok": process.state.get("ok")
+        })
+
+    health["all_ok"] = all([p["ok"] for p in health["processes"]])
+
+    for queue in queues:
+        health["queues"].append({
+            "size": queue.qsize(),
+        })
+
+    try:
+        with open(health_file, "w") as f:
+            f.write(json.dumps(health))
+    except:
+        logging.error("Unable to write health file: %s", health_file)
+
+
 def log_process_status(processes):
     process_statuses = []
 
@@ -81,33 +116,39 @@ def main():
     else:
         raise Exception()
 
+    if "health_file" in config["zac"]:
+        health_file = os.path.abspath(config["zac"]["health_file"])
+    else:
+        health_file = None
+
     logging.info("Main start (%d) version %s", os.getpid(), __version__)
 
     stop_event = multiprocessing.Event()
+    state_manager = multiprocessing.Manager()
     processes = []
 
     source_hosts_queues = []
     source_collectors = get_source_collectors(config)
     for source_collector in source_collectors:
         source_hosts_queue = multiprocessing.Queue()
-        process = processing.SourceCollectorProcess(source_collector["name"], source_collector["module"], source_collector["config"], source_hosts_queue)
+        process = processing.SourceCollectorProcess(source_collector["name"], state_manager.dict(), source_collector["module"], source_collector["config"], source_hosts_queue)
         source_hosts_queues.append(source_hosts_queue)
         processes.append(process)
 
     try:
-        process = processing.SourceHandlerProcess("source-handler", config["zac"]["db_uri"], source_hosts_queues)
+        process = processing.SourceHandlerProcess("source-handler", state_manager.dict(), config["zac"]["db_uri"], source_hosts_queues)
         processes.append(process)
 
-        process = processing.SourceMergerProcess("source-merger", config["zac"]["db_uri"], config["zac"]["host_modifier_dir"])
+        process = processing.SourceMergerProcess("source-merger", state_manager.dict(), config["zac"]["db_uri"], config["zac"]["host_modifier_dir"])
         processes.append(process)
 
-        process = processing.ZabbixHostUpdater("zabbix-host-updater", config["zac"]["db_uri"], zabbix_config)
+        process = processing.ZabbixHostUpdater("zabbix-host-updater", state_manager.dict(), config["zac"]["db_uri"], zabbix_config)
         processes.append(process)
 
-        process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", config["zac"]["db_uri"], zabbix_config)
+        process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", state_manager.dict(), config["zac"]["db_uri"], zabbix_config)
         processes.append(process)
 
-        process = processing.ZabbixTemplateUpdater("zabbix-template-updater", config["zac"]["db_uri"], zabbix_config)
+        process = processing.ZabbixTemplateUpdater("zabbix-template-updater", state_manager.dict(), config["zac"]["db_uri"], zabbix_config)
         processes.append(process)
     except exceptions.ZACException as e:
         logging.error("Failed to initialize child processes. Exiting: %s", str(e))
@@ -122,6 +163,8 @@ def main():
 
         while not stop_event.is_set():
             if next_status < datetime.datetime.now():
+                if health_file is not None:
+                    write_health(health_file, processes, source_hosts_queues)
                 log_process_status(processes)
                 next_status = datetime.datetime.now() + datetime.timedelta(seconds=status_interval)
 

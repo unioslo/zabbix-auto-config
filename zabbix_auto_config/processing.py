@@ -23,10 +23,15 @@ from . import utils
 
 
 class BaseProcess(multiprocessing.Process):
-    def __init__(self, sleep_interval=1):
+    def __init__(self, name, state):
         super().__init__()
-        self.sleep_interval = sleep_interval
+        self.name = name
+        self.state = state
 
+        self.update_interval = 1
+        self.next_update = datetime.datetime.now()
+
+        self.state["ok"] = True
         self.stop_event = multiprocessing.Event()
 
     def run(self):
@@ -34,12 +39,28 @@ class BaseProcess(multiprocessing.Process):
 
         with SignalHandler(self.stop_event):
             while not self.stop_event.is_set():
-                self.work()
-                time.sleep(self.sleep_interval)
                 if not multiprocessing.parent_process().is_alive():
                     logging.error("Parent is dead. Stopping")
                     self.stop_event.set()
+                    break
 
+                if self.next_update > datetime.datetime.now():
+                    # logging.debug(f"Waiting for next update {self.next_update.isoformat()}")
+                    time.sleep(1)
+                    continue
+
+                self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
+
+                try:
+                    self.work()
+                    self.state["ok"] = True
+                except exceptions.ZACException as e:
+                    logging.error("Work exception: %s", str(e))
+                    self.state["ok"] = False
+
+                if self.update_interval > 1 and self.next_update < datetime.datetime.now():
+                    # Only log warning when update_interval is actually changed from default
+                    logging.warning("Next update is in the past. Interval too short? Lagging behind? Next update was: %s", self.next_update.isoformat(timespec="seconds"))
 
         logging.info("Process exiting")
 
@@ -65,39 +86,31 @@ class SignalHandler():
 
 
 class SourceCollectorProcess(BaseProcess):
-    def __init__(self, name, module, config, source_hosts_queue):
-        super().__init__()
-        self.name = name
+    def __init__(self, name, state, module, config, source_hosts_queue):
+        super().__init__(name, state)
         self.module = module
         self.config = config
         self.source_hosts_queue = source_hosts_queue
         self.source_hosts_queue.cancel_join_thread()  # Don't wait for empty queue when exiting
 
         self.update_interval = int(self.config["update_interval"])
-        self.next_update = None
 
     def work(self):
-        if self.next_update and self.next_update > datetime.datetime.now():
-            # logging.debug(f"Waiting for next update {self.next_update.isoformat()}")
-            return
-
-        self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
-
         start_time = time.time()
+        logging.info("Collection starting")
 
         try:
             hosts = self.module.collect(**self.config)
             assert isinstance(hosts, list), "Collect module did not return a list"
         except (AssertionError, Exception) as e:
-            logging.warning("Error when collecting hosts: %s", str(e))
-            # TODO: Do more? Die?
-            return
+            raise exceptions.ZACException(f"Unable to collect from module ({self.config['module_name']}): {str(e)}")
 
         valid_hosts = []
         for host in hosts:
             if self.stop_event.is_set():
                 logging.debug("Told to stop. Breaking")
                 break
+
             try:
                 assert isinstance(host, models.Host), f"Collected object is not a proper Host: {host!r}"
                 host.sources = [self.name]
@@ -112,13 +125,12 @@ class SourceCollectorProcess(BaseProcess):
 
         self.source_hosts_queue.put(source_hosts)
 
-        logging.info(f"Collected hosts ({len(valid_hosts)}) from source <{self.name}> in {time.time() - start_time:.2f}s. Next update {self.next_update.isoformat()}")
+        logging.info("Done collecting %d hosts from source, '%s', in %.2f seconds. Next update: %s", len(valid_hosts), self.name, time.time() - start_time, self.next_update.isoformat(timespec="seconds"))
 
 
 class SourceHandlerProcess(BaseProcess):
-    def __init__(self, name, db_uri, source_hosts_queues):
-        super().__init__()
-        self.name = name
+    def __init__(self, name, state, db_uri, source_hosts_queues):
+        super().__init__(name, state)
 
         self.db_uri = db_uri
         self.db_source_table = "hosts_source"
@@ -186,13 +198,12 @@ class SourceHandlerProcess(BaseProcess):
                     db_cursor.execute(f"INSERT INTO {self.db_source_table} (data) VALUES (%s)", [host.json()])
                 inserted_hosts += 1
 
-        logging.info(f"Handled hosts from source <{source}> in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
+        logging.info("Done handling hosts from source, '%s', in %.2f seconds. Equal hosts: %d, replaced hosts: %d, inserted hosts: %d, removed hosts: %d. Next update: %s", source, time.time() - start_time, equal_hosts, replaced_hosts, inserted_hosts, removed_hosts, self.next_update.isoformat(timespec="seconds"))
 
 
 class SourceMergerProcess(BaseProcess):
-    def __init__(self, name, db_uri, host_modifier_dir):
-        super().__init__()
-        self.name = name
+    def __init__(self, name, state, db_uri, host_modifier_dir):
+        super().__init__(name, state)
 
         self.db_uri = db_uri
         self.db_source_table = "hosts_source"
@@ -210,7 +221,6 @@ class SourceMergerProcess(BaseProcess):
             sys.exit(1)
 
         self.update_interval = 60
-        self.next_update = None
 
     def get_host_modifiers(self):
         sys.path.append(self.host_modifier_dir)
@@ -238,18 +248,7 @@ class SourceMergerProcess(BaseProcess):
         return host_modifiers
 
     def work(self):
-        if self.next_update and self.next_update > datetime.datetime.now():
-            # logging.debug(f"Waiting for next update {self.next_update.isoformat()}")
-            return
-
-        self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
-
-        logging.info("Merge starting")
         self.merge_sources()
-        logging.info("Merge done. Next update %s", self.next_update.isoformat())
-
-        if self.next_update < datetime.datetime.now():
-            logging.warning("Next update is in the past. Interval too short? Lagging behind? Next update: %s", self.next_update.isoformat())
 
     def merge_hosts(self, hostname):
         with self.db_connection, self.db_connection.cursor() as db_cursor:
@@ -268,6 +267,7 @@ class SourceMergerProcess(BaseProcess):
 
     def merge_sources(self):
         start_time = time.time()
+        logging.info("Merge starting")
         equal_hosts, replaced_hosts, inserted_hosts, removed_hosts = (0, 0, 0, 0)
 
         with self.db_connection, self.db_connection.cursor() as db_cursor:
@@ -325,13 +325,12 @@ class SourceMergerProcess(BaseProcess):
                     db_cursor.execute(f"INSERT INTO {self.db_hosts_table} (data) VALUES (%s)", [host.json()])
                     inserted_hosts += 1
 
-        logging.info(f"Merged sources in {time.time() - start_time:.2f}s. Equal hosts: {equal_hosts}, replaced hosts: {replaced_hosts}, inserted hosts: {inserted_hosts}, removed hosts: {removed_hosts}")
+        logging.info("Done with merge in %.2f seconds. Equal hosts: %d, replaced hosts: %d, inserted hosts: %d, removed hosts: %d. Next update: %s", time.time() - start_time, equal_hosts, replaced_hosts, inserted_hosts, removed_hosts, self.next_update.isoformat(timespec="seconds"))
 
 
 class ZabbixUpdater(BaseProcess):
-    def __init__(self, name, db_uri, zabbix_config):
-        super().__init__()
-        self.name = name
+    def __init__(self, name, state, db_uri, zabbix_config):
+        super().__init__(name, state)
 
         self.db_uri = db_uri
         self.db_hosts_table = "hosts"
@@ -356,7 +355,6 @@ class ZabbixUpdater(BaseProcess):
             self.managed_inventory = []
 
         self.update_interval = 60
-        self.next_update = None
 
         pyzabbix_logger = logging.getLogger("pyzabbix")
         pyzabbix_logger.setLevel(logging.ERROR)
@@ -376,19 +374,10 @@ class ZabbixUpdater(BaseProcess):
         self.siteadmin_hostgroup_map = utils.read_map_file(os.path.join(self.map_dir, "siteadmin_hostgroup_map.txt"))
 
     def work(self):
-        if self.next_update and self.next_update > datetime.datetime.now():
-            # logging.debug(f"Waiting for next update {self.next_update.isoformat()}")
-            return
-
-        self.next_update = datetime.datetime.now() + datetime.timedelta(seconds=self.update_interval)
-
         start_time = time.time()
-        logging.info("Zabbix update starting.")
+        logging.info("Zabbix update starting")
         self.do_update()
-        logging.info(f"Zabbix update done in {time.time() - start_time:.2f}s. Next update: %s", self.next_update.isoformat())
-
-        if self.next_update < datetime.datetime.now():
-            logging.warning("Next update is in the past. Interval too short? Lagging behind? Next update: %s", self.next_update.isoformat())
+        logging.info("Done with zabbix update in %.2f seconds. Next update: %s", time.time() - start_time, self.next_update.isoformat(timespec="seconds"))
 
     def do_update(self):
         pass
@@ -549,7 +538,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
         if len(hostnames_to_remove) > self.failsafe or len(hostnames_to_add) > self.failsafe:
             logging.warning("Too many hosts to change (failsafe=%d). Remove: %d, Add: %d. Aborting", self.failsafe, len(hostnames_to_remove), len(hostnames_to_add))
-            return
+            raise exceptions.ZACException("Failsafe triggered")
 
         for hostname in hostnames_to_remove:
             if self.stop_event.is_set():
