@@ -306,7 +306,7 @@ class SourceMergerProcess(BaseProcess):
                 except AssertionError as e:
                     logging.warning("Host, '%s', was modified to be invalid by modifier: '%s'. Error: %s", hostname, host_modifier["name"], str(e))
                 except Exception as e:
-                    logging.warning("Error when modifying host, '%s': %s", hostname, str(e))
+                    logging.warning("Error when running modifier %s on host '%s': %s", host_modifier["name"], hostname, str(e))
                     # TODO: Do more?
 
             with self.db_connection, self.db_connection.cursor() as db_cursor:
