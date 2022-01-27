@@ -224,7 +224,11 @@ class SourceMergerProcess(BaseProcess):
     def get_host_modifiers(self):
         sys.path.append(self.host_modifier_dir)
 
-        module_names = [filename[:-3] for filename in os.listdir(self.host_modifier_dir) if filename.endswith(".py")]
+        try:
+            module_names = [filename[:-3] for filename in os.listdir(self.host_modifier_dir) if filename.endswith(".py")]
+        except FileNotFoundError:
+            logging.error("Host modififier directory %s does not exist.", self.host_modifier_dir)
+            sys.exit(1)
 
         host_modifiers = []
 
