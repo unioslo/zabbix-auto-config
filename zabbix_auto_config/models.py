@@ -82,7 +82,7 @@ class Host(BaseModel):
         importances = [importance for importance in [self.importance, other.importance] if importance]
         self.importance = min(importances) if importances else None
 
-        self_interface_types = {i["type"] for i in self.interfaces}
+        self_interface_types = {i.type for i in self.interfaces}
         for other_interface in other.interfaces:
             if other_interface.type not in self_interface_types:
                 self.interfaces.append(other_interface)
