@@ -809,7 +809,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             if db_host.importance != None:
                 synced_hostgroup_names.add(f"Importance-{db_host.importance}")
             else:
-                synced_hostgroup_names.add(f"Importance-X")
+                synced_hostgroup_names.add("Importance-X")
 
             host_hostgroups = {}
             for zabbix_hostgroup in zabbix_host["groups"]:
