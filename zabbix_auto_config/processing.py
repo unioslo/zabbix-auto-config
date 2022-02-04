@@ -447,7 +447,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 parameters["dns"] = interface.endpoint
                 parameters["ip"] = ""
 
-            if "details" in interface:
+            if interface.details:
                 parameters["details"] = interface.details
 
             if old_id:
