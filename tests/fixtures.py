@@ -37,3 +37,39 @@ def full_hosts():
             "tags": [["tag1", "x"], ["tag2", "y"]],
         },
     ]
+
+def invalid_hosts():
+    return [
+        {
+            "enabled": True,
+            "hostname": "invalid-proxy-pattern.example.com",
+            "proxy_pattern": "[",
+        },
+        {
+            "enabled": True,
+            "hostname": "invalid-interface.example.com",
+            "interfaces": [
+                {
+                    "endpoint": "type-2-sans-details.example.com",
+                    "port": "10050",
+                    "type": 2,
+                },
+            ],
+        },
+        {
+            "enabled": True,
+            "hostname": "duplicate-interface.example.com",
+            "interfaces": [
+                {
+                    "endpoint": "endpoint1.example.com",
+                    "port": "10050",
+                    "type": 1,
+                },
+                {
+                    "endpoint": "endpoint2.example.com",
+                    "port": "10050",
+                    "type": 1,
+                },
+            ],
+        },
+    ]

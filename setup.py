@@ -20,9 +20,9 @@ REQUIRED = [
     "requests",
 ]
 
-EXTRAS = {
-    # "fancy feature": ["django"],
-}
+TESTS_REQUIRE = [
+    "pytest"
+]
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -57,7 +57,7 @@ setuptools.setup(
         "console_scripts": ["zac=zabbix_auto_config:main"],
     },
     install_requires=REQUIRED,
-    extras_require=EXTRAS,
+    tests_require=TESTS_REQUIRE,
     include_package_data=True,
     license="MIT",
     classifiers=[
