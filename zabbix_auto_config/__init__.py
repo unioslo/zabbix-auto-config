@@ -1,4 +1,3 @@
-import configparser
 import datetime
 import importlib
 import json
@@ -10,6 +9,7 @@ import sys
 import time
 
 import multiprocessing_logging
+import tomli
 
 from .__version__ import __version__
 from . import exceptions
@@ -21,11 +21,9 @@ def get_source_collectors(config):
     sys.path.append(source_collector_dir)
 
     section_prefix = "source-collector-"
-    source_collector_sections = [config_section for config_section in config.sections() if config_section.startswith(section_prefix)]
 
     source_collectors = []
-
-    for source_collector_section in source_collector_sections:
+    for source_collector_section in filter(lambda section: section.startswith(section_prefix), config):
         source_collector_name = source_collector_section[len(section_prefix):]
         source_collector_module_name = config[source_collector_section]["module_name"]
 
@@ -48,9 +46,10 @@ def get_source_collectors(config):
 
 def get_config():
     cwd = os.getcwd()
-    config_file = os.path.join(cwd, "config.ini")
-    config = configparser.ConfigParser()
-    config.read(config_file)
+    config_file = os.path.join(cwd, "config.toml")
+    with open(config_file) as f:
+        content = f.read()
+        config = tomli.loads(content)
 
     return config
 
@@ -107,14 +106,7 @@ def main():
     multiprocessing_logging.install_mp_handler()
     logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
 
-    zabbix_config = dict(config["zabbix"])
-    zabbix_config["failsafe"] = int(zabbix_config.get("failsafe", "20"))
-    if zabbix_config["dryrun"] == "false":
-        zabbix_config["dryrun"] = False
-    elif zabbix_config["dryrun"] == "true":
-        zabbix_config["dryrun"] = True
-    else:
-        raise Exception()
+    config["zabbix"]["failsafe"] = config["zabbix"].get("failsafe", 20)
 
     if "health_file" in config["zac"]:
         health_file = os.path.abspath(config["zac"]["health_file"])
@@ -142,13 +134,13 @@ def main():
         process = processing.SourceMergerProcess("source-merger", state_manager.dict(), config["zac"]["db_uri"], config["zac"]["host_modifier_dir"])
         processes.append(process)
 
-        process = processing.ZabbixHostUpdater("zabbix-host-updater", state_manager.dict(), config["zac"]["db_uri"], zabbix_config)
+        process = processing.ZabbixHostUpdater("zabbix-host-updater", state_manager.dict(), config["zac"]["db_uri"], config["zabbix"])
         processes.append(process)
 
-        process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", state_manager.dict(), config["zac"]["db_uri"], zabbix_config)
+        process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", state_manager.dict(), config["zac"]["db_uri"], config["zabbix"])
         processes.append(process)
 
-        process = processing.ZabbixTemplateUpdater("zabbix-template-updater", state_manager.dict(), config["zac"]["db_uri"], zabbix_config)
+        process = processing.ZabbixTemplateUpdater("zabbix-template-updater", state_manager.dict(), config["zac"]["db_uri"], config["zabbix"])
         processes.append(process)
     except exceptions.ZACException as e:
         logging.error("Failed to initialize child processes. Exiting: %s", str(e))

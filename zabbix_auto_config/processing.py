@@ -93,7 +93,7 @@ class SourceCollectorProcess(BaseProcess):
         self.source_hosts_queue = source_hosts_queue
         self.source_hosts_queue.cancel_join_thread()  # Don't wait for empty queue when exiting
 
-        self.update_interval = int(self.config["update_interval"])
+        self.update_interval = self.config["update_interval"]
 
     def work(self):
         start_time = time.time()
@@ -349,10 +349,7 @@ class ZabbixUpdater(BaseProcess):
         self.dryrun = zabbix_config["dryrun"]
         self.failsafe = zabbix_config["failsafe"]
         self.tags_prefix = zabbix_config["tags_prefix"]
-        if "managed_inventory" in zabbix_config:
-            self.managed_inventory = [managed_inventory.strip() for managed_inventory in zabbix_config["managed_inventory"].split(",") if managed_inventory.strip() != ""]
-        else:
-            self.managed_inventory = []
+        self.managed_inventory = zabbix_config.get("managed_inventory", [])
 
         self.update_interval = 60
 
