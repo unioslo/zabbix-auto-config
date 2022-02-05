@@ -342,33 +342,26 @@ class ZabbixUpdater(BaseProcess):
             logging.error("Unable to connect to database. Process exiting with error")
             raise exceptions.ZACException(*e.args)
 
-        self.map_dir = zabbix_config["map_dir"]
-        self.zabbix_url = zabbix_config["url"]
-        self.zabbix_username = zabbix_config["username"]
-        self.zabbix_password = zabbix_config["password"]
-        self.dryrun = zabbix_config["dryrun"]
-        self.failsafe = zabbix_config["failsafe"]
-        self.tags_prefix = zabbix_config["tags_prefix"]
-        self.managed_inventory = zabbix_config.get("managed_inventory", [])
+        self.config = zabbix_config
 
         self.update_interval = 60
 
         pyzabbix_logger = logging.getLogger("pyzabbix")
         pyzabbix_logger.setLevel(logging.ERROR)
 
-        self.api = pyzabbix.ZabbixAPI(self.zabbix_url)
+        self.api = pyzabbix.ZabbixAPI(self.config.url)
         try:
-            self.api.login(self.zabbix_username, self.zabbix_password)
+            self.api.login(self.config.username, self.config.password)
         except requests.exceptions.ConnectionError as e:
-            logging.error("Error while connecting to Zabbix: %s", self.zabbix_url)
+            logging.error("Error while connecting to Zabbix: %s", self.config.url)
             raise exceptions.ZACException(*e.args)
         except (pyzabbix.ZabbixAPIException, requests.exceptions.HTTPError) as e:
             logging.error("Unable to login to Zabbix API: %s", str(e))
             raise exceptions.ZACException(*e.args)
 
-        self.property_template_map = utils.read_map_file(os.path.join(self.map_dir, "property_template_map.txt"))
-        self.property_hostgroup_map = utils.read_map_file(os.path.join(self.map_dir, "property_hostgroup_map.txt"))
-        self.siteadmin_hostgroup_map = utils.read_map_file(os.path.join(self.map_dir, "siteadmin_hostgroup_map.txt"))
+        self.property_template_map = utils.read_map_file(os.path.join(self.config.map_dir, "property_template_map.txt"))
+        self.property_hostgroup_map = utils.read_map_file(os.path.join(self.config.map_dir, "property_hostgroup_map.txt"))
+        self.siteadmin_hostgroup_map = utils.read_map_file(os.path.join(self.config.map_dir, "siteadmin_hostgroup_map.txt"))
 
     def work(self):
         start_time = time.time()
@@ -383,7 +376,7 @@ class ZabbixUpdater(BaseProcess):
 class ZabbixHostUpdater(ZabbixUpdater):
 
     def disable_host(self, zabbix_host):
-        if not self.dryrun:
+        if not self.config.dryrun:
             try:
                 disabled_hostgroup_id = self.api.hostgroup.get(filter={"name": "All-auto-disabled-hosts"})[0]["groupid"]
                 self.api.host.update(hostid=zabbix_host["hostid"], status=1, templates=[], groups=[{"groupid": disabled_hostgroup_id}])
@@ -396,7 +389,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
     def enable_host(self, db_host):
         # TODO: Set correct proxy when enabling
         hostname = db_host.hostname
-        if not self.dryrun:
+        if not self.config.dryrun:
             try:
                 hostgroup_id = self.api.hostgroup.get(filter={"name": "All-hosts"})[0]["groupid"]
 
@@ -422,14 +415,14 @@ class ZabbixHostUpdater(ZabbixUpdater):
             logging.info("DRYRUN: Enabling host: '%s'", hostname)
 
     def clear_proxy(self, zabbix_host):
-        if not self.dryrun:
+        if not self.config.dryrun:
             self.api.host.update(hostid=zabbix_host["hostid"], proxy_hostid="0")
             logging.info("Clearing proxy on host: '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
         else:
             logging.info("DRYRUN: Clearing proxy on host: '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
 
     def set_interface(self, zabbix_host, interface, useip, old_id):
-        if not self.dryrun:
+        if not self.config.dryrun:
             parameters = {
                 "hostid": zabbix_host["hostid"],
                 "main": 1,
@@ -457,28 +450,28 @@ class ZabbixHostUpdater(ZabbixUpdater):
             logging.info("DRYRUN: Setting interface (type: %d) on host: '%s' (%s)", interface.type, zabbix_host["host"], zabbix_host["hostid"])
 
     def set_inventory_mode(self, zabbix_host, inventory_mode):
-        if not self.dryrun:
+        if not self.config.dryrun:
             self.api.host.update(hostid=zabbix_host["hostid"], inventory_mode=inventory_mode)
             logging.info("Setting inventory_mode (%d) on host: '%s' (%s)", inventory_mode, zabbix_host["host"], zabbix_host["hostid"])
         else:
             logging.info("DRYRUN: Setting inventory_mode (%d) on host: '%s' (%s)", inventory_mode, zabbix_host["host"], zabbix_host["hostid"])
 
     def set_inventory(self, zabbix_host, inventory):
-        if not self.dryrun:
+        if not self.config.dryrun:
             self.api.host.update(hostid=zabbix_host["hostid"], inventory=inventory)
             logging.info("Setting inventory (%s) on host: '%s'", inventory, zabbix_host["host"])
         else:
             logging.info("DRYRUN: Setting inventory (%s) on host: '%s'", inventory, zabbix_host["host"])
 
     def set_proxy(self, zabbix_host, zabbix_proxy):
-        if not self.dryrun:
+        if not self.config.dryrun:
             self.api.host.update(hostid=zabbix_host["hostid"], proxy_hostid=zabbix_proxy["proxyid"])
             logging.info("Setting proxy (%s) on host: '%s' (%s)", zabbix_proxy["host"], zabbix_host["host"], zabbix_host["hostid"])
         else:
             logging.info("DRYRUN: Setting proxy (%s) on host: '%s' (%s)", zabbix_proxy["host"], zabbix_host["host"], zabbix_host["hostid"])
 
     def set_tags(self, zabbix_host, tags):
-        if not self.dryrun:
+        if not self.config.dryrun:
             zabbix_tags = utils.zac_tags2zabbix_tags(tags)
             self.api.host.update(hostid=zabbix_host["hostid"], tags=zabbix_tags)
             logging.info("Setting tags (%s) on host: '%s' (%s)", tags, zabbix_host["host"], zabbix_host["hostid"])
@@ -494,7 +487,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                                                                          output=["hostid", "host", "status", "flags", "proxy_hostid", "inventory_mode"],
                                                                          selectGroups=["groupid", "name"],
                                                                          selectInterfaces=["dns", "interfaceid", "ip", "main", "port", "type", "useip", "details"],
-                                                                         selectInventory=self.managed_inventory,
+                                                                         selectInventory=self.config.managed_inventory,
                                                                          selectParentTemplates=["templateid", "host"],
                                                                          selectTags=["tag", "value"],
                                                                          )}
@@ -533,8 +526,8 @@ class ZabbixHostUpdater(ZabbixUpdater):
         logging.debug("Only in db: %s", " ".join(hostnames_to_add[:10]))
         logging.debug("In both: %d", len(hostnames_in_both))
 
-        if len(hostnames_to_remove) > self.failsafe or len(hostnames_to_add) > self.failsafe:
-            logging.warning("Too many hosts to change (failsafe=%d). Remove: %d, Add: %d. Aborting", self.failsafe, len(hostnames_to_remove), len(hostnames_to_add))
+        if len(hostnames_to_remove) > self.config.failsafe or len(hostnames_to_add) > self.config.failsafe:
+            logging.warning("Too many hosts to change (failsafe=%d). Remove: %d, Add: %d. Aborting", self.config.failsafe, len(hostnames_to_remove), len(hostnames_to_add))
             raise exceptions.ZACException("Failsafe triggered")
 
         for hostname in hostnames_to_remove:
@@ -625,13 +618,13 @@ class ZabbixHostUpdater(ZabbixUpdater):
                         self.set_interface(zabbix_host, interface, useip, None)
 
             # Check current tags and apply db tags
-            other_zabbix_tags = utils.zabbix_tags2zac_tags([tag for tag in zabbix_host["tags"] if not tag["tag"].startswith(self.tags_prefix)])  # These are tags outside our namespace/prefix. Keep them.
-            current_tags = utils.zabbix_tags2zac_tags([tag for tag in zabbix_host["tags"] if tag["tag"].startswith(self.tags_prefix)])
+            other_zabbix_tags = utils.zabbix_tags2zac_tags([tag for tag in zabbix_host["tags"] if not tag["tag"].startswith(self.config.tags_prefix)])  # These are tags outside our namespace/prefix. Keep them.
+            current_tags = utils.zabbix_tags2zac_tags([tag for tag in zabbix_host["tags"] if tag["tag"].startswith(self.config.tags_prefix)])
             db_tags = db_host.tags
-            ignored_tags = set(filter(lambda tag: not tag[0].startswith(self.tags_prefix), db_tags))
+            ignored_tags = set(filter(lambda tag: not tag[0].startswith(self.config.tags_prefix), db_tags))
             if ignored_tags:
                 db_tags = db_tags - ignored_tags
-                logging.warning("Tags (%s) not matching tags prefix ('%s') is configured on host '%s'. They will be ignored.", ignored_tags, self.tags_prefix, zabbix_host["host"])
+                logging.warning("Tags (%s) not matching tags prefix ('%s') is configured on host '%s'. They will be ignored.", ignored_tags, self.config.tags_prefix, zabbix_host["host"])
 
             tags_to_remove = current_tags - db_tags
             tags_to_add = db_tags - current_tags
@@ -654,10 +647,10 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
                 if changed_inventory:
                     # inventory outside of zac management
-                    ignored_inventory = {k: v for k, v in changed_inventory.items() if k not in self.managed_inventory}
+                    ignored_inventory = {k: v for k, v in changed_inventory.items() if k not in self.config.managed_inventory}
 
                     # inventories managed by zac and to be updated
-                    inventory = {k: v for k, v in changed_inventory.items() if k in self.managed_inventory}
+                    inventory = {k: v for k, v in changed_inventory.items() if k in self.config.managed_inventory}
                     if inventory:
                         self.set_inventory(zabbix_host, inventory)
                     if ignored_inventory:
@@ -668,7 +661,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
 
     def clear_templates(self, templates, host):
         logging.debug("Clearing templates on host: '%s'", host["host"])
-        if not self.dryrun:
+        if not self.config.dryrun:
             try:
                 templates = [{"templateid": template_id} for _, template_id in templates.items()]
                 self.api.host.update(hostid=host["hostid"], templates_clear=templates)
@@ -677,7 +670,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
 
     def set_templates(self, templates, host):
         logging.debug("Setting templates on host: '%s'", host["host"])
-        if not self.dryrun:
+        if not self.config.dryrun:
             try:
                 templates = [{"templateid": template_id} for _, template_id in templates.items()]
                 self.api.host.update(hostid=host["hostid"], templates=templates)
@@ -746,7 +739,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
     def set_hostgroups(self, hostgroups, host):
         logging.debug("Setting hostgroups on host: '%s'", host["host"])
-        if not self.dryrun:
+        if not self.config.dryrun:
             try:
                 groups = [{"groupid": hostgroup_id} for _, hostgroup_id in hostgroups.items()]
                 self.api.host.update(hostid=host["hostid"], groups=groups)
@@ -754,7 +747,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 logging.error("Error when setting hostgroups on host '%s': %s", host["host"], e.args)
 
     def create_hostgroup(self, hostgroup_name):
-        if not self.dryrun:
+        if not self.config.dryrun:
             try:
                 result = self.api.hostgroup.create(name=hostgroup_name)
                 return result["groupids"][0]

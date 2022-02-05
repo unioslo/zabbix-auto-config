@@ -11,13 +11,46 @@ from typing import (
 
 from pydantic import (
     BaseModel,
+    BaseSettings,
     conint,
     validator,
+    Extra,
 )
 
 from . import utils
 
 # TODO: Models aren't validated when making changes to a set/list. Why? How to handle?
+
+
+class ZabbixSettings(BaseSettings):
+    map_dir: str
+    url: str
+    username: str
+    password: str
+    dryrun: bool
+
+    tags_prefix: str = "zac_"
+    managed_inventory: List[str] = []
+    failsafe: int = 20
+
+
+class ZacSettings(BaseSettings):
+    source_collector_dir: str
+    host_modifier_dir: str
+    db_uri: str
+
+    health_file: str = None
+
+
+class SourceCollectorSettings(BaseSettings, extra=Extra.allow):
+    module_name: str
+    update_interval: int
+
+
+class Settings(BaseSettings):
+    zac: ZacSettings
+    zabbix: ZabbixSettings
+    source_collectors: Dict[str, SourceCollectorSettings]
 
 
 class Interface(BaseModel):

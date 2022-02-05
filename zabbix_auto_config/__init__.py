@@ -13,30 +13,26 @@ import tomli
 
 from .__version__ import __version__
 from . import exceptions
+from . import models
 from . import processing
 
 
 def get_source_collectors(config):
-    source_collector_dir = config["zac"]["source_collector_dir"]
+    source_collector_dir = config.zac.source_collector_dir
     sys.path.append(source_collector_dir)
 
-    section_prefix = "source-collector-"
-
     source_collectors = []
-    for source_collector_section in filter(lambda section: section.startswith(section_prefix), config):
-        source_collector_name = source_collector_section[len(section_prefix):]
-        source_collector_module_name = config[source_collector_section]["module_name"]
-
+    for source_collector_name, source_collector_values in config.source_collectors.items():
         try:
-            module = importlib.import_module(source_collector_module_name)
+            module = importlib.import_module(source_collector_values.module_name)
         except ModuleNotFoundError:
-            logging.error("Unable to find source collector named '%s' in '%s'", source_collector_module_name, source_collector_dir)
+            logging.error("Unable to find source collector named '%s' in '%s'", source_collector_values.module_name, source_collector_dir)
             continue
 
         source_collector = {
             "name": source_collector_name,
             "module": module,
-            "config": dict(config[source_collector_section])
+            "config": source_collector_values.dict(),
         }
 
         source_collectors.append(source_collector)
@@ -49,7 +45,9 @@ def get_config():
     config_file = os.path.join(cwd, "config.toml")
     with open(config_file) as f:
         content = f.read()
-        config = tomli.loads(content)
+
+    config = tomli.loads(content)
+    config = models.Settings(**config)
 
     return config
 
@@ -106,12 +104,8 @@ def main():
     multiprocessing_logging.install_mp_handler()
     logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
 
-    config["zabbix"]["failsafe"] = config["zabbix"].get("failsafe", 20)
-
-    if "health_file" in config["zac"]:
-        health_file = os.path.abspath(config["zac"]["health_file"])
-    else:
-        health_file = None
+    if config.zac.health_file is not None:
+        health_file = os.path.abspath(config.zac.health_file)
 
     logging.info("Main start (%d) version %s", os.getpid(), __version__)
 
@@ -128,19 +122,19 @@ def main():
         processes.append(process)
 
     try:
-        process = processing.SourceHandlerProcess("source-handler", state_manager.dict(), config["zac"]["db_uri"], source_hosts_queues)
+        process = processing.SourceHandlerProcess("source-handler", state_manager.dict(), config.zac.db_uri, source_hosts_queues)
         processes.append(process)
 
-        process = processing.SourceMergerProcess("source-merger", state_manager.dict(), config["zac"]["db_uri"], config["zac"]["host_modifier_dir"])
+        process = processing.SourceMergerProcess("source-merger", state_manager.dict(), config.zac.db_uri, config.zac.host_modifier_dir)
         processes.append(process)
 
-        process = processing.ZabbixHostUpdater("zabbix-host-updater", state_manager.dict(), config["zac"]["db_uri"], config["zabbix"])
+        process = processing.ZabbixHostUpdater("zabbix-host-updater", state_manager.dict(), config.zac.db_uri, config.zabbix)
         processes.append(process)
 
-        process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", state_manager.dict(), config["zac"]["db_uri"], config["zabbix"])
+        process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", state_manager.dict(), config.zac.db_uri, config.zabbix)
         processes.append(process)
 
-        process = processing.ZabbixTemplateUpdater("zabbix-template-updater", state_manager.dict(), config["zac"]["db_uri"], config["zabbix"])
+        process = processing.ZabbixTemplateUpdater("zabbix-template-updater", state_manager.dict(), config.zac.db_uri, config.zabbix)
         processes.append(process)
     except exceptions.ZACException as e:
         logging.error("Failed to initialize child processes. Exiting: %s", str(e))
