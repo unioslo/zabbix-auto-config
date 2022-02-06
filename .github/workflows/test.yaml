@@ -19,7 +19,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: ~/.cache/pip
-          key: v1-pip-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('setup.py') }}
+          key: v1-pip-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('setup.cfg') }}
           restore-keys: |
             v1-pip-${{ runner.os }}-${{ matrix.python-version }}
             v1-pip-${{ runner.os }}
@@ -30,6 +30,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
-          pip install -e .
+          pip install -e .[test]
       - name: Test
         run: python -m unittest discover -v tests
