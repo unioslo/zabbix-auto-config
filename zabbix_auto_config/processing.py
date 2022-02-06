@@ -2,7 +2,6 @@ import multiprocessing
 import logging
 import datetime
 import importlib
-import json
 import os
 import os.path
 import random
@@ -807,10 +806,10 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                     synced_hostgroup_names.update(self.siteadmin_hostgroup_map[siteadmin])
             for source in db_host.sources:
                 synced_hostgroup_names.add(f"Source-{source}")
-            if db_host.importance != None:
+            if db_host.importance is not None:
                 synced_hostgroup_names.add(f"Importance-{db_host.importance}")
             else:
-                synced_hostgroup_names.add(f"Importance-X")
+                synced_hostgroup_names.add("Importance-X")
 
             host_hostgroups = {}
             for zabbix_hostgroup in zabbix_host["groups"]:

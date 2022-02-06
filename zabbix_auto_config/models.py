@@ -29,6 +29,8 @@ class Interface(BaseModel):
     class Config:
         validate_assignment = True
 
+    # These validators look static, but pydantic uses the class argument.
+    # pylint: disable=no-self-use, no-self-argument
     @validator("type")
     def type_2_must_have_details(cls, v, values):
         if v == 2 and not values["details"]:
@@ -53,12 +55,14 @@ class Host(BaseModel):
     class Config:
         validate_assignment = True
 
+    # pylint: disable=no-self-use, no-self-argument
     @validator("interfaces")
     def no_duplicate_interface_types(cls, v):
         types = [interface.type for interface in v]
         assert len(types) == len(set(types)), f"No duplicate interface types: {types}"
         return v
 
+    # pylint: disable=no-self-use, no-self-argument
     @validator("proxy_pattern")
     def must_be_valid_regexp_pattern(cls, v):
         if v is not None:
