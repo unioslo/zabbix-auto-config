@@ -1,5 +1,6 @@
 import datetime
 import importlib
+import importlib.metadata
 import json
 import logging
 import multiprocessing
@@ -11,10 +12,12 @@ import time
 import multiprocessing_logging
 import tomli
 
-from .__version__ import __version__
 from . import exceptions
 from . import models
 from . import processing
+
+
+__version__ = importlib.metadata.version(os.path.basename(os.path.dirname(__file__)))
 
 
 def get_source_collectors(config):
