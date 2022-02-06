@@ -18,6 +18,7 @@ REQUIRED = [
     "pydantic",
     "pyzabbix",
     "requests",
+    "tomli",
 ]
 
 TESTS_REQUIRE = [

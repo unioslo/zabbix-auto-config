@@ -6,5 +6,5 @@ venv/
 .vscode/
 
 path/to/
-config.ini
+config.toml
 zabbix.yaml

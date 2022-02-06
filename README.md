@@ -49,8 +49,8 @@ EOF
 python3 -m venv venv
 . venv/bin/activate
 pip install -e .
-cat config.sample.ini > config.ini
-sed -i 's/^dryrun = true$/dryrun = false/g' config.ini
+cp config.sample.toml config.toml
+sed -i 's/^dryrun = true$/dryrun = false/g' config.toml
 mkdir -p path/to/source_collector_dir/ path/to/host_modifier_dir/ path/to/map_dir/
 cat > path/to/source_collector_dir/mysource.py << EOF
 import zabbix_auto_config.models
@@ -128,7 +128,7 @@ WantedBy=multi-user.target
 
 ## Host inventory
 
-Zac manages only inventory properties configured as `managed_inventory` in `config.ini`. Inventory properties must be seperated by ",". An inventory property will not be removed/blanked from Zabbix even if the inventory property is removed from `managed_inventory` list or from the host in the source e.g:
+Zac manages only inventory properties configured as `managed_inventory` in `config.toml`. An inventory property will not be removed/blanked from Zabbix even if the inventory property is removed from `managed_inventory` list or from the host in the source e.g:
 
 1. Add "location=x" to a host in a source and wait for sync
 2. Remove the "location" property from the host in the source
