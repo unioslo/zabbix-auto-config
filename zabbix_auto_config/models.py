@@ -33,6 +33,12 @@ class ZabbixSettings(BaseSettings):
     managed_inventory: List[str] = []
     failsafe: int = 20
 
+    hostgroup_all: str = "All-hosts"
+    hostgroup_manual: str = "All-manual-hosts"
+    hostgroup_disabled: str = "All-auto-disabled-hosts"
+
+    hostgroup_source_prefix: str = "Source-"
+    hostgroup_importance_prefix: str = "Importance-"
 
 class ZacSettings(BaseSettings):
     source_collector_dir: str

@@ -381,7 +381,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
     def disable_host(self, zabbix_host):
         if not self.config.dryrun:
             try:
-                disabled_hostgroup_id = self.api.hostgroup.get(filter={"name": "All-auto-disabled-hosts"})[0]["groupid"]
+                disabled_hostgroup_id = self.api.hostgroup.get(filter={"name": self.config.hostgroup_disabled})[0]["groupid"]
                 self.api.host.update(hostid=zabbix_host["hostid"], status=1, templates=[], groups=[{"groupid": disabled_hostgroup_id}])
                 logging.info("Disabling host: '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
             except pyzabbix.ZabbixAPIException as e:
@@ -394,7 +394,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         hostname = db_host.hostname
         if not self.config.dryrun:
             try:
-                hostgroup_id = self.api.hostgroup.get(filter={"name": "All-hosts"})[0]["groupid"]
+                hostgroup_id = self.api.hostgroup.get(filter={"name": self.config.hostgroup_all})[0]["groupid"]
 
                 hosts = self.api.host.get(filter={"name": hostname})
                 if hosts:
@@ -503,7 +503,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 logging.debug("Told to stop. Breaking")
                 break
             hostgroup_names = [group["name"] for group in host["groups"]]
-            if "All-manual-hosts" in hostgroup_names:
+            if self.config.hostgroup_manual in hostgroup_names:
                 zabbix_manual_hosts.append(host)
             else:
                 zabbix_managed_hosts.append(host)
@@ -696,7 +696,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                 logging.debug("Told to stop. Breaking")
                 break
 
-            if "All-manual-hosts" in [group["name"] for group in zabbix_host["groups"]]:
+            if self.config.hostgroup_manual in [group["name"] for group in zabbix_host["groups"]]:
                 logging.debug("Skipping manual host: '%s' (%s)", zabbix_hostname, zabbix_host["hostid"])
                 continue
 
@@ -765,11 +765,11 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         zabbix_hostgroups = {}
         for zabbix_hostgroup in self.api.hostgroup.get(output=["name", "groupid"]):
             zabbix_hostgroups[zabbix_hostgroup["name"]] = zabbix_hostgroup["groupid"]
-            if zabbix_hostgroup["name"].startswith("Source-"):
+            if zabbix_hostgroup["name"].startswith(self.config.hostgroup_source_prefix):
                 managed_hostgroup_names.add(zabbix_hostgroup["name"])
-            if zabbix_hostgroup["name"].startswith("Importance-"):
+            if zabbix_hostgroup["name"].startswith(self.config.hostgroup_importance_prefix):
                 managed_hostgroup_names.add(zabbix_hostgroup["name"])
-        managed_hostgroup_names.update(["All-hosts"])
+        managed_hostgroup_names.update([self.config.hostgroup_all])
 
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
@@ -781,7 +781,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 logging.debug("Told to stop. Breaking")
                 break
 
-            if "All-manual-hosts" in [group["name"] for group in zabbix_host["groups"]]:
+            if self.config.hostgroup_manual in [group["name"] for group in zabbix_host["groups"]]:
                 logging.debug("Skipping manual host: '%s' (%s)", zabbix_hostname, zabbix_host["hostid"])
                 continue
 
@@ -791,7 +791,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
             db_host = db_hosts[zabbix_hostname]
 
-            synced_hostgroup_names = set(["All-hosts"])
+            synced_hostgroup_names = set([self.config.hostgroup_all])
             for _property in db_host.properties:
                 if _property in self.property_hostgroup_map:
                     synced_hostgroup_names.update(self.property_hostgroup_map[_property])
@@ -799,11 +799,11 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 if siteadmin in self.siteadmin_hostgroup_map:
                     synced_hostgroup_names.update(self.siteadmin_hostgroup_map[siteadmin])
             for source in db_host.sources:
-                synced_hostgroup_names.add(f"Source-{source}")
+                synced_hostgroup_names.add(f"{self.config.hostgroup_source_prefix}{source}")
             if db_host.importance is not None:
-                synced_hostgroup_names.add(f"Importance-{db_host.importance}")
+                synced_hostgroup_names.add(f"{self.config.hostgroup_importance_prefix}{db_host.importance}")
             else:
-                synced_hostgroup_names.add("Importance-X")
+                synced_hostgroup_names.add(f"{self.config.hostgroup_importance_prefix}X")
 
             host_hostgroups = {}
             for zabbix_hostgroup in zabbix_host["groups"]:
