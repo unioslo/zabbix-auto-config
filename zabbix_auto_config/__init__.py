@@ -55,7 +55,7 @@ def get_config():
     return config
 
 
-def write_health(health_file, processes, queues):
+def write_health(health_file, processes, queues, failsafe):
     now = datetime.datetime.now()
     health = {
         "date": now.isoformat(timespec="seconds"),
@@ -65,6 +65,7 @@ def write_health(health_file, processes, queues):
         "all_ok": True,
         "processes": [],
         "queues": [],
+        "failsafe": failsafe,
     }
 
     for process in processes:
@@ -153,7 +154,7 @@ def main():
         while not stop_event.is_set():
             if next_status < datetime.datetime.now():
                 if health_file is not None:
-                    write_health(health_file, processes, source_hosts_queues)
+                    write_health(health_file, processes, source_hosts_queues, config.zabbix.failsafe)
                 log_process_status(processes)
                 next_status = datetime.datetime.now() + datetime.timedelta(seconds=status_interval)
 
