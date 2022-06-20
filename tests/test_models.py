@@ -52,6 +52,19 @@ class TestModels(unittest.TestCase):
         assert exc_info.value.errors() == [{'loc': ('interfaces',),
                                             'msg': 'No duplicate interface types: [1, 1]',
                                             'type': 'assertion_error'}]
+    def test_invalid_importance(self):
+        host = self.find_host_by_hostname(self.invalid_hosts, "invalid-importance")
+        with pytest.raises(ValidationError) as exc_info:
+            models.Host(**host)
+        assert exc_info.value.errors() == [
+            {
+                "loc": ("importance",),
+                "msg": "ensure this value is greater than or equal to 0",
+                "type": "value_error.number.not_ge",
+                "ctx": {"limit_value": 0},
+            }
+        ]
+
 
 
 if __name__ == "__main__":

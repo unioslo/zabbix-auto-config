@@ -72,4 +72,9 @@ def invalid_hosts():
                 },
             ],
         },
+        {
+            "enabled": True,
+            "hostname": "invalid-importance.example.com",
+            "importance": -1,
+        },
     ]
