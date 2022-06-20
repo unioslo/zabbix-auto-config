@@ -81,18 +81,29 @@ class Host(BaseModel):
     enabled: bool
     hostname: str
 
-    importance: Optional[conint(ge=0)]
-    interfaces: Optional[List[Interface]] = []
-    inventory: Optional[Dict[str, str]] = {}
+    importance: Optional[conint(ge=0)]  # type: ignore # mypy blows up: https://github.com/samuelcolvin/pydantic/issues/156#issuecomment-614748288
+    interfaces: List[Interface] = []
+    inventory: Dict[str, str] = {}
     macros: Optional[None] = None  # TODO: What should macros look like?
-    properties: Optional[Set[str]] = set()
-    proxy_pattern: Optional[str]
-    siteadmins: Optional[Set[str]] = set()
-    sources: Optional[Set[str]] = set()
-    tags: Optional[Set[Tuple[str, str]]] = set()
+    properties: Set[str] = set()
+    proxy_pattern: Optional[str]  # NOTE: replace with Optional[typing.Pattern]?
+    siteadmins: Set[str] = set()
+    sources: Set[str] = set()
+    tags: Set[Tuple[str, str]] = set()
 
     class Config:
         validate_assignment = True
+
+    @validator("*", pre=True)
+    def none_defaults_to_field_default(cls, v: Any, field: ModelField) -> Any:
+        """The field's default value or factory is returned if the value is None."""
+        # TODO: add field type check
+        if v is None:
+            if field.default:
+                return field.default
+            elif field.default_factory:
+                return field.default_factory()
+        return v
 
     # pylint: disable=no-self-use, no-self-argument
     @validator("interfaces")
