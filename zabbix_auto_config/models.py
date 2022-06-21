@@ -99,9 +99,9 @@ class Host(BaseModel):
         """The field's default value or factory is returned if the value is None."""
         # TODO: add field type check
         if v is None:
-            if field.default:
+            if field.default is not None:
                 return field.default
-            elif field.default_factory:
+            elif field.default_factory is not None:
                 return field.default_factory()
         return v
 
