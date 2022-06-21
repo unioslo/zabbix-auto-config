@@ -66,6 +66,40 @@ class TestModels(unittest.TestCase):
         ]
 
 
+    def test_host_merge(self):
+        """Tests merging of Hosts"""
+        host = self.find_host_by_hostname(self.full_hosts, "foo")
+        h1 = models.Host(**host)
+        host["enabled"] = False
+        host["properties"] = {"prop2", "prop3"}
+        host["siteadmins"] = {"bob@example.com", "chuck@example.com"}
+        host["sources"] = {"source2", "source3"}
+        host["tags"] = [["tag2", "y"], ["tag3", "z"]]
+        host["importance"] = 2
+        # TODO: interfaces
+        # TODO: proxy_pattern
+        host["inventory"] = {"foo": "bar", "baz": "qux"}
+        h2 = models.Host(**host)
+        h1.merge(h2)
+        assert h1.enabled
+        assert h1.properties == {"prop1", "prop2", "prop3"}
+        assert h1.siteadmins == {
+            "alice@example.com",
+            "bob@example.com",
+            "chuck@example.com",
+        }
+        assert h1.sources == {"source1", "source2", "source3"}
+        assert h1.tags == {("tag1", "x"), ("tag2", "y"), ("tag3", "z")}
+        assert h1.importance == 1
+        assert h1.inventory == {"foo": "bar", "baz": "qux"}
+
+    def test_host_merge_invalid(self):
+        """Tests merging of Host with incorrect type"""
+        host = self.find_host_by_hostname(self.full_hosts, "foo")
+        h1 = models.Host(**host)
+        with pytest.raises(TypeError):
+            h1.merge(object())
+
 
 if __name__ == "__main__":
     unittest.main()
