@@ -96,6 +96,7 @@ class Host(BaseModel):
     class Config:
         validate_assignment = True
 
+    # pylint: disable=no-self-use, no-self-argument
     @validator("*", pre=True)
     def none_defaults_to_field_default(cls, v: Any, field: ModelField) -> Any:
         """The field's default value or factory is returned if the value is None."""
