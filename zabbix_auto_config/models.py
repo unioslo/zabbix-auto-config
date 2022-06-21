@@ -127,7 +127,7 @@ class Host(BaseModel):
         Merge other host into this one. The current hostname will be kept if they do not match.
         """
         if not isinstance(other, self.__class__):
-            raise ValueError(f"Can't merge with objects of other type: {type(other)}")
+            raise TypeError(f"Can't merge with objects of other type: {type(other)}")
 
         self.enabled = self.enabled or other.enabled
         # self.macros TODO
