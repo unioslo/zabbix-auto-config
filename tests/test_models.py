@@ -67,9 +67,11 @@ class TestModels(unittest.TestCase):
 
 
     def test_host_merge(self):
-        """Tests merging of Hosts"""
+        """Tests Host.merge()"""
         host = self.find_host_by_hostname(self.full_hosts, "foo")
         h1 = models.Host(**host)
+
+        host["hostname"] = "bar.example.com"
         host["enabled"] = False
         host["properties"] = {"prop2", "prop3"}
         host["siteadmins"] = {"bob@example.com", "chuck@example.com"}
@@ -80,7 +82,10 @@ class TestModels(unittest.TestCase):
         # TODO: proxy_pattern
         host["inventory"] = {"foo": "bar", "baz": "qux"}
         h2 = models.Host(**host)
+
         h1.merge(h2)
+
+        assert h1.hostname == "foo.example.com"
         assert h1.enabled
         assert h1.properties == {"prop1", "prop2", "prop3"}
         assert h1.siteadmins == {
@@ -94,7 +99,7 @@ class TestModels(unittest.TestCase):
         assert h1.inventory == {"foo": "bar", "baz": "qux"}
 
     def test_host_merge_invalid(self):
-        """Tests merging of Host with incorrect type"""
+        """Tests Host.merge() with incorrect argument type"""
         host = self.find_host_by_hostname(self.full_hosts, "foo")
         h1 = models.Host(**host)
         with pytest.raises(TypeError):
