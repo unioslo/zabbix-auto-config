@@ -110,19 +110,19 @@ class Host(BaseModel):
 
     # pylint: disable=no-self-use, no-self-argument
     @validator("interfaces")
-    def no_duplicate_interface_types(cls, v):
+    def no_duplicate_interface_types(cls, v: List[Interface]) -> List[Interface]:
         types = [interface.type for interface in v]
         assert len(types) == len(set(types)), f"No duplicate interface types: {types}"
         return v
 
     # pylint: disable=no-self-use, no-self-argument
     @validator("proxy_pattern")
-    def must_be_valid_regexp_pattern(cls, v):
+    def must_be_valid_regexp_pattern(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
             assert utils.is_valid_regexp(v), f"Must be valid regexp pattern: {v!r}"
         return v
 
-    def merge(self, other):
+    def merge(self, other: "Host") -> None:
         """
         Merge other host into this one. The current hostname will be kept if they do not match.
         """
