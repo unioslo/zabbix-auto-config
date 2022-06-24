@@ -1,13 +1,20 @@
+import os
+import pytest
+
+
+@pytest.fixture(scope="function")
 def minimal_hosts():
-    return [
+    yield [
         {
             "enabled": True,
             "hostname": "foo.example.com",
         },
     ]
 
+
+@pytest.fixture(scope="function")
 def full_hosts():
-    return [
+    yield [
         {
             "enabled": True,
             "hostname": "foo.example.com",
@@ -38,8 +45,10 @@ def full_hosts():
         },
     ]
 
+
+@pytest.fixture(scope="function")
 def invalid_hosts():
-    return [
+    yield [
         {
             "enabled": True,
             "hostname": "invalid-proxy-pattern.example.com",
@@ -78,3 +87,11 @@ def invalid_hosts():
             "importance": -1,
         },
     ]
+
+
+@pytest.fixture(scope="function")
+def sample_config():
+    with open(
+        os.path.dirname(os.path.dirname(__file__)) + "/config.sample.toml"
+    ) as config:
+        yield config.read()

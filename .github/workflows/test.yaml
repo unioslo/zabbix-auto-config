@@ -32,4 +32,4 @@ jobs:
         run: |
           pip install -e .[test]
       - name: Test
-        run: python -m unittest discover -v tests
+        run: python -m pytest -vv
