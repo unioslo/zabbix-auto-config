@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from zabbix_auto_config import utils
+from hypothesis import given, settings, strategies as st, HealthCheck, assume
 
 
 def test_read_map_file(tmp_path: Path, caplog: pytest.LogCaptureFixture):
@@ -62,3 +63,21 @@ def test_read_map_file(tmp_path: Path, caplog: pytest.LogCaptureFixture):
     for phrase in invalid_lines_contain:
         assert phrase in caplog.text
     assert caplog.text.count("WARNING") == 6
+
+
+@given(st.text())
+@settings(
+    max_examples=1000,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+def test_read_map_file_fuzz(tmp_path: Path, text: str):
+    tmpfile = tmp_path / "map_fuzz.txt"
+    tmpfile.write_text(
+        text,
+        encoding="utf-8",
+    )
+    m = utils.read_map_file(tmpfile)
+    for key in m:
+        assert key  # no empty keys
+        for value in m[key]:
+            assert value  # no empty values
