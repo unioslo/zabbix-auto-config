@@ -57,6 +57,7 @@ def test_read_map_file(tmp_path: Path, caplog: pytest.LogCaptureFixture):
         "line 6",
         "line 7",
         "line 8",
+        "line 15",
     ]
     for phrase in invalid_lines_contain:
         assert phrase in caplog.text
