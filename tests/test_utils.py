@@ -10,17 +10,21 @@ def test_read_map_file(tmp_path: Path, caplog: pytest.LogCaptureFixture):
     tmpfile.write_text(
         "\n".join(
             [
-                "key1:val1",
-                "key2:val2,val3",
+                "a:1",
+                "b:2,3",
                 "invalid line here",  # warning (no colon)
-                "key3:val4",
-                "key3:val5",
-                "key4:",
-                "key5: ",
-                "key6:,",
+                "c:4",
+                "d:5",
+                "e:",
+                "f: ",
+                "g:,",
                 "# this is a comment",  # ignored (comment)
-                "key7:val7,",
-                "key8:val8:val9",  # warning (invalid format)
+                "h:6,",
+                "i:7:8",  # colon in value (allowed)
+                "j:9,9,10",  # duplicate values
+                "k :11,12,13",  # trailing whitespace in key
+                "l: 14 , 15,16 ",  # leading and trailing whitespace in values
+                "l:17",  # duplicate key (extends existing values)
                 "",  # ignored (empty line)
             ]
         ),
@@ -31,15 +35,29 @@ def test_read_map_file(tmp_path: Path, caplog: pytest.LogCaptureFixture):
         m = utils.read_map_file(tmpfile)
 
     assert m == {
-        "key1": ["val1"],
-        "key2": ["val2", "val3"],
-        "key3": ["val4", "val5"],
-        "key4": [""],
-        "key5": [""],
-        "key6": ["", ""],
-        "key7": ["val7", ""],
+        "a": ["1"],
+        "b": ["2", "3"],
+        "c": ["4"],
+        "d": ["5"],
+        "h": ["6"],
+        "i": ["7:8"],
+        "j": ["9", "10"],
+        "k": ["11", "12", "13"],
+        "l": ["14", "15", "16", "17"],
     }
-    invalid_lines_contain = ["invalid line here", "key8:val8:val9"]
+    invalid_lines_contain = [
+        "'invalid line here'",
+        "'e:'",
+        "'f:'",
+        "'g:,'",
+        "duplicate values",
+        "Duplicate key",
+        # Check correct line numbers
+        "line 3",
+        "line 6",
+        "line 7",
+        "line 8",
+    ]
     for phrase in invalid_lines_contain:
         assert phrase in caplog.text
-    assert caplog.text.count("WARNING") == 2
+    assert caplog.text.count("WARNING") == 6
