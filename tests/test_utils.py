@@ -21,6 +21,7 @@ def test_read_map_file(tmp_path: Path, caplog: pytest.LogCaptureFixture):
                 "g:,",
                 "# this is a comment",  # ignored (comment)
                 "h:6,",
+                "h:6",  # duplicate key+value
                 "i:7:8",  # colon in value (allowed)
                 "j:9,9,10",  # duplicate values
                 "k :11,12,13",  # trailing whitespace in key
@@ -53,16 +54,19 @@ def test_read_map_file(tmp_path: Path, caplog: pytest.LogCaptureFixture):
         "'g:,'",
         "duplicate values",
         "Duplicate key",
+        "key 'h'",
+        "key 'j'",
         # Check correct line numbers
         "line 3",
         "line 6",
         "line 7",
         "line 8",
-        "line 15",
+        "line 11",
+        "line 16",
     ]
     for phrase in invalid_lines_contain:
         assert phrase in caplog.text
-    assert caplog.text.count("WARNING") == 6
+    assert caplog.text.count("WARNING") == 8
 
 
 @given(st.text())

@@ -44,7 +44,7 @@ def read_map_file(path: Union[str, Path]) -> Dict[str, List[str]]:
             try:
                 key, value = line.split(":", 1)
 
-                # Remove whitespace and check for empty key/values
+                # Remove whitespace and check for empty key
                 key = key.strip()
                 if not key:
                     raise ValueError(f"Emtpy key on line {lineno} in map file {path}")
@@ -57,25 +57,30 @@ def read_map_file(path: Union[str, Path]) -> Dict[str, List[str]]:
                     )
             except ValueError:
                 logging.warning(
-                    "Invalid format at line {} in map file. Expected 'key:value', got '{}'.".format(
-                        lineno, line
+                    "Invalid format at line {lineno} in map file '{path}'. Expected 'key:value', got '{line}'.".format(
+                        lineno=lineno, path=path, line=line
                     ),
                 )
                 continue
 
-            # Remove duplicates (dict.fromkeys guarantees order unlike list(set()))
-            values_dedup = list(dict.fromkeys(values))
-            if len(values) != len(values_dedup):
-                logging.warning(
-                    "Ignoring duplicate values at line {} in map file.".format(lineno)
-                )
-                values = values_dedup
-
             if key in _map:
                 logging.warning(
-                    "Duplicate key {} at line {} in map file.".format(key, lineno)
+                    "Duplicate key {key} at line {lineno} in map file '{path}'.".format(
+                        key=key, lineno=lineno, path=path
+                    )
                 )
                 _map[key].extend(values)
             else:
                 _map[key] = values
+
+    # Final pass to remove duplicate values
+    for key, values in _map.items():
+        values_dedup = list(dict.fromkeys(values))  # dict.fromkeys() guarantees order
+        if len(values) != len(values_dedup):
+            logging.warning(
+                "Ignoring duplicate values for key '{key}' in map file '{path}'.".format(
+                    key=key, path=path
+                )
+            )
+        _map[key] = values_dedup
     return _map
