@@ -2,10 +2,10 @@ import ipaddress
 import logging
 from pathlib import Path
 import re
-from typing import Dict, List, Union
+from typing import Dict, Iterable, List, Sequence, Set, Tuple, Union
 
 
-def is_valid_regexp(pattern):
+def is_valid_regexp(pattern: str):
     try:
         re.compile(pattern)
         return True
@@ -13,7 +13,7 @@ def is_valid_regexp(pattern):
         return False
 
 
-def is_valid_ip(ip):
+def is_valid_ip(ip: str):
     try:
         ipaddress.ip_address(ip)
         return True
@@ -21,11 +21,11 @@ def is_valid_ip(ip):
         return False
 
 
-def zabbix_tags2zac_tags(zabbix_tags):
+def zabbix_tags2zac_tags(zabbix_tags: Iterable[Dict[str, str]]) -> Set[Tuple[str, ...]]:
     return {tuple(tag.values()) for tag in zabbix_tags}
 
 
-def zac_tags2zabbix_tags(zac_tags):
+def zac_tags2zabbix_tags(zac_tags: Iterable[Tuple[str, str]]) -> List[Dict[str, str]]:
     zabbix_tags = [{"tag": tag[0], "value": tag[1]} for tag in zac_tags]
     return zabbix_tags
 
