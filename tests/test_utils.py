@@ -152,4 +152,6 @@ def test_zabbix_tags2zac_tags(
 def test_zac_tags2zabbix_tags(
     tags: Set[Tuple[str, str]], expected: List[Dict[str, str]]
 ):
-    assert utils.zac_tags2zabbix_tags(tags) == expected
+    zabbix_tags = utils.zac_tags2zabbix_tags(tags)
+    for tag in expected:
+        assert tag in zabbix_tags
