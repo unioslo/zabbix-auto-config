@@ -1,11 +1,13 @@
-from ipaddress import IPv4Address, IPv6Address
 import logging
+from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Union
 
 import pytest
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
+
 from zabbix_auto_config import utils
-from hypothesis import given, settings, strategies as st, HealthCheck, assume
 
 
 @pytest.mark.parametrize(
@@ -155,3 +157,60 @@ def test_zac_tags2zabbix_tags(
     zabbix_tags = utils.zac_tags2zabbix_tags(tags)
     for tag in expected:
         assert tag in zabbix_tags
+
+
+# Test with the two prefixes we use + no prefix
+@pytest.mark.parametrize(
+    "prefix",
+    ["Templates-", "Siteadmin-", ""],
+)
+def test_mapping_values_with_prefix(hostgroup_map_file: Path, prefix: str):
+    m = utils.read_map_file(hostgroup_map_file)
+
+    # Make sure we read the map file correctly
+    assert len(m) == 3
+
+    old_prefix = "Hostgroup-"
+    new_map = utils.mapping_values_with_prefix(
+        m,
+        prefix=prefix,
+        old_prefix=old_prefix,
+        lower=False,
+    )
+
+    # Compare new dict to old dict
+    assert new_map is not m  # we should get a new dict
+    assert len(new_map) == len(m)
+    assert sum(len(v) for v in new_map.values()) == sum(len(v) for v in m.values())
+
+    # Check values in new map
+    assert new_map["user1@example.com"] == [f"{prefix}user1-primary"]
+    assert new_map["user2@example.com"] == [
+        f"{prefix}user2-primary",
+        f"{prefix}user2-secondary",
+    ]
+    assert new_map["user3@example.com"] == [f"{prefix}user3-primary"]
+
+    # Check values in old map (they should be untouched)
+    assert m["user1@example.com"] == [f"{old_prefix}user1-primary"]
+    assert m["user2@example.com"] == [
+        f"{old_prefix}user2-primary",
+        f"{old_prefix}user2-secondary",
+    ]
+    assert m["user3@example.com"] == [f"{old_prefix}user3-primary"]
+
+
+def test_mapping_values_with_prefix_strict(hostgroup_map_file: Path) -> None:
+    """Passing the wrong prefix in strict mode should raise an error."""
+    m = utils.read_map_file(hostgroup_map_file)
+
+    with pytest.raises(ValueError) as exc_info:
+        utils.mapping_values_with_prefix(
+            m,
+            prefix="Foo-",
+            old_prefix="Bar-",
+            lower=False,
+            strict=True,
+        )
+        exc_msg = exc_info.exconly()
+        assert "missing prefix" in exc_msg

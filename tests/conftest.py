@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+from typing import Iterable
 import pytest
 
 
@@ -95,3 +97,27 @@ def sample_config():
         os.path.dirname(os.path.dirname(__file__)) + "/config.sample.toml"
     ) as config:
         yield config.read()
+
+
+@pytest.fixture
+def hostgroup_map_file(tmp_path: Path) -> Iterable[Path]:
+    contents = hostgroup_map = """
+# This file defines assosiation between siteadm fetched from Nivlheim and hostsgroups in Zabbix.
+# A siteadm can be assosiated only with one hostgroup or usergroup.
+# Example: <siteadm>:<host/user groupname>
+#
+#****************************************************************************************
+# ATT: First letter will be capitilazed, leading and trailing spaces will be removed and 
+#      spaces within the hostgroupname will be replaced with "-" by the script automatically 
+#****************************************************************************************
+#
+user1@example.com:Hostgroup-user1-primary
+#
+user2@example.com:Hostgroup-user2-primary
+user2@example.com:Hostgroup-user2-secondary
+#
+user3@example.com:Hostgroup-user3-primary
+"""
+    map_file_path = tmp_path / "siteadmin_hostgroup_map.txt"
+    map_file_path.write_text(contents)
+    yield map_file_path

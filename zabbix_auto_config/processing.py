@@ -11,6 +11,7 @@ import sys
 import signal
 import itertools
 import queue
+from typing import Dict, List
 
 import psycopg2
 import pyzabbix
@@ -332,7 +333,7 @@ class SourceMergerProcess(BaseProcess):
 
 
 class ZabbixUpdater(BaseProcess):
-    def __init__(self, name, state, db_uri, zabbix_config):
+    def __init__(self, name, state, db_uri, zabbix_config: models.ZabbixSettings):
         super().__init__(name, state)
 
         self.db_uri = db_uri
@@ -362,9 +363,26 @@ class ZabbixUpdater(BaseProcess):
             logging.error("Unable to login to Zabbix API: %s", str(e))
             raise exceptions.ZACException(*e.args)
 
-        self.property_template_map = utils.read_map_file(os.path.join(self.config.map_dir, "property_template_map.txt"))
-        self.property_hostgroup_map = utils.read_map_file(os.path.join(self.config.map_dir, "property_hostgroup_map.txt"))
-        self.siteadmin_hostgroup_map = utils.read_map_file(os.path.join(self.config.map_dir, "siteadmin_hostgroup_map.txt"))
+        self.property_template_map = utils.read_map_file(
+            os.path.join(self.config.map_dir, "property_template_map.txt")
+        )
+        self.property_hostgroup_map = utils.read_map_file(
+            os.path.join(self.config.map_dir, "property_hostgroup_map.txt")
+        )
+
+        # Read mapping file
+        # This is the unmodified contents of the map file
+        self.siteadmin_hosts_map_raw = utils.read_map_file(
+            os.path.join(self.config.map_dir, "siteadmin_hostgroup_map.txt")
+        )
+
+        # Mapping used to map hostgroups to hosts
+        self.siteadmin_hostgroup_map = utils.mapping_values_with_prefix(
+            self.siteadmin_hosts_map_raw,
+            prefix=self.config.hostgroup_siteadmin_prefix,
+            old_prefix=self.config.mapping_file_prefix,
+            strict=True,
+        )
 
     def work(self):
         start_time = time.time()
@@ -670,6 +688,8 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                 self.api.host.update(hostid=host["hostid"], templates_clear=templates)
             except pyzabbix.ZabbixAPIException as e:
                 logging.error("Error when clearing templates on host '%s': %s", host["host"], e.args)
+        else:
+            logging.debug("DRYRUN: Clearing templates on host: '%s'", host["host"])
 
     def set_templates(self, templates, host):
         logging.debug("Setting templates on host: '%s'", host["host"])
@@ -679,6 +699,8 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                 self.api.host.update(hostid=host["hostid"], templates=templates)
             except pyzabbix.ZabbixAPIException as e:
                 logging.error("Error when setting templates on host '%s': %s", host["host"], e.args)
+        else:
+            logging.debug("DRYRUN: Setting templates on host: '%s'", host["host"])
 
     def do_update(self):
         managed_template_names = set(itertools.chain.from_iterable(self.property_template_map.values()))
@@ -741,35 +763,70 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
 class ZabbixHostgroupUpdater(ZabbixUpdater):
 
     def set_hostgroups(self, hostgroups, host):
-        logging.debug("Setting hostgroups on host: '%s'", host["host"])
         if not self.config.dryrun:
+            logging.debug("Setting hostgroups on host: '%s'", host["host"])
             try:
                 groups = [{"groupid": hostgroup_id} for _, hostgroup_id in hostgroups.items()]
                 self.api.host.update(hostid=host["hostid"], groups=groups)
             except pyzabbix.ZabbixAPIException as e:
                 logging.error("Error when setting hostgroups on host '%s': %s", host["host"], e.args)
+        else:
+            logging.debug("DRYRUN: Setting hostgroups on host: '%s'", host["host"])
 
     def create_hostgroup(self, hostgroup_name):
         if not self.config.dryrun:
+            logging.debug("Creating hostgroup: '%s'", hostgroup_name)
             try:
                 result = self.api.hostgroup.create(name=hostgroup_name)
                 return result["groupids"][0]
             except pyzabbix.ZabbixAPIException as e:
                 logging.error("Error when creating hostgroups '%s': %s", hostgroup_name, e.args)
         else:
+            logging.debug("DRYRUN: Creating hostgroup: '%s'", hostgroup_name)
             return "-1"
 
+    def create_extra_hostgroups(
+        self, existing_hostgroups: List[Dict[str, str]]
+    ) -> None:
+        """Creates additonal host groups based on the prefixes specified
+        in the config file. These host groups are not assigned hosts by ZAC."""
+        hostgroup_names = [h["name"] for h in existing_hostgroups]
+
+        for prefix in self.config.extra_siteadmin_hostgroup_prefixes:
+            mapping = utils.mapping_values_with_prefix(
+                self.siteadmin_hosts_map_raw,
+                prefix=prefix,
+                old_prefix=self.config.mapping_file_prefix,
+            )
+            for hostgroups in mapping.values():
+                for hostgroup in hostgroups:
+                    if hostgroup in hostgroup_names:
+                        continue
+                    self.create_hostgroup(hostgroup)
+
     def do_update(self):
-        managed_hostgroup_names = set(itertools.chain.from_iterable(self.property_hostgroup_map.values()))
-        managed_hostgroup_names.update(itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values()))
+        managed_hostgroup_names = set(
+            itertools.chain.from_iterable(self.property_hostgroup_map.values())
+        )
+        managed_hostgroup_names.update(
+            itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values())
+        )
+
+        existing_hostgroups = self.api.hostgroup.get(output=["name", "groupid"])
+
+        # Create extra host groups if necessary
+        if self.config.extra_siteadmin_hostgroup_prefixes:
+            self.create_extra_hostgroups(existing_hostgroups)
+
         zabbix_hostgroups = {}
-        for zabbix_hostgroup in self.api.hostgroup.get(output=["name", "groupid"]):
+        for zabbix_hostgroup in existing_hostgroups:
             zabbix_hostgroups[zabbix_hostgroup["name"]] = zabbix_hostgroup["groupid"]
             if zabbix_hostgroup["name"].startswith(self.config.hostgroup_source_prefix):
                 managed_hostgroup_names.add(zabbix_hostgroup["name"])
             if zabbix_hostgroup["name"].startswith(self.config.hostgroup_importance_prefix):
                 managed_hostgroup_names.add(zabbix_hostgroup["name"])
         managed_hostgroup_names.update([self.config.hostgroup_all])
+
 
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")

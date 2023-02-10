@@ -2,7 +2,7 @@ import ipaddress
 import logging
 from pathlib import Path
 import re
-from typing import Dict, Iterable, List, Sequence, Set, Tuple, Union
+from typing import Dict, Iterable, List, Set, Tuple, Union
 
 
 def is_valid_regexp(pattern: str):
@@ -84,3 +84,67 @@ def read_map_file(path: Union[str, Path]) -> Dict[str, List[str]]:
             )
         _map[key] = values_dedup
     return _map
+
+
+def with_prefix(
+    text: str,
+    prefix: str,
+    old_prefix: str = "",
+    lower: bool = False,
+    strict: bool = True,
+) -> str:
+    """Ensures `text` starts with `prefix`.
+
+    Parameters
+    ----
+    text: str
+        The text to format.
+    prefix: str
+        The prefix to add to `text`.
+    old_prefix: str
+        If given, `old_prefix` will be replaced with `prefix`.
+    strict: bool
+        Raise exception if old prefix is not found.
+
+    Returns
+    -------
+    str
+        The formatted string.
+    """
+    if old_prefix:
+        if text.startswith(old_prefix):
+            text = text[len(old_prefix) :]
+        else:
+            if strict:
+                raise ValueError(f"{text!r} missing prefix {old_prefix!r}")
+    if not text.startswith(prefix):
+        if lower:
+            text = text.lower()
+        return f"{prefix}{text}"
+    return text
+
+
+def mapping_values_with_prefix(
+    m: Dict[str, Union[List[str], str]],
+    prefix: str,
+    old_prefix: str = "",
+    lower: bool = False,
+    strict: bool = True,
+) -> Dict[str, List[str]]:
+    """Calls `with_prefix` on all items in the values (list) in the mapping `m`."""
+    m = m.copy()  # don't modify the original mapping
+    for key, value in m.items():
+        if isinstance(value, str):
+            value = [value]
+        new_values = []
+        for v in value:
+            new_value = with_prefix(
+                text=v,
+                prefix=prefix,
+                old_prefix=old_prefix,
+                lower=lower,
+                strict=strict,
+            )
+            new_values.append(new_value)
+        m[key] = new_values
+    return m

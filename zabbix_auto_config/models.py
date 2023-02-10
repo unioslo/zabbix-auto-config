@@ -42,6 +42,22 @@ class ZabbixSettings(BaseSettings):
     hostgroup_source_prefix: str = "Source-"
     hostgroup_importance_prefix: str = "Importance-"
 
+    # The prefix (if any) for the managed host groups in Zabbix
+    # This group is used to store the hosts that are managed by ZAC
+    hostgroup_siteadmin_prefix: str = "Hostgroup-"
+
+    # The prefix (if any) for groups in the mapping file
+    # This is required to be able to control the prefix of the groups
+    # when creating them in Zabbix. Must match with the prefix in the
+    # mapping file.
+    mapping_file_prefix: str = "Hostgroup-"
+
+    # Prefixes for extra host groups to create
+    # These groups are not used by ZAC, but ZAC has the ability to
+    # create them based on the mapping file
+    extra_siteadmin_hostgroup_prefixes: Set[str] = set()
+
+
 class ZacSettings(BaseSettings):
     source_collector_dir: str
     host_modifier_dir: str
@@ -83,7 +99,7 @@ class Host(BaseModel):
     enabled: bool
     hostname: str
 
-    importance: Optional[conint(ge=0)]  # type: ignore # mypy blows up: https://github.com/samuelcolvin/pydantic/issues/156#issuecomment-614748288
+    importance: Optional[conint(ge=0)]  # type: ignore # mypy blows up: https://github.com/pydantic/pydantic/issues/239 & https://github.com/pydantic/pydantic/issues/156
     interfaces: List[Interface] = []
     inventory: Dict[str, str] = {}
     macros: Optional[None] = None  # TODO: What should macros look like?
