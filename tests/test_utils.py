@@ -1,11 +1,13 @@
-from ipaddress import IPv4Address, IPv6Address
 import logging
+from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Union
 
 import pytest
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
+
 from zabbix_auto_config import utils
-from hypothesis import given, settings, strategies as st, HealthCheck, assume
 
 
 @pytest.mark.parametrize(
@@ -155,3 +157,55 @@ def test_zac_tags2zabbix_tags(
     zabbix_tags = utils.zac_tags2zabbix_tags(tags)
     for tag in expected:
         assert tag in zabbix_tags
+
+
+# Test with the two prefixes we use + no prefix
+@pytest.mark.parametrize(
+    "prefix",
+    ["Templates-", "Siteadmin-", ""],
+)
+def test_mapping_values_with_prefix(tmp_path: Path, prefix: str):
+    hostgroup_map = """
+# This file defines assosiation between siteadm fetched from Nivlheim and hostsgroups in Zabbix.
+# A siteadm can be assosiated only with one hostgroup or usergroup.
+# Example: <siteadm>:<host/user groupname>
+#
+#****************************************************************************************
+# ATT: First letter will be capitilazed, leading and trailing spaces will be removed and 
+#      spaces within the hostgroupname will be replaced with "-" by the script automatically 
+#****************************************************************************************
+#
+user1@example.com:Siteadmin-user1-primary
+#
+user2@example.com:Siteadmin-user2-primary
+user2@example.com:Siteadmin-user2-secondary
+#
+user3@example.com:Siteadmin-user3-primary
+"""
+
+    mapping_file = tmp_path / "siteadmin_hostgroup_map.txt"
+    mapping_file.write_text(hostgroup_map)
+    m = utils.read_map_file(mapping_file)
+
+    # Make sure we read the map file correctly
+    assert len(m) == 3
+
+    new_map = utils.mapping_values_with_prefix(
+        m,
+        prefix=prefix,
+        old_prefix="Siteadmin-",
+        lower=False,
+    )
+
+    # Compare new dict to old dict
+    assert new_map is not m  # we should get a new dict
+    assert len(new_map) == len(m)
+    assert sum(len(v) for v in new_map.values()) == sum(len(v) for v in m.values())
+
+    # Compare values
+    assert new_map["user1@example.com"] == [f"{prefix}user1-primary"]
+    assert new_map["user2@example.com"] == [
+        f"{prefix}user2-primary",
+        f"{prefix}user2-secondary",
+    ]
+    assert new_map["user3@example.com"] == [f"{prefix}user3-primary"]

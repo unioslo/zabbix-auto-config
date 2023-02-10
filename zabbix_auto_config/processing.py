@@ -332,7 +332,7 @@ class SourceMergerProcess(BaseProcess):
 
 
 class ZabbixUpdater(BaseProcess):
-    def __init__(self, name, state, db_uri, zabbix_config):
+    def __init__(self, name, state, db_uri, zabbix_config: models.ZabbixSettings):
         super().__init__(name, state)
 
         self.db_uri = db_uri
@@ -362,9 +362,23 @@ class ZabbixUpdater(BaseProcess):
             logging.error("Unable to login to Zabbix API: %s", str(e))
             raise exceptions.ZACException(*e.args)
 
-        self.property_template_map = utils.read_map_file(os.path.join(self.config.map_dir, "property_template_map.txt"))
-        self.property_hostgroup_map = utils.read_map_file(os.path.join(self.config.map_dir, "property_hostgroup_map.txt"))
-        self.siteadmin_hostgroup_map = utils.read_map_file(os.path.join(self.config.map_dir, "siteadmin_hostgroup_map.txt"))
+        self.property_template_map = utils.read_map_file(
+            os.path.join(self.config.map_dir, "property_template_map.txt")
+        )
+        self.property_hostgroup_map = utils.read_map_file(
+            os.path.join(self.config.map_dir, "property_hostgroup_map.txt")
+        )
+
+        # Use this dict as the basis for siteadmin and template hostgroups
+        siteadmin_hostgroups = utils.read_map_file(
+            os.path.join(self.config.map_dir, "siteadmin_hostgroup_map.txt")
+        )
+        self.siteadmin_hostgroup_map = siteadmin_hostgroups
+        self.templates_hostgroup_map = utils.mapping_values_with_prefix(
+            siteadmin_hostgroups,
+            prefix=self.config.hostgroup_templates_prefix,
+            old_prefix=self.config.hostgroup_siteadmin_prefix,
+        )
 
     def work(self):
         start_time = time.time()
@@ -670,6 +684,8 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                 self.api.host.update(hostid=host["hostid"], templates_clear=templates)
             except pyzabbix.ZabbixAPIException as e:
                 logging.error("Error when clearing templates on host '%s': %s", host["host"], e.args)
+        else:
+            logging.debug("DRYRUN: Clearing templates on host: '%s'", host["host"])
 
     def set_templates(self, templates, host):
         logging.debug("Setting templates on host: '%s'", host["host"])
@@ -679,6 +695,8 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                 self.api.host.update(hostid=host["hostid"], templates=templates)
             except pyzabbix.ZabbixAPIException as e:
                 logging.error("Error when setting templates on host '%s': %s", host["host"], e.args)
+        else:
+            logging.debug("DRYRUN: Setting templates on host: '%s'", host["host"])
 
     def do_update(self):
         managed_template_names = set(itertools.chain.from_iterable(self.property_template_map.values()))
@@ -741,27 +759,38 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
 class ZabbixHostgroupUpdater(ZabbixUpdater):
 
     def set_hostgroups(self, hostgroups, host):
-        logging.debug("Setting hostgroups on host: '%s'", host["host"])
         if not self.config.dryrun:
+            logging.debug("Setting hostgroups on host: '%s'", host["host"])
             try:
                 groups = [{"groupid": hostgroup_id} for _, hostgroup_id in hostgroups.items()]
                 self.api.host.update(hostid=host["hostid"], groups=groups)
             except pyzabbix.ZabbixAPIException as e:
                 logging.error("Error when setting hostgroups on host '%s': %s", host["host"], e.args)
+        else:
+            logging.debug("DRYRUN: Setting hostgroups on host: '%s'", host["host"])
 
     def create_hostgroup(self, hostgroup_name):
         if not self.config.dryrun:
+            logging.debug("Creating hostgroup: '%s'", hostgroup_name)
             try:
                 result = self.api.hostgroup.create(name=hostgroup_name)
                 return result["groupids"][0]
             except pyzabbix.ZabbixAPIException as e:
                 logging.error("Error when creating hostgroups '%s': %s", hostgroup_name, e.args)
         else:
+            logging.debug("DRYRUN: Creating hostgroup: '%s'", hostgroup_name)
             return "-1"
 
     def do_update(self):
-        managed_hostgroup_names = set(itertools.chain.from_iterable(self.property_hostgroup_map.values()))
-        managed_hostgroup_names.update(itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values()))
+        managed_hostgroup_names = set(
+            itertools.chain.from_iterable(self.property_hostgroup_map.values())
+        )
+        managed_hostgroup_names.update(
+            itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values())
+        )
+        managed_hostgroup_names.update(
+            itertools.chain.from_iterable(self.templates_hostgroup_map.values())
+        )
         zabbix_hostgroups = {}
         for zabbix_hostgroup in self.api.hostgroup.get(output=["name", "groupid"]):
             zabbix_hostgroups[zabbix_hostgroup["name"]] = zabbix_hostgroup["groupid"]
@@ -798,6 +827,10 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             for siteadmin in db_host.siteadmins:
                 if siteadmin in self.siteadmin_hostgroup_map:
                     synced_hostgroup_names.update(self.siteadmin_hostgroup_map[siteadmin])
+                if siteadmin in self.templates_hostgroup_map:
+                    synced_hostgroup_names.update(
+                        self.templates_hostgroup_map[siteadmin]
+                    )
             for source in db_host.sources:
                 synced_hostgroup_names.add(f"{self.config.hostgroup_source_prefix}{source}")
             if db_host.importance is not None:

@@ -2,7 +2,7 @@ import ipaddress
 import logging
 from pathlib import Path
 import re
-from typing import Dict, Iterable, List, Sequence, Set, Tuple, Union
+from typing import Dict, Iterable, List, Set, Tuple, Union
 
 
 def is_valid_regexp(pattern: str):
@@ -84,3 +84,67 @@ def read_map_file(path: Union[str, Path]) -> Dict[str, List[str]]:
             )
         _map[key] = values_dedup
     return _map
+
+
+def with_prefix(
+    text: str, prefix: str, old_prefix: str = "", lower: bool = False
+) -> str:
+    """Ensures `text` starts with `prefix`.
+
+    If `old_prefix` is given, it will be replaced with `prefix`.
+
+    If `lower` is True, `text` will be lowercased before new prefix is added.
+
+    Examples:
+        >>> with_prefix("foo", "bar-")
+        'bar-foo'
+        >>> with_prefix("baz-foo", "bar-", "baz-")
+        'bar-foo'
+        >>> with_prefix("Foo", "Bar-", lower=True)
+        'Bar-foo'
+        >>> with_prefix("Baz-Foo", "Bar-", "Baz-", lower=True)
+        'Bar-foo'
+
+    Parameters
+    ----
+    text: str
+        The text to format.
+    prefix: str
+        The prefix to add to `text`.
+    old_prefix: str, optional
+        If given, `old_prefix` will be replaced with `prefix`.
+    lower: bool
+        If True, `text` will be converted to lowercase before adding the prefix,
+        but after comparing to `old_prefix`.
+
+    Returns
+    -------
+    str
+        The formatted string.
+    """
+    if old_prefix and text.startswith(old_prefix):
+        text = text[len(old_prefix) :]
+    if not text.startswith(prefix):
+        if lower:
+            text = text.lower()
+        return f"{prefix}{text}"
+    return text
+
+
+def mapping_values_with_prefix(
+    m: Dict[str, Union[List[str], str]],
+    prefix: str,
+    old_prefix: str = "",
+    lower: bool = False,
+) -> Dict[str, List[str]]:
+    """Calls `with_prefix` on all values in the mapping `m`."""
+    m = m.copy()  # don't modify the original mapping
+    for key, value in m.items():
+        if isinstance(value, str):
+            value = [value]
+        new_values = []
+        for v in value:
+            new_value = with_prefix(v, prefix, old_prefix, lower)
+            new_values.append(new_value)
+        m[key] = new_values
+    return m

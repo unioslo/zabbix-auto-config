@@ -41,6 +41,8 @@ class ZabbixSettings(BaseSettings):
 
     hostgroup_source_prefix: str = "Source-"
     hostgroup_importance_prefix: str = "Importance-"
+    hostgroup_siteadmin_prefix: str = "Siteadmin-"
+    hostgroup_templates_prefix: str = "Templates-"
 
 class ZacSettings(BaseSettings):
     source_collector_dir: str
@@ -83,7 +85,7 @@ class Host(BaseModel):
     enabled: bool
     hostname: str
 
-    importance: Optional[conint(ge=0)]  # type: ignore # mypy blows up: https://github.com/samuelcolvin/pydantic/issues/156#issuecomment-614748288
+    importance: Optional[conint(ge=0)]  # type: ignore # mypy blows up: https://github.com/pydantic/pydantic/issues/239 & https://github.com/pydantic/pydantic/issues/156
     interfaces: List[Interface] = []
     inventory: Dict[str, str] = {}
     macros: Optional[None] = None  # TODO: What should macros look like?
