@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 venv/
 .vscode/
+.hypothesis/
 
 path/to/
 config.toml
