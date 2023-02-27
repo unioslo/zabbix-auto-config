@@ -41,8 +41,16 @@ class ZabbixSettings(BaseSettings):
 
     hostgroup_source_prefix: str = "Source-"
     hostgroup_importance_prefix: str = "Importance-"
-    hostgroup_siteadmin_prefix: str = "Siteadmin-"
-    hostgroup_templates_prefix: str = "Templates-"
+    hostgroup_siteadmin_hosts_prefix: str = "Siteadmin-"
+    hostgroup_siteadmin_templates_prefix: str = "Templates-"
+
+    # The prefix (if any) for groups in the mapping file
+    mapping_file_prefix: str = "Siteadmin-"
+
+    # Create/delete host groups
+    manage_hosts_hostgroups: bool = True
+    manage_templates_hostgroups: bool = True
+
 
 class ZacSettings(BaseSettings):
     source_collector_dir: str

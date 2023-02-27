@@ -20,8 +20,11 @@ managed_inventory = ["location"]
 #hostgroup_disabled = "All-auto-disabled-hosts"
 #hostgroup_source_prefix = "Source-"
 #hostgroup_importance_prefix = "Importance-"
-#hostgroup_siteadmin_prefix = "Siteadmin-"
-#hostgroup_templates_prefix = "Templates-"
+#hostgroup_siteadmin_hosts_prefix = "Siteadmin-"
+#hostgroup_siteadmin_templates_prefix = "Templates-"
+#mapping_file_prefix = "Siteadmin-"
+#manage_hosts_hostgroups = true
+#manage_templates_hostgroups = true
 
 [source_collectors.mysource]
 module_name = "mysource"

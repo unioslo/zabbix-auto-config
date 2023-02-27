@@ -369,15 +369,22 @@ class ZabbixUpdater(BaseProcess):
             os.path.join(self.config.map_dir, "property_hostgroup_map.txt")
         )
 
-        # Use this dict as the basis for siteadmin and template hostgroups
+        # Read mapping file
         siteadmin_hostgroups = utils.read_map_file(
             os.path.join(self.config.map_dir, "siteadmin_hostgroup_map.txt")
         )
-        self.siteadmin_hostgroup_map = siteadmin_hostgroups
-        self.templates_hostgroup_map = utils.mapping_values_with_prefix(
+
+        # Construct mapping from siteadmin hostgroups to hosts and templates host groups
+        self.siteadmin_hosts_map = utils.mapping_values_with_prefix(
             siteadmin_hostgroups,
-            prefix=self.config.hostgroup_templates_prefix,
-            old_prefix=self.config.hostgroup_siteadmin_prefix,
+            prefix=self.config.hostgroup_siteadmin_hosts_prefix,
+            old_prefix=self.config.mapping_file_prefix,
+        )
+
+        self.siteadmin_templates_map = utils.mapping_values_with_prefix(
+            siteadmin_hostgroups,
+            prefix=self.config.hostgroup_siteadmin_templates_prefix,
+            old_prefix=self.config.mapping_file_prefix,
         )
 
     def work(self):
@@ -785,12 +792,19 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         managed_hostgroup_names = set(
             itertools.chain.from_iterable(self.property_hostgroup_map.values())
         )
-        managed_hostgroup_names.update(
-            itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values())
-        )
-        managed_hostgroup_names.update(
-            itertools.chain.from_iterable(self.templates_hostgroup_map.values())
-        )
+
+        # Add names of siteadmin hosts host groups if we're managing them
+        if self.config.manage_hosts_hostgroups:
+            managed_hostgroup_names.update(
+                itertools.chain.from_iterable(self.siteadmin_hosts_map.values())
+            )
+
+        # Add names of siteadmin templates host groups if we're managing them
+        if self.config.manage_templates_hostgroups:
+            managed_hostgroup_names.update(
+                itertools.chain.from_iterable(self.siteadmin_templates_map.values())
+            )
+
         zabbix_hostgroups = {}
         for zabbix_hostgroup in self.api.hostgroup.get(output=["name", "groupid"]):
             zabbix_hostgroups[zabbix_hostgroup["name"]] = zabbix_hostgroup["groupid"]
@@ -825,12 +839,16 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 if _property in self.property_hostgroup_map:
                     synced_hostgroup_names.update(self.property_hostgroup_map[_property])
             for siteadmin in db_host.siteadmins:
-                if siteadmin in self.siteadmin_hostgroup_map:
-                    synced_hostgroup_names.update(self.siteadmin_hostgroup_map[siteadmin])
-                if siteadmin in self.templates_hostgroup_map:
-                    synced_hostgroup_names.update(
-                        self.templates_hostgroup_map[siteadmin]
-                    )
+                if self.config.manage_hosts_hostgroups:
+                    if siteadmin in self.siteadmin_hosts_map:
+                        synced_hostgroup_names.update(
+                            self.siteadmin_hosts_map[siteadmin]
+                        )
+                if self.config.manage_templates_hostgroups:
+                    if siteadmin in self.siteadmin_templates_map:
+                        synced_hostgroup_names.update(
+                            self.siteadmin_templates_map[siteadmin]
+                        )
             for source in db_host.sources:
                 synced_hostgroup_names.add(f"{self.config.hostgroup_source_prefix}{source}")
             if db_host.importance is not None:
