@@ -33,3 +33,5 @@ services:
       - "POSTGRES_DB=zabbix"
       - "POSTGRES_PASSWORD=${ZABBIX_PASSWORD:?Need env: ZABBIX_PASSWORD}"
       - "POSTGRES_USER=zabbix"
+    ports:
+      - "10051:10051"
