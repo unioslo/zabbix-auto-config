@@ -788,6 +788,17 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             logging.debug("DRYRUN: Creating hostgroup: '%s'", hostgroup_name)
             return "-1"
 
+    def create_hostgroup_if_not_exists(self, hostgroup, hostgroups):
+        """Given a host group name and a list of host groups, checks if
+        the host group exists, and if it doesn't, creates it.
+        
+        Returns the host group ID.
+        """
+        zabbix_hostgroup_id = hostgroups.get(hostgroup, None)
+        if not zabbix_hostgroup_id:
+            zabbix_hostgroup_id = self.create_hostgroup(hostgroup)
+        return zabbix_hostgroup_id
+
     def do_update(self):
         managed_hostgroup_names = set(
             itertools.chain.from_iterable(self.property_hostgroup_map.values())
@@ -799,12 +810,6 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 itertools.chain.from_iterable(self.siteadmin_hosts_map.values())
             )
 
-        # Add names of siteadmin templates host groups if we're managing them
-        if self.config.manage_templates_hostgroups:
-            managed_hostgroup_names.update(
-                itertools.chain.from_iterable(self.siteadmin_templates_map.values())
-            )
-
         zabbix_hostgroups = {}
         for zabbix_hostgroup in self.api.hostgroup.get(output=["name", "groupid"]):
             zabbix_hostgroups[zabbix_hostgroup["name"]] = zabbix_hostgroup["groupid"]
@@ -813,6 +818,11 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             if zabbix_hostgroup["name"].startswith(self.config.hostgroup_importance_prefix):
                 managed_hostgroup_names.add(zabbix_hostgroup["name"])
         managed_hostgroup_names.update([self.config.hostgroup_all])
+
+        # Create templates hostgroups if they do not exist
+        if self.config.manage_templates_hostgroups:
+            for hostgroup_name in itertools.chain.from_iterable(self.siteadmin_templates_map.values()):
+                self.create_hostgroup_if_not_exists(hostgroup_name, zabbix_hostgroups)
 
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
@@ -844,11 +854,6 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                         synced_hostgroup_names.update(
                             self.siteadmin_hosts_map[siteadmin]
                         )
-                if self.config.manage_templates_hostgroups:
-                    if siteadmin in self.siteadmin_templates_map:
-                        synced_hostgroup_names.update(
-                            self.siteadmin_templates_map[siteadmin]
-                        )
             for source in db_host.sources:
                 synced_hostgroup_names.add(f"{self.config.hostgroup_source_prefix}{source}")
             if db_host.importance is not None:
@@ -870,10 +875,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             for hostgroup_name in synced_hostgroup_names:
                 if hostgroup_name not in host_hostgroups.keys():
                     logging.debug("Going to add hostgroup '%s' to host '%s'.", hostgroup_name, zabbix_hostname)
-                    zabbix_hostgroup_id = zabbix_hostgroups.get(hostgroup_name, None)
-                    if not zabbix_hostgroup_id:
-                        # The hostgroup doesn't exist. We need to create it.
-                        zabbix_hostgroup_id = self.create_hostgroup(hostgroup_name)
+                    zabbix_hostgroup_id = self.create_hostgroup_if_not_exists(hostgroup_name, zabbix_hostgroups)
                     host_hostgroups[hostgroup_name] = zabbix_hostgroup_id
 
             if host_hostgroups != old_host_hostgroups:
