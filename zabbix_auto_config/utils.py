@@ -1,8 +1,9 @@
+import copy
 import ipaddress
 import logging
 from pathlib import Path
 import re
-from typing import Dict, Iterable, List, Set, Tuple, Union
+from typing import Dict, Iterable, List, Mapping, Set, Tuple, Union
 
 
 def is_valid_regexp(pattern: str):
@@ -125,14 +126,14 @@ def with_prefix(
 
 
 def mapping_values_with_prefix(
-    m: Dict[str, Union[List[str], str]],
+    m: Mapping[str, Union[List[str], str]],
     prefix: str,
-    old_prefix: str = "",
+    old_prefix: str,
     lower: bool = False,
     strict: bool = True,
-) -> Dict[str, List[str]]:
+) -> Mapping[str, List[str]]:
     """Calls `with_prefix` on all items in the values (list) in the mapping `m`."""
-    m = m.copy()  # don't modify the original mapping
+    m = copy.copy(m) # don't modify the original mapping
     for key, value in m.items():
         if isinstance(value, str):
             value = [value]

@@ -14,6 +14,7 @@ from pydantic import (
     BaseModel,
     BaseSettings,
     conint,
+    root_validator,
     validator,
     Extra,
 )
@@ -42,21 +43,39 @@ class ZabbixSettings(BaseSettings):
     hostgroup_source_prefix: str = "Source-"
     hostgroup_importance_prefix: str = "Importance-"
 
-    # The prefix (if any) for the managed host groups in Zabbix
-    # This group is used to store the hosts that are managed by ZAC
-    hostgroup_siteadmin_prefix: str = "Hostgroup-"
+    # Override for prefix in mapping file
+    hostgroup_siteadmin_prefix: str = ""
 
     # The prefix (if any) for groups in the mapping file
-    # This is required to be able to control the prefix of the groups
-    # when creating them in Zabbix. Must match with the prefix in the
-    # mapping file.
-    mapping_file_prefix: str = "Hostgroup-"
+    mapping_file_prefix: str = ""
+
+    # Asserts that mapping_file_prefix is not empty and that mapping file
+    # entries start with that prefix.
+    strict_prefix_check: bool = False
 
     # Prefixes for extra host groups to create
-    # These groups are not used by ZAC, but ZAC has the ability to
-    # create them based on the mapping file
+    # Not managed by ZAC beyond their creation.
     extra_siteadmin_hostgroup_prefixes: Set[str] = set()
 
+    @root_validator
+    def check_mapping_file_prefix(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        if any(
+            values.get(k)
+            for k in [
+                "extra_siteadmin_hostgroup_prefixes",
+                "hostgroup_siteadmin_prefix",
+            ]
+        ):
+            if not values.get("mapping_file_prefix"):
+                if values.get("strict_prefix_check"):
+                    raise ValueError(
+                        "'mapping_file_prefix' can not be empty in strict prefix mode."
+                    )
+                else:
+                    logging.warning(
+                        "No mapping file prefix is specified. Ensure mapping file hostgroups have no prefix."
+                    )
+        return values
 
 class ZacSettings(BaseSettings):
     source_collector_dir: str

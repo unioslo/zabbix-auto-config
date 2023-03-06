@@ -381,7 +381,7 @@ class ZabbixUpdater(BaseProcess):
             self.siteadmin_hosts_map_raw,
             prefix=self.config.hostgroup_siteadmin_prefix,
             old_prefix=self.config.mapping_file_prefix,
-            strict=True,
+            strict=self.config.strict_prefix_check,
         )
 
     def work(self):
@@ -797,6 +797,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 self.siteadmin_hosts_map_raw,
                 prefix=prefix,
                 old_prefix=self.config.mapping_file_prefix,
+                strict=self.config.strict_prefix_check,
             )
             for hostgroups in mapping.values():
                 for hostgroup in hostgroups:
