@@ -43,8 +43,12 @@ class ZabbixSettings(BaseSettings):
     hostgroup_source_prefix: str = "Source-"
     hostgroup_importance_prefix: str = "Importance-"
 
-    # Prefixes for extra host groups to create
-    # Not managed by ZAC beyond their creation.
+    # Prefixes for extra host groups to create based on the host groups
+    # in the siteadmin mapping. 
+    # e.g. Siteadmin-foo -> Templates-foo if list is ["Templates-"]
+    # The groups must have prefixes separated by a hyphen (-) in order 
+    # to replace them with any of these prefixes.
+    # These groups are not managed by ZAC beyond creating them.
     extra_siteadmin_hostgroup_prefixes: Set[str] = set()
 
     # Ensures extra host group prefixes are not empty
