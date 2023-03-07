@@ -91,7 +91,6 @@ def with_prefix(
     text: str,
     prefix: str,
     separator: str = "-",
-    strict: bool = True,
 ) -> str:
     """Replaces the prefix of `text` with `prefix`. Assumes the separator
     between the prefix and the text is `separator` (default: "-").
@@ -104,25 +103,22 @@ def with_prefix(
         The prefix to add to `text`.
     separator: str
         The separator between the prefix and the text.
-    strict: bool
-        Raise exception if old prefix is not found.
 
     Returns
     -------
     str
         The formatted string.
     """
-    if not prefix:
-        raise ValueError("Prefix is empty")
-
-    if not text or not separator:
-        return text
+    if not all(s for s in (text, prefix, separator)):
+        raise ValueError("Text, prefix, and separator cannot be empty")
 
     _, _, postfix = text.partition(separator)
 
     # Unable to split text, nothing to do
-    if strict and not postfix:
-        raise ValueError(f"Could not find prefix in '{text}'")
+    if not postfix:
+        raise ValueError(
+            f"Could not find prefix in {text!r} with separator {separator!r}"
+        )
 
     if prefix.endswith(separator) or postfix.startswith(separator):
         sep = ""
@@ -132,24 +128,22 @@ def with_prefix(
 
 
 def mapping_values_with_prefix(
-    m: MutableMapping[str, Union[List[str], str]],
+    m: MutableMapping[str, List[str]],
     prefix: str,
     separator: str = "-",
-    strict: bool = True,
 ) -> MutableMapping[str, List[str]]:
     """Calls `with_prefix` on all items in the values (list) in the mapping `m`."""
     m = copy.copy(m) # don't modify the original mapping
     for key, value in m.items():
-        if isinstance(value, str):
-            value = [value]
         new_values = []
         for v in value:
-            new_value = with_prefix(
-                text=v,
-                prefix=prefix,
-                separator=separator,
-                strict=strict,
-            )
+            try:
+                new_value = with_prefix(text=v, prefix=prefix, separator=separator)
+            except ValueError:
+                logging.warning(
+                    f"Unable to replace prefix in '%s' with '%s'", v, prefix
+                )
+                continue
             new_values.append(new_value)
         m[key] = new_values
-    return m  # type: ignore # mypy doesn't understand all values are lists now
+    return m

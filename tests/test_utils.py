@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Set, Tuple, Union
 
 import pytest
+from pytest import LogCaptureFixture
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
@@ -174,7 +175,6 @@ def test_mapping_values_with_prefix(hostgroup_map_file: Path, prefix: str):
     new_map = utils.mapping_values_with_prefix(
         m,
         prefix=prefix,
-        strict=False,
     )
 
     # Compare new dict to old dict
@@ -199,26 +199,22 @@ def test_mapping_values_with_prefix(hostgroup_map_file: Path, prefix: str):
     assert m["user3@example.com"] == [f"{old_prefix}user3-primary"]
 
 
-def test_mapping_values_with_prefix_no_prefix() -> None:
-    """Passing an empty string as the prefix should raise an exception."""
-    with pytest.raises(ValueError) as exc_info:
-        utils.mapping_values_with_prefix(
-            {"user1@example.com": ["Hostgroup-user1-primary"]},
-            prefix="",
-            strict=True,
-        )
-    exc_msg = exc_info.exconly()
-    assert "empty" in exc_msg
+def test_mapping_values_with_prefix_no_prefix_arg(caplog: LogCaptureFixture) -> None:
+    """Passing an empty string as the prefix should be ignored and logged."""
+    res = utils.mapping_values_with_prefix(
+        {"user1@example.com": ["Hostgroup-user1-primary"]},
+        prefix="",
+    )
+    assert res == {"user1@example.com": []}
+    assert caplog.text.count("WARNING") == 1
 
 
-def test_mapping_values_with_prefix_strict() -> None:
+def test_mapping_values_with_prefix_no_group_prefix(caplog: LogCaptureFixture) -> None:
     """Passing a group name with no prefix separated by the separator
-    should raise an exception."""
-    with pytest.raises(ValueError) as exc_info:
-        utils.mapping_values_with_prefix(
-            {"bob@admin.com": ["Mygroup"]},
-            prefix="Foo-",
-            strict=True,
-        )
-    exc_msg = exc_info.exconly()
-    assert "prefix" in exc_msg
+    should be ignored and logged."""
+    res = utils.mapping_values_with_prefix(
+        {"user1@example.com": ["Mygroup"]},
+        prefix="Foo-",
+    )
+    assert res == {"user1@example.com": []}
+    assert caplog.text.count("WARNING") == 1

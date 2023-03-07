@@ -785,7 +785,6 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             mapping = utils.mapping_values_with_prefix(
                 self.siteadmin_hostgroup_map,  # this is copied in the function
                 prefix=prefix,
-                strict=self.config.strict_prefix_check,
             )
             for hostgroups in mapping.values():
                 for hostgroup in hostgroups:

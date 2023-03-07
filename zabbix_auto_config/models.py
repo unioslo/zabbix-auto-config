@@ -51,9 +51,6 @@ class ZabbixSettings(BaseSettings):
     # These groups are not managed by ZAC beyond creating them.
     extra_siteadmin_hostgroup_prefixes: Set[str] = set()
 
-    # Ensures extra host group prefixes are not empty
-    strict_prefix_check: bool = False
-
 class ZacSettings(BaseSettings):
     source_collector_dir: str
     host_modifier_dir: str

@@ -21,7 +21,6 @@ managed_inventory = ["location"]
 #hostgroup_source_prefix = "Source-"
 #hostgroup_importance_prefix = "Importance-"
 #extra_siteadmin_hostgroup_prefixes = []
-#strict_prefix_check = false
 
 [source_collectors.mysource]
 module_name = "mysource"
