@@ -3,7 +3,7 @@ import ipaddress
 import logging
 from pathlib import Path
 import re
-from typing import Dict, Iterable, List, Mapping, Set, Tuple, Union
+from typing import Dict, Iterable, List, Mapping, MutableMapping, Set, Tuple, Union
 
 
 def is_valid_regexp(pattern: str):
@@ -90,11 +90,11 @@ def read_map_file(path: Union[str, Path]) -> Dict[str, List[str]]:
 def with_prefix(
     text: str,
     prefix: str,
-    old_prefix: str = "",
-    lower: bool = False,
+    separator: str = "-",
     strict: bool = True,
 ) -> str:
-    """Ensures `text` starts with `prefix`.
+    """Replaces the prefix of `text` with `prefix`. Assumes the separator
+    between the prefix and the text is `separator` (default: "-").
 
     Parameters
     ----
@@ -102,8 +102,8 @@ def with_prefix(
         The text to format.
     prefix: str
         The prefix to add to `text`.
-    old_prefix: str
-        If given, `old_prefix` will be replaced with `prefix`.
+    separator: str
+        The separator between the prefix and the text.
     strict: bool
         Raise exception if old prefix is not found.
 
@@ -112,26 +112,31 @@ def with_prefix(
     str
         The formatted string.
     """
-    if old_prefix:
-        if text.startswith(old_prefix):
-            text = text[len(old_prefix) :]
-        else:
-            if strict:
-                raise ValueError(f"{text!r} missing prefix {old_prefix!r}")
-    if not text.startswith(prefix):
-        if lower:
-            text = text.lower()
-        return f"{prefix}{text}"
-    return text
+    if not prefix:
+        raise ValueError("Prefix is empty")
+
+    if not text or not separator:
+        return text
+
+    _, _, postfix = text.partition(separator)
+
+    # Unable to split text, nothing to do
+    if strict and not postfix:
+        raise ValueError(f"Could not find prefix in '{text}'")
+
+    if prefix.endswith(separator) or postfix.startswith(separator):
+        sep = ""
+    else:
+        sep = separator
+    return f"{prefix}{sep}{postfix}"
 
 
 def mapping_values_with_prefix(
-    m: Mapping[str, Union[List[str], str]],
+    m: MutableMapping[str, Union[List[str], str]],
     prefix: str,
-    old_prefix: str,
-    lower: bool = False,
+    separator: str = "-",
     strict: bool = True,
-) -> Mapping[str, List[str]]:
+) -> MutableMapping[str, List[str]]:
     """Calls `with_prefix` on all items in the values (list) in the mapping `m`."""
     m = copy.copy(m) # don't modify the original mapping
     for key, value in m.items():
@@ -142,10 +147,9 @@ def mapping_values_with_prefix(
             new_value = with_prefix(
                 text=v,
                 prefix=prefix,
-                old_prefix=old_prefix,
-                lower=lower,
+                separator=separator,
                 strict=strict,
             )
             new_values.append(new_value)
         m[key] = new_values
-    return m
+    return m  # type: ignore # mypy doesn't understand all values are lists now

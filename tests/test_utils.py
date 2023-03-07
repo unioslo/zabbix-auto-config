@@ -162,7 +162,7 @@ def test_zac_tags2zabbix_tags(
 # Test with the two prefixes we use + no prefix
 @pytest.mark.parametrize(
     "prefix",
-    ["Templates-", "Siteadmin-", ""],
+    ["Templates-", "Siteadmin-"],
 )
 def test_mapping_values_with_prefix(hostgroup_map_file: Path, prefix: str):
     m = utils.read_map_file(hostgroup_map_file)
@@ -174,8 +174,7 @@ def test_mapping_values_with_prefix(hostgroup_map_file: Path, prefix: str):
     new_map = utils.mapping_values_with_prefix(
         m,
         prefix=prefix,
-        old_prefix=old_prefix,
-        lower=False,
+        strict=False,
     )
 
     # Compare new dict to old dict
@@ -200,17 +199,26 @@ def test_mapping_values_with_prefix(hostgroup_map_file: Path, prefix: str):
     assert m["user3@example.com"] == [f"{old_prefix}user3-primary"]
 
 
-def test_mapping_values_with_prefix_strict(hostgroup_map_file: Path) -> None:
-    """Passing the wrong prefix in strict mode should raise an error."""
-    m = utils.read_map_file(hostgroup_map_file)
-
+def test_mapping_values_with_prefix_no_prefix() -> None:
+    """Passing an empty string as the prefix should raise an exception."""
     with pytest.raises(ValueError) as exc_info:
         utils.mapping_values_with_prefix(
-            m,
-            prefix="Foo-",
-            old_prefix="Bar-",
-            lower=False,
+            {"user1@example.com": ["Hostgroup-user1-primary"]},
+            prefix="",
             strict=True,
         )
-        exc_msg = exc_info.exconly()
-        assert "missing prefix" in exc_msg
+    exc_msg = exc_info.exconly()
+    assert "empty" in exc_msg
+
+
+def test_mapping_values_with_prefix_strict() -> None:
+    """Passing a group name with no prefix separated by the separator
+    should raise an exception."""
+    with pytest.raises(ValueError) as exc_info:
+        utils.mapping_values_with_prefix(
+            {"bob@admin.com": ["Mygroup"]},
+            prefix="Foo-",
+            strict=True,
+        )
+    exc_msg = exc_info.exconly()
+    assert "prefix" in exc_msg

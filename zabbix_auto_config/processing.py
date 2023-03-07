@@ -369,19 +369,8 @@ class ZabbixUpdater(BaseProcess):
         self.property_hostgroup_map = utils.read_map_file(
             os.path.join(self.config.map_dir, "property_hostgroup_map.txt")
         )
-
-        # Read mapping file
-        # This is the unmodified contents of the map file
-        self.siteadmin_hosts_map_raw = utils.read_map_file(
+        self.siteadmin_hostgroup_map = utils.read_map_file(
             os.path.join(self.config.map_dir, "siteadmin_hostgroup_map.txt")
-        )
-
-        # Mapping used to map hostgroups to hosts
-        self.siteadmin_hostgroup_map = utils.mapping_values_with_prefix(
-            self.siteadmin_hosts_map_raw,
-            prefix=self.config.hostgroup_siteadmin_prefix,
-            old_prefix=self.config.mapping_file_prefix,
-            strict=self.config.strict_prefix_check,
         )
 
     def work(self):
@@ -794,9 +783,8 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
         for prefix in self.config.extra_siteadmin_hostgroup_prefixes:
             mapping = utils.mapping_values_with_prefix(
-                self.siteadmin_hosts_map_raw,
+                self.siteadmin_hostgroup_map,  # this is copied in the function
                 prefix=prefix,
-                old_prefix=self.config.mapping_file_prefix,
                 strict=self.config.strict_prefix_check,
             )
             for hostgroups in mapping.values():
