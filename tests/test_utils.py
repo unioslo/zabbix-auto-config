@@ -218,3 +218,15 @@ def test_mapping_values_with_prefix_no_group_prefix(caplog: LogCaptureFixture) -
     )
     assert res == {"user1@example.com": []}
     assert caplog.text.count("WARNING") == 1
+
+
+def test_mapping_values_with_prefix_no_prefix_separator(
+    caplog: LogCaptureFixture,
+) -> None:
+    """Passing a prefix with no separator emits a warning (but is otherwise legal)."""
+    res = utils.mapping_values_with_prefix(
+        {"user1@example.com": ["Hostgroup-user1-primary", "Hostgroup-user1-secondary"]},
+        prefix="Foo",
+    )
+    assert res == {"user1@example.com": ["Foouser1-primary", "Foouser1-secondary"]}
+    assert caplog.text.count("WARNING") == 2

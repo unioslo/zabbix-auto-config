@@ -120,12 +120,15 @@ def with_prefix(
             f"Could not find prefix in {text!r} with separator {separator!r}"
         )
 
-    if prefix.endswith(separator) or postfix.startswith(separator):
-        sep = ""
-    else:
-        sep = separator
-    return f"{prefix}{sep}{postfix}"
-
+    groupname = f"{prefix}{postfix}"
+    if not prefix.endswith(separator) and not postfix.startswith(separator):
+        logging.warning(
+            "Prefix '%s' for group name '%s' does not contain separator '%s'",
+            prefix,
+            groupname,
+            separator,
+        )
+    return groupname
 
 def mapping_values_with_prefix(
     m: MutableMapping[str, List[str]],
