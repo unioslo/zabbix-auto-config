@@ -112,16 +112,16 @@ def with_prefix(
     if not all(s for s in (text, prefix, separator)):
         raise ValueError("Text, prefix, and separator cannot be empty")
 
-    _, _, postfix = text.partition(separator)
+    _, _, suffix = text.partition(separator)
 
     # Unable to split text, nothing to do
-    if not postfix:
+    if not suffix:
         raise ValueError(
             f"Could not find prefix in {text!r} with separator {separator!r}"
         )
 
-    groupname = f"{prefix}{postfix}"
-    if not prefix.endswith(separator) and not postfix.startswith(separator):
+    groupname = f"{prefix}{suffix}"
+    if not prefix.endswith(separator) and not suffix.startswith(separator):
         logging.warning(
             "Prefix '%s' for group name '%s' does not contain separator '%s'",
             prefix,
