@@ -1,11 +1,14 @@
-from ipaddress import IPv4Address, IPv6Address
 import logging
+from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Union
 
 import pytest
+from pytest import LogCaptureFixture
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
+
 from zabbix_auto_config import utils
-from hypothesis import given, settings, strategies as st, HealthCheck, assume
 
 
 @pytest.mark.parametrize(
@@ -155,3 +158,75 @@ def test_zac_tags2zabbix_tags(
     zabbix_tags = utils.zac_tags2zabbix_tags(tags)
     for tag in expected:
         assert tag in zabbix_tags
+
+
+# Test with the two prefixes we use + no prefix
+@pytest.mark.parametrize(
+    "prefix",
+    ["Templates-", "Siteadmin-"],
+)
+def test_mapping_values_with_prefix(hostgroup_map_file: Path, prefix: str):
+    m = utils.read_map_file(hostgroup_map_file)
+
+    # Make sure we read the map file correctly
+    assert len(m) == 3
+
+    old_prefix = "Hostgroup-"
+    new_map = utils.mapping_values_with_prefix(
+        m,
+        prefix=prefix,
+    )
+
+    # Compare new dict to old dict
+    assert new_map is not m  # we should get a new dict
+    assert len(new_map) == len(m)
+    assert sum(len(v) for v in new_map.values()) == sum(len(v) for v in m.values())
+
+    # Check values in new map
+    assert new_map["user1@example.com"] == [f"{prefix}user1-primary"]
+    assert new_map["user2@example.com"] == [
+        f"{prefix}user2-primary",
+        f"{prefix}user2-secondary",
+    ]
+    assert new_map["user3@example.com"] == [f"{prefix}user3-primary"]
+
+    # Check values in old map (they should be untouched)
+    assert m["user1@example.com"] == [f"{old_prefix}user1-primary"]
+    assert m["user2@example.com"] == [
+        f"{old_prefix}user2-primary",
+        f"{old_prefix}user2-secondary",
+    ]
+    assert m["user3@example.com"] == [f"{old_prefix}user3-primary"]
+
+
+def test_mapping_values_with_prefix_no_prefix_arg(caplog: LogCaptureFixture) -> None:
+    """Passing an empty string as the prefix should be ignored and logged."""
+    res = utils.mapping_values_with_prefix(
+        {"user1@example.com": ["Hostgroup-user1-primary"]},
+        prefix="",
+    )
+    assert res == {"user1@example.com": []}
+    assert caplog.text.count("WARNING") == 1
+
+
+def test_mapping_values_with_prefix_no_group_prefix(caplog: LogCaptureFixture) -> None:
+    """Passing a group name with no prefix separated by the separator
+    should be ignored and logged."""
+    res = utils.mapping_values_with_prefix(
+        {"user1@example.com": ["Mygroup"]},
+        prefix="Foo-",
+    )
+    assert res == {"user1@example.com": []}
+    assert caplog.text.count("WARNING") == 1
+
+
+def test_mapping_values_with_prefix_no_prefix_separator(
+    caplog: LogCaptureFixture,
+) -> None:
+    """Passing a prefix with no separator emits a warning (but is otherwise legal)."""
+    res = utils.mapping_values_with_prefix(
+        {"user1@example.com": ["Hostgroup-user1-primary", "Hostgroup-user1-secondary"]},
+        prefix="Foo",
+    )
+    assert res == {"user1@example.com": ["Foouser1-primary", "Foouser1-secondary"]}
+    assert caplog.text.count("WARNING") == 2

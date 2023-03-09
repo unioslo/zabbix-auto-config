@@ -1,8 +1,9 @@
+import copy
 import ipaddress
 import logging
 from pathlib import Path
 import re
-from typing import Dict, Iterable, List, Sequence, Set, Tuple, Union
+from typing import Dict, Iterable, List, Mapping, MutableMapping, Set, Tuple, Union
 
 
 def is_valid_regexp(pattern: str):
@@ -84,3 +85,68 @@ def read_map_file(path: Union[str, Path]) -> Dict[str, List[str]]:
             )
         _map[key] = values_dedup
     return _map
+
+
+def with_prefix(
+    text: str,
+    prefix: str,
+    separator: str = "-",
+) -> str:
+    """Replaces the prefix of `text` with `prefix`. Assumes the separator
+    between the prefix and the text is `separator` (default: "-").
+
+    Parameters
+    ----
+    text: str
+        The text to format.
+    prefix: str
+        The prefix to add to `text`.
+    separator: str
+        The separator between the prefix and the text.
+
+    Returns
+    -------
+    str
+        The formatted string.
+    """
+    if not all(s for s in (text, prefix, separator)):
+        raise ValueError("Text, prefix, and separator cannot be empty")
+
+    _, _, suffix = text.partition(separator)
+
+    # Unable to split text, nothing to do
+    if not suffix:
+        raise ValueError(
+            f"Could not find prefix in {text!r} with separator {separator!r}"
+        )
+
+    groupname = f"{prefix}{suffix}"
+    if not prefix.endswith(separator) and not suffix.startswith(separator):
+        logging.warning(
+            "Prefix '%s' for group name '%s' does not contain separator '%s'",
+            prefix,
+            groupname,
+            separator,
+        )
+    return groupname
+
+def mapping_values_with_prefix(
+    m: MutableMapping[str, List[str]],
+    prefix: str,
+    separator: str = "-",
+) -> MutableMapping[str, List[str]]:
+    """Calls `with_prefix` on all items in the values (list) in the mapping `m`."""
+    m = copy.copy(m) # don't modify the original mapping
+    for key, value in m.items():
+        new_values = []
+        for v in value:
+            try:
+                new_value = with_prefix(text=v, prefix=prefix, separator=separator)
+            except ValueError:
+                logging.warning(
+                    f"Unable to replace prefix in '%s' with '%s'", v, prefix
+                )
+                continue
+            new_values.append(new_value)
+        m[key] = new_values
+    return m
