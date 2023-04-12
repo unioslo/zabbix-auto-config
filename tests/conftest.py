@@ -40,7 +40,7 @@ def full_hosts():
             "inventory": None,
             "macros": None,
             "properties": {"prop1", "prop2"},
-            "proxy_pattern": "^zbx-proxy\d+\.example\.com$",
+            "proxy_pattern": r"^zbx-proxy\d+\.example\.com$",
             "siteadmins": {"bob@example.com", "alice@example.com"},
             "sources": {"source1", "source2"},
             "tags": [["tag1", "x"], ["tag2", "y"]],
