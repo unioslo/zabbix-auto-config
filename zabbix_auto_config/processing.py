@@ -88,7 +88,7 @@ class SignalHandler():
 class SourceCollectorProcess(BaseProcess):
     def __init__(
         self,
-        name,
+        name: str,
         state,
         module: SourceCollectorModule,
         config: Dict[str, Any],
