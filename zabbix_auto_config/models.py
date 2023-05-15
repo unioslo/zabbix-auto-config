@@ -12,7 +12,7 @@ from typing import (
 
 from pydantic import (
     BaseModel,
-    BaseSettings,
+    BaseSettings as PydanticBaseSettings,
     conint,
     root_validator,
     validator,
@@ -23,6 +23,26 @@ from pydantic.fields import ModelField
 from . import utils
 
 # TODO: Models aren't validated when making changes to a set/list. Why? How to handle?
+
+
+class BaseSettings(PydanticBaseSettings, extra=Extra.ignore):
+    # https://pydantic-docs.helpmanual.io/usage/model_config/#change-behaviour-globally
+
+    @root_validator(pre=True)
+    def _check_unknown_fields(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        """Checks for unknown fields and logs a warning if any are found.
+        Does not log warnings if extra is set to `Extra.allow`.
+        """
+        if cls.__config__.extra == Extra.allow:
+            return values
+        for key in values:
+            if key not in cls.__fields__:
+                logging.warning(
+                    "%s: Got unknown config field '%s'.",
+                    getattr(cls, "__name__", str(cls)),
+                    key,
+                )
+        return values
 
 
 class ZabbixSettings(BaseSettings):
