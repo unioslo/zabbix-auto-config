@@ -9,8 +9,7 @@ from .models import Host
 
 @runtime_checkable
 class SourceCollectorModule(Protocol):
-    """Module that collects hosts from a source and returns them as a
-    list of zabbix_auto_config.models.Host objects."""
+    """Module that collects hosts from a source."""
 
     def collect(self, *args: Any, **kwargs: Any) -> List[Host]:
         """Collect hosts from the given source. Returns a list of Host objects"""
@@ -19,7 +18,7 @@ class SourceCollectorModule(Protocol):
 
 @runtime_checkable
 class HostModifierModule(Protocol):
-    """Module that modifies a Host object. Returns the modified Host object."""
+    """Module that modifies a Host object."""
 
     def modify(self, host: Host) -> Host:
         """Takes a Host object and returns a modified Host object."""
