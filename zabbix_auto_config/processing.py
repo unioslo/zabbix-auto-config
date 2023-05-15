@@ -243,11 +243,9 @@ class SourceMergerProcess(BaseProcess):
         for module_name in module_names:
             module = importlib.import_module(module_name)
 
-            try:
-                assert isinstance(module, HostModifierModule)
-            except (AttributeError, AssertionError):
+            if not isinstance(module, HostModifierModule):
                 logging.warning(
-                    "Host modifier module '%s' is not a valid host modifier module. Skipping.",
+                    "Module '%s' is not a valid host modifier module. Skipping.",
                     module_name,
                 )
                 continue
