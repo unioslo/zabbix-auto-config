@@ -53,7 +53,8 @@ cp config.sample.toml config.toml
 sed -i 's/^dryrun = true$/dryrun = false/g' config.toml
 mkdir -p path/to/source_collector_dir/ path/to/host_modifier_dir/ path/to/map_dir/
 cat > path/to/source_collector_dir/mysource.py << EOF
-import zabbix_auto_config.models
+from typing import Any, List
+from zabbix_auto_config.models import Host
 
 HOSTS = [
     {
@@ -64,7 +65,8 @@ HOSTS = [
     },
 ]
 
-def collect(*args, **kwargs):
+
+def collect(*args: Any, **kwargs: Any) -> List[Host]:
     hosts = []
     for host in HOSTS:
         host["enabled"] = True
@@ -73,16 +75,19 @@ def collect(*args, **kwargs):
         source = kwargs.get("source")
         if source:
             host["properties"].append(source)
-        hosts.append(zabbix_auto_config.models.Host(**host))
+        hosts.append(Host(**host))
 
     return hosts
+
 
 if __name__ == "__main__":
     for host in collect():
         print(host.json())
 EOF
 cat > path/to/host_modifier_dir/mod.py << EOF
-def modify(host):
+from zabbix_auto_config.models import Host
+
+def modify(host: Host) -> Host:
     if host.hostname == "bar.example.com":
         host.properties.add("barry")
     return host
