@@ -31,7 +31,7 @@ For automatic linking in templates you could create the templates:
 ## Database
 
 ```bash
-PGPASSWORD=secret psql -h localhost -U postgres -p 5432 -U zabbix << EOF
+PGPASSWORD=secret psql -h localhost -U postgres -p 5433 -U zabbix << EOF
 CREATE DATABASE zac;
 \c zac
 CREATE TABLE hosts (
@@ -130,6 +130,52 @@ TimeoutSec=300
 [Install]
 WantedBy=multi-user.target
 ```
+
+## Source collectors
+
+As shown in the [Database](#database) section, source collectors are Python modules (files) that are placed in a directory defined by the option `source_collector_dir` in the `[zac]` table of the config file. Zabbix-auto-config will load all source collectors in the given directory. 
+
+A source collector is a module that contains a function named `collect` that returns a list of `Host` objects. Zabbix-auto-config uses these host objects to create/update hosts in Zabbix.
+
+A module that collects hosts from a file could look like this:
+
+```python
+# path/to/source_collector_dir/load_from_json.py
+
+from typing import Any, Dict, List
+from zabbix_auto_config.models import Host
+
+HOSTS_FILE = "hosts.json" 
+
+def collect(*args: Any, **kwargs: Any) -> List[Host]:
+    with open(HOSTS_FILE, "r") as f:
+        return [Host(**host) for host in f.read()]
+```
+
+Any module that contains a function named `collect` which takes a an arbitrary number of arguments and keyword arguments and returns a list of `Host` objects is recognized as a source collector module. Type annotations are optional, but recommended.
+
+
+## Host modifiers
+
+Host modifiers are Python modules (files) that are placed in a directory defined by the option `host_modifier_dir` in the `[zac]` table of the config file. A host modifier is a module that contains a function named `modify` that takes a `Host` object as input, modifies it, and returns it.  
+
+A host modifier module that adds a given siteadmin to all hosts could look like this:
+
+```py
+# path/to/host_modifier_dir/add_siteadmin.py
+
+from zabbix_auto_config.models import Host
+
+SITEADMIN = "admin@example.com"
+
+def modify(host: Host) -> Host:
+    host.siteadmins.add(SITEADMIN)
+    return host
+```
+
+See the [`Host`](https://github.com/unioslo/zabbix-auto-config/blob/2b45f1cb7da0d46b8b218005ebbf751cb17f8793/zabbix_auto_config/models.py#L111-L123) class in `zabbix_auto_config/models.py` for the available fields that can be accessed and modified.
+
+Any module that contains a function named `modify` which takes a `Host` and returns a `Host` is recognized as a host modifier module. Type annotations are optional, but recommended.
 
 ## Host inventory
 
