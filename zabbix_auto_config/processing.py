@@ -309,7 +309,6 @@ class SourceMergerProcess(BaseProcess):
             for host_modifier in self.host_modifiers:
                 try:
                     modified_host = host_modifier["module"].modify(host.copy(deep=True))
-                    assert isinstance(modified_host, models.Host)
                     assert hostname == modified_host.hostname, f"Modifier changed the hostname, '{hostname}' -> '{modified_host.hostname}'"
                     host = modified_host
                 except AssertionError as e:
