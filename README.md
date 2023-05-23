@@ -145,11 +145,11 @@ A module that collects hosts from a file could look like this:
 from typing import Any, Dict, List
 from zabbix_auto_config.models import Host
 
-HOSTS_FILE = "hosts.json" 
+DEFAULT_FILE = "hosts.json" 
 
 def collect(*args: Any, **kwargs: Any) -> List[Host]:
-    filename = kwargs.get("filename", HOSTS_FILE)
-    with open(HOSTS_FILE, "r") as f:
+    filename = kwargs.get("filename", DEFAULT_FILE)
+    with open(filename, "r") as f:
         return [Host(**host) for host in f.read()]
 ```
 
