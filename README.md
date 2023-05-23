@@ -31,7 +31,7 @@ For automatic linking in templates you could create the templates:
 ## Database
 
 ```bash
-PGPASSWORD=secret psql -h localhost -U postgres -p 5433 -U zabbix << EOF
+PGPASSWORD=secret psql -h localhost -U postgres -p 5432 -U zabbix << EOF
 CREATE DATABASE zac;
 \c zac
 CREATE TABLE hosts (
