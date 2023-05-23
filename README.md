@@ -133,7 +133,7 @@ WantedBy=multi-user.target
 
 ## Source collectors
 
-As shown in the [Database](#database) section, source collectors are Python modules (files) that are placed in a directory defined by the option `source_collector_dir` in the `[zac]` table of the config file. Zabbix-auto-config will load all source collectors in the given directory. 
+As outlined in the [Application](#application) section, source collectors are Python modules (files) that are placed in a directory defined by the option `source_collector_dir` in the `[zac]` table of the config file. Zabbix-auto-config will attempt to load all modules in the directory that are referenced in the configuration file by name. Modules that are referenced in the config but not found in the directory will be ignored.
 
 A source collector is a module that contains a function named `collect` that returns a list of `Host` objects. Zabbix-auto-config uses these host objects to create/update hosts in Zabbix.
 
@@ -148,16 +148,27 @@ from zabbix_auto_config.models import Host
 HOSTS_FILE = "hosts.json" 
 
 def collect(*args: Any, **kwargs: Any) -> List[Host]:
+    filename = kwargs.get("filename", HOSTS_FILE)
     with open(HOSTS_FILE, "r") as f:
         return [Host(**host) for host in f.read()]
 ```
 
 Any module that contains a function named `collect` which takes a an arbitrary number of arguments and keyword arguments and returns a list of `Host` objects is recognized as a source collector module. Type annotations are optional, but recommended.
 
+The corresponding config entry to load the `load_from_json.py` module above could look like this:
+
+```toml
+[source_collectors.load_from_json]
+module_name = "load_from_json"
+update_interval = 60
+filename = "hosts.json"
+```
+
+The `module_name` and `update_interval` options are required for all source collector modules. Any other options are passed as keyword arguments to the `collect` function.
 
 ## Host modifiers
 
-Host modifiers are Python modules (files) that are placed in a directory defined by the option `host_modifier_dir` in the `[zac]` table of the config file. A host modifier is a module that contains a function named `modify` that takes a `Host` object as input, modifies it, and returns it. 
+Host modifiers are Python modules (files) that are placed in a directory defined by the option `host_modifier_dir` in the `[zac]` table of the config file. A host modifier is a module that contains a function named `modify` that takes a `Host` object as input, modifies it, and returns it. Zabbix-auto-config will attempt to load all modules in the given directory.
 
 A host modifier module that adds a given siteadmin to all hosts could look like this:
 
