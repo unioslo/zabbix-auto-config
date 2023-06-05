@@ -168,7 +168,7 @@ The `module_name` and `update_interval` options are required for all source coll
 
 ## Host modifiers
 
-Host modifiers are Python modules (files) that are placed in a directory defined by the option `host_modifier_dir` in the `[zac]` table of the config file. A host modifier is a module that contains a function named `modify` that takes a `Host` object as input, modifies it, and returns it. Zabbix-auto-config will attempt to load all modules in the given directory.
+Host modifiers are Python modules (files) that are placed in a directory defined by the option `host_modifier_dir` in the `[zac]` table of the config file. A host modifier is a module that contains a function named `modify` that takes a `Host` object as its only argument, modifies it, and returns it. Zabbix-auto-config will attempt to load all modules in the given directory.
 
 A host modifier module that adds a given siteadmin to all hosts could look like this:
 
