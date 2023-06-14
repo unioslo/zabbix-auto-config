@@ -113,3 +113,5 @@ def test_host_merge_invalid(full_hosts):
     h1 = models.Host(**host)
     with pytest.raises(TypeError):
         h1.merge(object())
+
+

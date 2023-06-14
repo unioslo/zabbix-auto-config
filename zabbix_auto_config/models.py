@@ -13,6 +13,7 @@ from typing import (
 from pydantic import (
     BaseModel,
     BaseSettings as PydanticBaseSettings,
+    Field,
     conint,
     root_validator,
     validator,
@@ -82,6 +83,38 @@ class ZacSettings(BaseSettings):
 class SourceCollectorSettings(BaseSettings, extra=Extra.allow):
     module_name: str
     update_interval: int
+    error_tolerance: int = Field(
+        5,
+        description="Number of errors to allow within the last `error_interval` seconds before disabling the collector.",
+        ge=0,
+    )
+    error_interval: int = Field(
+        360,  # 6 minutes
+        description=(
+            "The window in seconds in which `error_tolerance` errors are allowed."
+            "If `error_tolerance` errors occur in this interval, the collector is disabled."
+        ),
+        ge=0,
+    )
+    exit_on_error: bool = Field(
+        False,
+        description="Exit ZAC if the collector failure tolerance is exceeded. Collector is disabled otherwise.",
+    )
+    disable_duration: int = Field(
+        3600,
+        description="""Duration to disable the collector for if the error tolerance is exceeded. 0 to disable indefinitely.""",
+        ge=0,
+    )
+
+    @validator("error_interval")
+    def _validate_error_interval_is_greater(cls, v: int, values: Dict[str, Any]) -> int:
+        # We use the mathematical term "product" here. Is that clear?
+        product = values["update_interval"] * values["error_tolerance"]
+        if v < product:
+            raise ValueError(
+                f"error_interval must be greater than or equal to the product of update_interval and error_tolerance ({product})"
+            )
+        return v
 
 
 class Settings(BaseSettings):

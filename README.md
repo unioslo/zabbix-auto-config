@@ -53,7 +53,8 @@ cp config.sample.toml config.toml
 sed -i 's/^dryrun = true$/dryrun = false/g' config.toml
 mkdir -p path/to/source_collector_dir/ path/to/host_modifier_dir/ path/to/map_dir/
 cat > path/to/source_collector_dir/mysource.py << EOF
-import zabbix_auto_config.models
+from typing import Any, List
+from zabbix_auto_config.models import Host
 
 HOSTS = [
     {
@@ -64,7 +65,8 @@ HOSTS = [
     },
 ]
 
-def collect(*args, **kwargs):
+
+def collect(*args: Any, **kwargs: Any) -> List[Host]:
     hosts = []
     for host in HOSTS:
         host["enabled"] = True
@@ -73,16 +75,19 @@ def collect(*args, **kwargs):
         source = kwargs.get("source")
         if source:
             host["properties"].append(source)
-        hosts.append(zabbix_auto_config.models.Host(**host))
+        hosts.append(Host(**host))
 
     return hosts
+
 
 if __name__ == "__main__":
     for host in collect():
         print(host.json())
 EOF
 cat > path/to/host_modifier_dir/mod.py << EOF
-def modify(host):
+from zabbix_auto_config.models import Host
+
+def modify(host: Host) -> Host:
     if host.hostname == "bar.example.com":
         host.properties.add("barry")
     return host
@@ -125,6 +130,79 @@ TimeoutSec=300
 [Install]
 WantedBy=multi-user.target
 ```
+
+## Source collectors
+
+Source collectors are Python modules placed in a directory specified by the `source_collector_dir` option in the `[zac]` table of the configuration file. Zabbix-auto-config attempts to load all modules referenced by name in the configuration file from this directory. If any referenced modules cannot be found in the directory, they will be ignored.
+
+A source collector module contains a function named `collect` that returns a list of `Host` objects. These host objects are used by Zabbix-auto-config to create or update hosts in Zabbix.
+
+Here's an example of a source collector module that reads hosts from a file:
+
+```python
+# path/to/source_collector_dir/load_from_json.py
+
+from typing import Any, Dict, List
+from zabbix_auto_config.models import Host
+
+DEFAULT_FILE = "hosts.json" 
+
+def collect(*args: Any, **kwargs: Any) -> List[Host]:
+    filename = kwargs.get("filename", DEFAULT_FILE)
+    with open(filename, "r") as f:
+        return [Host(**host) for host in f.read()]
+```
+
+A module is recognized as a source collector if it contains a `collect` function that accepts an arbitrary number of arguments and keyword arguments and returns a list of `Host` objects. Type annotations are optional but recommended.
+
+The configuration entry for loading a source collector module, like the `load_from_json.py` module above, includes both mandatory and optional fields. Here's how it can be configured:
+
+```toml
+[source_collectors.load_from_json]
+module_name = "load_from_json"
+update_interval = 60
+error_tolerance = 5
+error_interval = 360
+exit_on_error = false
+disable_duration = 3600
+filename = "hosts.json"
+```
+
+The following configurations options are available:
+
+- `module_name` (required) is the name of the module to load. This is the name that will be used in the configuration file to reference the module. It must correspond with the name of the module file, without the `.py` extension.
+- `update_interval` (required) is the number of seconds between updates. This is the interval at which the `collect` function will be called.
+- `error_tolerance` (default: 5) is the maximum number of errors tolerated before the collector is disabled.
+- `error_interval` (default: 360) specifies how long an error is kept on record. This number should be greater than or equal to `error_tolerance * update_interval` in order to properly detect errors. For example, if `error_tolerance` is 5 and `update_interval` is 60, `error_interval` should be at least 300 (5 * 60).
+- `exit_on_error` (default: false) determines if the application should exit or disable the collector when errors exceed the tolerance.
+- `disable_duration` (default: 3600) sets how long a collector stays disabled once it's turned off. If set to 0, the collector stays off until the application restarts.
+
+If `error_tolerance` errors happen within `error_interval` seconds, the collector is disabled. If `exit_on_error` is set to `true`, the application will exit. Otherwise, the collector will be disabled for `disable_duration` seconds.
+
+Any extra config options specified in the configuration file will be passed to the `collect` function as keyword arguments. In the example above, the `filename` option is passed to the `collect` function, and then accessed via `kwargs["filename"]`.
+
+
+## Host modifiers
+
+Host modifiers are Python modules (files) that are placed in a directory defined by the option `host_modifier_dir` in the `[zac]` table of the config file. A host modifier is a module that contains a function named `modify` that takes a `Host` object as its only argument, modifies it, and returns it. Zabbix-auto-config will attempt to load all modules in the given directory.
+
+A host modifier module that adds a given siteadmin to all hosts could look like this:
+
+```py
+# path/to/host_modifier_dir/add_siteadmin.py
+
+from zabbix_auto_config.models import Host
+
+SITEADMIN = "admin@example.com"
+
+def modify(host: Host) -> Host:
+    host.siteadmins.add(SITEADMIN)
+    return host
+```
+
+Any module that contains a function named `modify` which takes a `Host` and returns a `Host` is recognized as a host modifier module. Type annotations are optional, but recommended.
+
+See the [`Host`](https://github.com/unioslo/zabbix-auto-config/blob/2b45f1cb7da0d46b8b218005ebbf751cb17f8793/zabbix_auto_config/models.py#L111-L123) class in `zabbix_auto_config/models.py` for the available fields that can be accessed and modified. One restriction applies: the `modify` function should _never_ modify the hostname of the host. Attempting to do so will result in an error. 
 
 ## Host inventory
 

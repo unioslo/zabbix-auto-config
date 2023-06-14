@@ -11,16 +11,18 @@ import sys
 import signal
 import itertools
 import queue
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import psycopg2
 import pyzabbix
 import requests.exceptions
 
+
 from . import exceptions
 from . import models
 from . import utils
-
+from .errcount import RollingErrorCounter
+from ._types import HostModifierDict, SourceCollectorModule, HostModifierModule
 
 class BaseProcess(multiprocessing.Process):
     def __init__(self, name, state):
@@ -86,37 +88,105 @@ class SignalHandler():
 
 
 class SourceCollectorProcess(BaseProcess):
-    def __init__(self, name, state, module, config, source_hosts_queue):
+    def __init__(
+        self,
+        name: str,
+        state: dict,
+        module: SourceCollectorModule,
+        config: models.SourceCollectorSettings,
+        source_hosts_queue: multiprocessing.Queue,
+    ):
         super().__init__(name, state)
         self.module = module
         self.config = config
+
         self.source_hosts_queue = source_hosts_queue
         self.source_hosts_queue.cancel_join_thread()  # Don't wait for empty queue when exiting
 
-        self.update_interval = self.config["update_interval"]
+        self.update_interval = self.config.update_interval
+
+        # Pop off the config fields from the config we pass to the module
+        self.collector_config = config.dict()
+        for key in self.config.__fields__:
+            self.collector_config.pop(key, None)
+
+        # Repeated errors will disable the source
+        self.disabled = False
+        self.disabled_until = datetime.datetime.now()
+        self.error_counter = RollingErrorCounter(
+            interval=self.config.error_interval,
+            tolerance=self.config.error_tolerance,
+        )
 
     def work(self):
-        start_time = time.time()
+        # If we are disabled, we must check if we should be re-enabled.
+        # If not, we raise a ZACException, so that the state of the process
+        # is marked as not ok.
+        if self.disabled:
+            if self.disabled_until > datetime.datetime.now():
+                time_left = self.disabled_until - datetime.datetime.now()
+                raise exceptions.ZACException(
+                    f"Source is disabled for {utils.timedelta_to_str(time_left)}"
+                )
+            else:
+                logging.info("Reactivating source")
+                self.disabled = False
+
         logging.info("Collection starting")
 
         try:
-            hosts = self.module.collect(**self.config)
+            self.collect()
+        except Exception as e:
+            logging.error("Collect exception: %s", str(e))
+            self.error_counter.add(exception=e)
+            if self.error_counter.tolerance_exceeded():
+                if self.config.exit_on_error:
+                    logging.error("Error tolerance exceeded. Terminating application.")
+                    self.stop_event.set()
+                else:
+                    self.disable()
+
+    def disable(self) -> None:
+        if self.disabled:
+            logging.warning("Attempted to disable already disabled source. Ignoring")
+            return
+
+        self.disabled = True
+        disable_duration = self.config.disable_duration
+        if disable_duration > 0:
+            logging.info(
+                "Disabling source '%s' for %s seconds", self.name, disable_duration
+            )
+            self.disabled_until = datetime.datetime.now() + datetime.timedelta(
+                seconds=disable_duration
+            )
+        else:
+            logging.info("Disabling source '%s' indefinitely", self.name)
+            self.disabled_until = datetime.datetime.max
+
+        # Reset the error counter so that previous errors don't count towards
+        # the error counter in the next run in case the disable duration is short
+        self.error_counter.reset()
+
+    def collect(self) -> None:
+        start_time = time.time()
+        try:
+            hosts = self.module.collect(**self.collector_config)
             assert isinstance(hosts, list), "Collect module did not return a list"
         except (AssertionError, Exception) as e:
-            raise exceptions.ZACException(f"Unable to collect from module ({self.config['module_name']}): {str(e)}")
+            raise exceptions.SourceCollectorError(f"Unable to collect from module ({self.config.module_name}): {str(e)}")
 
-        valid_hosts = []
+        valid_hosts = []  # type: List[models.Host]
         for host in hosts:
             if self.stop_event.is_set():
                 logging.debug("Told to stop. Breaking")
                 break
 
-            try:
-                assert isinstance(host, models.Host), f"Collected object is not a proper Host: {host!r}"
-                host.sources = [self.name]
-                valid_hosts.append(host)
-            except AssertionError as e:
-                logging.error("Host object is invalid: %s", str(e))
+            if not isinstance(host, models.Host):
+                raise exceptions.SourceCollectorTypeError(f"Collected object is not a Host object: {host!r}. Type: {type(host)}")
+            
+            host.sources = set([self.name])
+            valid_hosts.append(host)
 
         source_hosts = {
             "source": self.name,
@@ -222,7 +292,7 @@ class SourceMergerProcess(BaseProcess):
 
         self.update_interval = 60
 
-    def get_host_modifiers(self):
+    def get_host_modifiers(self) -> List[HostModifierDict]:
         sys.path.append(self.host_modifier_dir)
 
         try:
@@ -231,21 +301,22 @@ class SourceMergerProcess(BaseProcess):
             logging.error("Host modififier directory %s does not exist.", self.host_modifier_dir)
             sys.exit(1)
 
-        host_modifiers = []
+        host_modifiers = []  # type: List[HostModifierDict]
 
         for module_name in module_names:
             module = importlib.import_module(module_name)
 
-            try:
-                assert callable(module.modify)
-            except (AttributeError, AssertionError):
-                logging.warning("Host modifier is missing 'modify' callable. Skipping: '%s'", module_name)
+            if not isinstance(module, HostModifierModule):
+                logging.warning(
+                    "Module '%s' is not a valid host modifier module. Skipping.",
+                    module_name,
+                )
                 continue
 
             host_modifier = {
                 "name": module_name,
-                "module": module
-            }
+                "module": module,
+            }  # type: HostModifierDict
 
             host_modifiers.append(host_modifier)
 
@@ -301,8 +372,12 @@ class SourceMergerProcess(BaseProcess):
             for host_modifier in self.host_modifiers:
                 try:
                     modified_host = host_modifier["module"].modify(host.copy(deep=True))
-                    assert isinstance(modified_host, models.Host)
-                    assert hostname == modified_host.hostname, f"Modifier changed the hostname, '{hostname}' -> '{modified_host.hostname}'"
+                    assert isinstance(
+                        modified_host, models.Host
+                    ), f"Modifier returned invalid type: {type(modified_host)}"
+                    assert (
+                        hostname == modified_host.hostname
+                    ), f"Modifier changed the hostname, '{hostname}' -> '{modified_host.hostname}'"
                     host = modified_host
                 except AssertionError as e:
                     logging.warning("Host, '%s', was modified to be invalid by modifier: '%s'. Error: %s", hostname, host_modifier["name"], str(e))

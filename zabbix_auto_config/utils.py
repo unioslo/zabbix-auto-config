@@ -1,4 +1,5 @@
 import copy
+import datetime
 import ipaddress
 import logging
 from pathlib import Path
@@ -150,3 +151,7 @@ def mapping_values_with_prefix(
             new_values.append(new_value)
         m[key] = new_values
     return m
+
+def timedelta_to_str(td: datetime.timedelta) -> str:
+    """Converts a timedelta to a string of the form HH:MM:SS."""
+    return str(td).partition(".")[0]

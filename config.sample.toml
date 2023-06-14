@@ -25,8 +25,17 @@ managed_inventory = ["location"]
 [source_collectors.mysource]
 module_name = "mysource"
 update_interval = 60
+error_tolerance = 5
+error_interval = 360             # should be greater than update_interval
+exit_on_error = false            # Disable source if it fails
+disable_duration = 3600          # Time in seconds to wait before reactivating a disabled source
+kwarg_passed_to_source = "value" # extra fields are passed to the source module as kwargs
+another_kwarg = "value2"         # We can pass an arbitrary number of kwargs to the source module
+
 
 [source_collectors.othersource]
 module_name = "mysource"
 update_interval = 60
-source = "other"
+error_tolerance = 0      # no tolerance for errors
+exit_on_error = true     # exit application if source fails
+source = "other"         # extra kwarg used in mysource module
