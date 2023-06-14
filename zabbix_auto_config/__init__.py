@@ -8,6 +8,7 @@ import os
 import os.path
 import sys
 import time
+from typing import List
 
 import multiprocessing_logging
 import tomli
@@ -15,28 +16,39 @@ import tomli
 from . import exceptions
 from . import models
 from . import processing
+from ._types import SourceCollectorDict, SourceCollectorModule
 
 
 __version__ = importlib.metadata.version(os.path.basename(os.path.dirname(__file__)))
 
 
-def get_source_collectors(config):
+def get_source_collectors(config: models.Settings) -> List[SourceCollectorDict]:
     source_collector_dir = config.zac.source_collector_dir
     sys.path.append(source_collector_dir)
 
-    source_collectors = []
-    for source_collector_name, source_collector_values in config.source_collectors.items():
+    source_collectors = []  # type: List[SourceCollectorDict]
+    for (
+        source_collector_name,
+        source_collector_values,
+    ) in config.source_collectors.items():
         try:
             module = importlib.import_module(source_collector_values.module_name)
         except ModuleNotFoundError:
             logging.error("Unable to find source collector named '%s' in '%s'", source_collector_values.module_name, source_collector_dir)
             continue
 
+        if not isinstance(module, SourceCollectorModule):
+            logging.error(
+                "Source collector named '%s' is not a valid source collector module",
+                source_collector_values.module_name,
+            )
+            continue
+
         source_collector = {
             "name": source_collector_name,
             "module": module,
             "config": source_collector_values.dict(),
-        }
+        }  # type: SourceCollectorDict
 
         source_collectors.append(source_collector)
 

@@ -11,7 +11,7 @@ import sys
 import signal
 import itertools
 import queue
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import psycopg2
 import pyzabbix
@@ -20,7 +20,7 @@ import requests.exceptions
 from . import exceptions
 from . import models
 from . import utils
-
+from ._types import HostModifierDict, SourceCollectorModule, HostModifierModule
 
 class BaseProcess(multiprocessing.Process):
     def __init__(self, name, state):
@@ -86,7 +86,14 @@ class SignalHandler():
 
 
 class SourceCollectorProcess(BaseProcess):
-    def __init__(self, name, state, module, config, source_hosts_queue):
+    def __init__(
+        self,
+        name: str,
+        state,
+        module: SourceCollectorModule,
+        config: Dict[str, Any],
+        source_hosts_queue,
+    ):
         super().__init__(name, state)
         self.module = module
         self.config = config
@@ -222,7 +229,7 @@ class SourceMergerProcess(BaseProcess):
 
         self.update_interval = 60
 
-    def get_host_modifiers(self):
+    def get_host_modifiers(self) -> List[HostModifierDict]:
         sys.path.append(self.host_modifier_dir)
 
         try:
@@ -231,21 +238,22 @@ class SourceMergerProcess(BaseProcess):
             logging.error("Host modififier directory %s does not exist.", self.host_modifier_dir)
             sys.exit(1)
 
-        host_modifiers = []
+        host_modifiers = []  # type: List[HostModifierDict]
 
         for module_name in module_names:
             module = importlib.import_module(module_name)
 
-            try:
-                assert callable(module.modify)
-            except (AttributeError, AssertionError):
-                logging.warning("Host modifier is missing 'modify' callable. Skipping: '%s'", module_name)
+            if not isinstance(module, HostModifierModule):
+                logging.warning(
+                    "Module '%s' is not a valid host modifier module. Skipping.",
+                    module_name,
+                )
                 continue
 
             host_modifier = {
                 "name": module_name,
-                "module": module
-            }
+                "module": module,
+            }  # type: HostModifierDict
 
             host_modifiers.append(host_modifier)
 
@@ -301,8 +309,12 @@ class SourceMergerProcess(BaseProcess):
             for host_modifier in self.host_modifiers:
                 try:
                     modified_host = host_modifier["module"].modify(host.copy(deep=True))
-                    assert isinstance(modified_host, models.Host)
-                    assert hostname == modified_host.hostname, f"Modifier changed the hostname, '{hostname}' -> '{modified_host.hostname}'"
+                    assert isinstance(
+                        modified_host, models.Host
+                    ), f"Modifier returned invalid type: {type(modified_host)}"
+                    assert (
+                        hostname == modified_host.hostname
+                    ), f"Modifier changed the hostname, '{hostname}' -> '{modified_host.hostname}'"
                     host = modified_host
                 except AssertionError as e:
                     logging.warning("Host, '%s', was modified to be invalid by modifier: '%s'. Error: %s", hostname, host_modifier["name"], str(e))
