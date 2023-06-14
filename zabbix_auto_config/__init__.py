@@ -44,13 +44,6 @@ def get_source_collectors(config: models.Settings) -> List[SourceCollectorDict]:
             )
             continue
 
-        if not isinstance(module, SourceCollectorModule):
-            logging.error(
-                "Source collector named '%s' is not a valid source collector module",
-                source_collector_values.module_name,
-            )
-            continue
-
         source_collector = {
             "name": source_collector_name,
             "module": module,
