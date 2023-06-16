@@ -141,7 +141,7 @@ class SourceCollectorProcess(BaseProcess):
             self.error_counter.add(exception=e)
             if self.error_counter.tolerance_exceeded():
                 if self.config.exit_on_error:
-                    logging.error("Error tolerance exceeded. Terminating application.")
+                    logging.critical("Error tolerance exceeded. Terminating application.")
                     self.stop_event.set()
                 else:
                     self.disable()
