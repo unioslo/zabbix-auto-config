@@ -17,16 +17,16 @@ def test_get_td():
 def test_rolling_error_counter_init():
     """Test that we can create a RollingErrorCounter object."""
     rec = RollingErrorCounter(60, 5)
-    assert rec.interval == 60
+    assert rec.duration == 60
     assert rec.tolerance == 5
     assert rec.errors == []
 
 
-def test_rolling_error_counter_init_negative_interval():
-    """Test that we can't create a RollingErrorCounter object with a negative interval."""
+def test_rolling_error_counter_init_negative_duration():
+    """Test that we can't create a RollingErrorCounter object with a negative duration."""
     with pytest.raises(ValueError) as exc_info:
         RollingErrorCounter(-60, 5)
-    assert "interval" in str(exc_info.value)
+    assert "duration" in str(exc_info.value)
 
 
 def test_rolling_error_counter_init_negative_tolerance():
@@ -60,12 +60,12 @@ def test_rolling_error_counter_count():
     assert rec.count() == 3
     rec.add()
     assert rec.count() == 4
-    time.sleep(0.03)  # enough to reset the window
+    time.sleep(0.03)  # enough to reset the counter
     assert rec.count() == 0
 
 
 def test_rolling_error_counter_count_is_rolling():
-    """Check that the window is actually rolling by incrementally adding
+    """Check that the error counter is actually rolling by incrementally adding
     and sleeping. At some point we should see the counter decrease because
     an entry has expired."""
     rec = RollingErrorCounter(0.03, 5)

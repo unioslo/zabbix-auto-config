@@ -162,7 +162,7 @@ The configuration entry for loading a source collector module, like the `load_fr
 module_name = "load_from_json"
 update_interval = 60
 error_tolerance = 5
-error_interval = 360
+error_duration = 360
 exit_on_error = false
 disable_duration = 3600
 filename = "hosts.json"
@@ -173,11 +173,11 @@ The following configurations options are available:
 - `module_name` (required) is the name of the module to load. This is the name that will be used in the configuration file to reference the module. It must correspond with the name of the module file, without the `.py` extension.
 - `update_interval` (required) is the number of seconds between updates. This is the interval at which the `collect` function will be called.
 - `error_tolerance` (default: 5) is the maximum number of errors tolerated before the collector is disabled.
-- `error_interval` (default: 360) specifies how long an error is kept on record. This number should be greater than or equal to `error_tolerance * update_interval` in order to properly detect errors. For example, if `error_tolerance` is 5 and `update_interval` is 60, `error_interval` should be at least 300 (5 * 60).
+- `error_duration` (default: 360) specifies how long an error is kept on record. This number should be greater than or equal to `error_tolerance * update_interval` in order to properly detect errors. For example, if `error_tolerance` is 5 and `update_interval` is 60, `error_duration` should be at least 300 (5 * 60).
 - `exit_on_error` (default: false) determines if the application should exit or disable the collector when errors exceed the tolerance.
 - `disable_duration` (default: 3600) sets how long a collector stays disabled once it's turned off. If set to 0, the collector stays off until the application restarts.
 
-If `error_tolerance` errors happen within `error_interval` seconds, the collector is disabled. If `exit_on_error` is set to `true`, the application will exit. Otherwise, the collector will be disabled for `disable_duration` seconds.
+If `error_tolerance` errors happen within `error_duration` seconds, the collector is disabled. If `exit_on_error` is set to `true`, the application will exit. Otherwise, the collector will be disabled for `disable_duration` seconds.
 
 Any extra config options specified in the configuration file will be passed to the `collect` function as keyword arguments. In the example above, the `filename` option is passed to the `collect` function, and then accessed via `kwargs["filename"]`.
 

@@ -114,7 +114,7 @@ class SourceCollectorProcess(BaseProcess):
         self.disabled = False
         self.disabled_until = datetime.datetime.now()
         self.error_counter = RollingErrorCounter(
-            interval=self.config.error_interval,
+            duration=self.config.error_duration,
             tolerance=self.config.error_tolerance,
         )
 

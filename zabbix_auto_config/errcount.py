@@ -58,14 +58,14 @@ class Error:
 class RollingErrorCounter:
     """A rolling error counter.
 
-    Counts errors in the last `interval` seconds. If the number of errors
-    exceeds  `tolerance`, the counter is disabled.
+    Counts errors in the last `duration` seconds. If the number of errors
+    exceeds `tolerance`, the counter is disabled.
     """
 
-    def __init__(self, interval: float, tolerance: int) -> None:
-        if interval < 0:
-            raise ValueError("interval must be a positive number")
-        self.interval = interval
+    def __init__(self, duration: float, tolerance: int) -> None:
+        if duration < 0:
+            raise ValueError("duration must be a positive number")
+        self.duration = duration
 
         if tolerance < 0:
             raise ValueError("tolerance must be a positive integer")
@@ -89,9 +89,9 @@ class RollingErrorCounter:
         self.errors.clear()
 
     def count(self) -> int:
-        """Return number of errors in the last interval seconds."""
+        """Return number of errors in the last duration seconds."""
         while len(self.errors) > 0 and (
-            self.errors[0].timestamp < datetime.datetime.now() - get_td(self.interval)
+            self.errors[0].timestamp < datetime.datetime.now() - get_td(self.duration)
         ):
             self.errors.pop(0)
 
