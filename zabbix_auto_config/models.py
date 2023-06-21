@@ -84,7 +84,7 @@ class SourceCollectorSettings(BaseSettings, extra=Extra.allow):
     module_name: str
     update_interval: int
     error_tolerance: int = Field(
-        5,
+        0,
         description="Number of errors to allow within the last `error_duration` seconds before disabling the collector.",
         ge=0,
     )
