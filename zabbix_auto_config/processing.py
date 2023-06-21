@@ -129,8 +129,12 @@ class SourceCollectorProcess(BaseProcess):
             "source": self.name,
             "hosts": valid_hosts,
         }
-
-        self.source_hosts_queue.put(source_hosts)
+        if self.source_hosts_queue.full():
+            logging.warning(
+                "Collection outpacing processing. Consider extending the update interval."
+            )
+            utils.drain_queue(self.source_hosts_queue)
+        self.source_hosts_queue.put_nowait(source_hosts)
 
         logging.info("Done collecting %d hosts from source, '%s', in %.2f seconds. Next update: %s", len(valid_hosts), self.name, time.time() - start_time, self.next_update.isoformat(timespec="seconds"))
 

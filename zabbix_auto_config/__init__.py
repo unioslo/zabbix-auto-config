@@ -132,7 +132,7 @@ def main():
     source_hosts_queues = []
     source_collectors = get_source_collectors(config)
     for source_collector in source_collectors:
-        source_hosts_queue = multiprocessing.Queue()
+        source_hosts_queue = multiprocessing.Queue(maxsize=1)
         process = processing.SourceCollectorProcess(source_collector["name"], state_manager.dict(), source_collector["module"], source_collector["config"], source_hosts_queue)
         source_hosts_queues.append(source_hosts_queue)
         processes.append(process)
