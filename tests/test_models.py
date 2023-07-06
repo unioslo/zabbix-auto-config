@@ -115,3 +115,47 @@ def test_host_merge_invalid(full_hosts):
         h1.merge(object())
 
 
+def test_sourcecollectorsettings_no_tolerance() -> None:
+    """Setting no error tolerance will cause the error_duration to be set
+    to a non-zero value.
+
+    Per note in the docstring of SourceCollectorSettings.error_duration,
+    the value of error_duration is set to a non-zero value to ensure that
+    the error is not discarded when calling RollingErrorCounter.check().
+    """
+    settings = models.SourceCollectorSettings(
+        module_name="foo",
+        update_interval=60,
+        error_tolerance=0,
+        error_duration=0,
+    )
+    assert settings.error_tolerance == 0
+    # In case the actual implementaiton changes in the future, we don't
+    # want to test the _exact_ value, but we know it will not be 0
+    assert settings.error_duration > 0
+
+
+def test_sourcecollectorsettings_duration_too_short(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Setting the value of error_duration to a value that is less
+    than the product of update_interval and error_tolerance will adjust
+    the value of error_duration to be at least that value + 1 update interval."""
+    settings = models.SourceCollectorSettings(
+        module_name="foo",
+        update_interval=60,
+        error_tolerance=5,
+        error_duration=60,
+    )
+    assert settings.error_tolerance == 5
+    assert (
+        settings.error_duration == 360
+    )  # update_interval * error_tolerance + update_interval
+
+    # A log message should have been generated telling the user about it
+    assert len(caplog.records) == 1
+    msg = caplog.records[0]
+    assert msg.levelname == "WARNING"
+    assert "foo" in msg.message
+    assert "60" in msg.message
+    assert "360" in msg.message

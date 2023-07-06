@@ -85,35 +85,50 @@ class SourceCollectorSettings(BaseSettings, extra=Extra.allow):
     update_interval: int
     error_tolerance: int = Field(
         0,
-        description="Number of errors to allow within the last `error_duration` seconds before disabling the collector.",
+        description="Number of errors to allow within the last `error_duration` seconds before marking the collector as failing.",
         ge=0,
     )
     error_duration: int = Field(
-        360,  # 6 minutes
+        0,
         description=(
             "The duration in seconds that errors are stored."
-            "If `error_tolerance` errors occur in this period, the collector is disabled."
+            "If `error_tolerance` errors occur in this period, the collector is marked as failing."
         ),
         ge=0,
     )
     exit_on_error: bool = Field(
-        False,
+        True,
         description="Exit ZAC if the collector failure tolerance is exceeded. Collector is disabled otherwise.",
     )
     disable_duration: int = Field(
         3600,
-        description="""Duration to disable the collector for if the error tolerance is exceeded. 0 to disable indefinitely.""",
+        description="Duration to disable the collector for if the error tolerance is exceeded. 0 to disable indefinitely.",
         ge=0,
     )
 
     @validator("error_duration")
     def _validate_error_duration_is_greater(cls, v: int, values: Dict[str, Any]) -> int:
-        # We use the mathematical term "product" here. Is that clear?
-        product = values["update_interval"] * values["error_tolerance"]
-        if v < product:
-            raise ValueError(
-                f"error_duration must be greater than or equal to the product of update_interval and error_tolerance ({product})"
+        error_tolerance = values["error_tolerance"]
+        update_interval = values["update_interval"]
+        # If no tolerance, we don't need to be concerned with how long errors
+        # are kept on record, because a single error will disable the collector.
+        if error_tolerance <= 0:
+            # hack to ensure RollingErrorCounter.count() doesn't discard the error
+            # before it is counted
+            return 9999
+        elif error_tolerance * update_interval > v:
+            # If the error duration is less than the product of the update interval
+            # we log a warning and set the error duration to the product + 1 iteration
+            # of the update interval.
+            # NOTE: we could also add just 1 second (?)
+            new_duration = error_tolerance * update_interval + update_interval
+            logging.warning(
+                f"error_duration (%s) for source collector '%s' too short, duration set to %s.",
+                v,
+                values.get("module_name"),
+                new_duration,
             )
+            return new_duration
         return v
 
 
