@@ -116,19 +116,11 @@ class SourceCollectorSettings(BaseSettings, extra=Extra.allow):
             # hack to ensure RollingErrorCounter.count() doesn't discard the error
             # before it is counted
             return 9999
-        elif error_tolerance * update_interval > v:
-            # If the error duration is less than the product of the update interval
-            # we log a warning and set the error duration to the product + 1 iteration
-            # of the update interval.
-            # NOTE: we could also add just 1 second (?)
-            new_duration = error_tolerance * update_interval + update_interval
-            logging.warning(
-                f"error_duration (%s) for source collector '%s' too short, duration set to %s.",
-                v,
-                values.get("module_name"),
-                new_duration,
+        elif (product := error_tolerance * update_interval) > v:
+            raise ValueError(
+                f"Invalid value for error_duration ({v}). It should be greater than error_tolerance ({error_tolerance}) "
+                f"times update_interval ({update_interval}), i.e., greater than {product}. Please adjust accordingly."
             )
-            return new_duration
         return v
 
 
