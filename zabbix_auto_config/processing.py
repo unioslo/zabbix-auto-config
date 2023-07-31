@@ -387,7 +387,12 @@ class SourceMergerProcess(BaseProcess):
     def work(self):
         self.merge_sources()
 
-    def merge_hosts(self, cursor: "Cursor", hosts: List[models.Host]) -> models.Host:
+    def merge_hosts(self, hosts: List[models.Host]) -> models.Host:
+        # merge_sources() guarantees the list is not empty
+        # however, that could change without this method being updated.
+        # Do an assert here so it's easier to debug if that happens.
+        assert len(hosts) > 0, "Cannot merge empty list of hosts"
+
         merged_host = hosts[0]
         for host in hosts[1:]:
             merged_host.merge(host)
@@ -399,7 +404,7 @@ class SourceMergerProcess(BaseProcess):
         current_host: Optional[models.Host],
         source_hosts: List[models.Host],
     ) -> HostAction:
-        host = self.merge_hosts(cursor, source_hosts)
+        host = self.merge_hosts(source_hosts)
 
         for host_modifier in self.host_modifiers:
             try:
@@ -488,6 +493,7 @@ class SourceMergerProcess(BaseProcess):
             db_cursor.execute(f"SELECT DISTINCT data->>'hostname' FROM {self.db_hosts_table}")
             current_hostnames = {t[0] for t in db_cursor.fetchall()}
 
+        # TODO: refactor to bulk delete
         removed_hostnames = current_hostnames - source_hostnames
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             for removed_hostname in removed_hostnames:
@@ -502,9 +508,10 @@ class SourceMergerProcess(BaseProcess):
             source_hosts_map = self.get_source_hosts(db_cursor)
             hosts = self.get_hosts(db_cursor)
             for hostname in source_hostnames:
-                # if self.stop_event.is_set():
-                #     logging.debug("Told to stop. Breaking")
-                #     return
+                # NOTE: Should we finish handling all hosts before stopping?
+                if self.stop_event.is_set():
+                    logging.debug("Told to stop. Breaking")
+                    break
 
                 source_hosts = source_hosts_map.get(hostname)
                 host = hosts.get(hostname)
