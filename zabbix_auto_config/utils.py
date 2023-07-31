@@ -2,10 +2,11 @@ import copy
 import datetime
 import ipaddress
 import logging
+import multiprocessing
 from pathlib import Path
+import queue
 import re
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Set, Tuple, Union
-
 
 def is_valid_regexp(pattern: str):
     try:
@@ -151,6 +152,16 @@ def mapping_values_with_prefix(
             new_values.append(new_value)
         m[key] = new_values
     return m
+
+
+def drain_queue(q: multiprocessing.Queue) -> None:
+    """Drains a multiprocessing.Queue by calling `queue.get_nowait()` until the queue is empty."""
+    while not q.empty():
+        try:
+            q.get_nowait()
+        except queue.Empty:
+            break
+
 
 def timedelta_to_str(td: datetime.timedelta) -> str:
     """Converts a timedelta to a string of the form HH:MM:SS."""
