@@ -1,3 +1,4 @@
+import multiprocessing
 import os
 from pathlib import Path
 from typing import Iterable
@@ -101,7 +102,7 @@ def sample_config():
 
 @pytest.fixture
 def hostgroup_map_file(tmp_path: Path) -> Iterable[Path]:
-    contents = hostgroup_map = """
+    contents = """
 # This file defines assosiation between siteadm fetched from Nivlheim and hostsgroups in Zabbix.
 # A siteadm can be assosiated only with one hostgroup or usergroup.
 # Example: <siteadm>:<host/user groupname>
@@ -121,3 +122,11 @@ user3@example.com:Hostgroup-user3-primary
     map_file_path = tmp_path / "siteadmin_hostgroup_map.txt"
     map_file_path.write_text(contents)
     yield map_file_path
+
+
+@pytest.fixture(autouse=True, scope="session")
+def setup_multiprocessing_start_method() -> None:
+    # On MacOS we have to set the start mode to fork
+    # when using multiprocessing-logging
+    if os.uname == "Darwin":
+        multiprocessing.set_start_method("fork", force=True)

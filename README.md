@@ -133,11 +133,11 @@ WantedBy=multi-user.target
 
 ## Source collectors
 
-As outlined in the [Application](#application) section, source collectors are Python modules (files) that are placed in a directory defined by the option `source_collector_dir` in the `[zac]` table of the config file. Zabbix-auto-config will attempt to load all modules in the directory that are referenced in the configuration file by name. Modules that are referenced in the config but not found in the directory will be ignored.
+Source collectors are Python modules placed in a directory specified by the `source_collector_dir` option in the `[zac]` table of the configuration file. Zabbix-auto-config attempts to load all modules referenced by name in the configuration file from this directory. If any referenced modules cannot be found in the directory, they will be ignored.
 
-A source collector is a module that contains a function named `collect` that returns a list of `Host` objects. Zabbix-auto-config uses these host objects to create/update hosts in Zabbix.
+A source collector module contains a function named `collect` that returns a list of `Host` objects. These host objects are used by Zabbix-auto-config to create or update hosts in Zabbix.
 
-A module that collects hosts from a file could look like this:
+Here's an example of a source collector module that reads hosts from a file:
 
 ```python
 # path/to/source_collector_dir/load_from_json.py
@@ -153,18 +153,60 @@ def collect(*args: Any, **kwargs: Any) -> List[Host]:
         return [Host(**host) for host in f.read()]
 ```
 
-Any module that contains a function named `collect` which takes a an arbitrary number of arguments and keyword arguments and returns a list of `Host` objects is recognized as a source collector module. Type annotations are optional, but recommended.
+A module is recognized as a source collector if it contains a `collect` function that accepts an arbitrary number of arguments and keyword arguments and returns a list of `Host` objects. Type annotations are optional but recommended.
 
-The corresponding config entry to load the `load_from_json.py` module above could look like this:
+The configuration entry for loading a source collector module, like the `load_from_json.py` module above, includes both mandatory and optional fields. Here's how it can be configured:
 
 ```toml
 [source_collectors.load_from_json]
 module_name = "load_from_json"
 update_interval = 60
+error_tolerance = 5
+error_duration = 360
+exit_on_error = false
+disable_duration = 3600
 filename = "hosts.json"
 ```
 
-The `module_name` and `update_interval` options are required for all source collector modules. Any other options are passed as keyword arguments to the `collect` function.
+The following configurations options are available:
+
+### Mandatory configuration
+
+#### module_name
+`module_name` is the name of the module to load. This is the name that will be used in the configuration file to reference the module. It must correspond with the name of the module file, without the `.py` extension.
+
+#### update_interval
+`update_interval` is the number of seconds between updates. This is the interval at which the `collect` function will be called.
+
+### Optional configuration (error handling)
+
+If `error_tolerance` number of errors occur within `error_duration` seconds, the collector is disabled. Source collectors do not tolerate errors by default and must opt-in to this behavior by setting `error_tolerance` and `error_duration` to non-zero values. If `exit_on_error` is set to `true`, the application will exit. Otherwise, the collector will be disabled for `disable_duration` seconds.
+
+
+#### error_tolerance
+
+`error_tolerance` (default: 0) is the maximum number of errors tolerated within `error_duration` seconds. 
+
+#### error_duration
+
+`error_duration` (default: 0) specifies the duration in seconds to track and log errors. This value should be at least equal to `error_tolerance * update_interval` to ensure correct error detection. 
+
+For instance, with an `error_tolerance` of 5 and an `update_interval` of 60, `error_duration` should be no less than 300 (5 * 60). However, it is advisable to choose a higher value to compensate for processing intervals between error occurrences and the subsequent error count checks, as well as any potential delays from the source collectors. 
+
+A useful guide is to set `error_duration` as `(error_tolerance + 1) * update_interval`, providing an additional buffer equivalent to one update interval.
+
+#### exit_on_error
+
+`exit_on_error` (default: true) determines if the application should terminate, or disable the failing collector when number of errors exceed the tolerance. If set to `true`, the application will exit. Otherwise, the collector will be disabled for `disable_duration` seconds. For backwards compatibility with previous versions of Zabbix-auto-config, this option defaults to `true`. In a future major version, the default will be changed to `false`.
+
+#### disable_duration
+
+`disable_duration` (default: 3600) is the duration in seconds to disable collector for. If set to 0, the collector is disabled indefinitely, requiring a restart of the application to re-enable it.
+
+### Keyword arguments
+
+Any extra config options specified in the configuration file will be passed to the `collect` function as keyword arguments. In the example above, the `filename` option is passed to the `collect` function, and then accessed via `kwargs["filename"]`.
+
 
 ## Host modifiers
 

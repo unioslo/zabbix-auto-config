@@ -13,6 +13,7 @@ from typing import (
 from pydantic import (
     BaseModel,
     BaseSettings as PydanticBaseSettings,
+    Field,
     conint,
     root_validator,
     validator,
@@ -82,6 +83,45 @@ class ZacSettings(BaseSettings):
 class SourceCollectorSettings(BaseSettings, extra=Extra.allow):
     module_name: str
     update_interval: int
+    error_tolerance: int = Field(
+        0,
+        description="Number of errors to allow within the last `error_duration` seconds before marking the collector as failing.",
+        ge=0,
+    )
+    error_duration: int = Field(
+        0,
+        description=(
+            "The duration in seconds that errors are stored."
+            "If `error_tolerance` errors occur in this period, the collector is marked as failing."
+        ),
+        ge=0,
+    )
+    exit_on_error: bool = Field(
+        True,
+        description="Exit ZAC if the collector failure tolerance is exceeded. Collector is disabled otherwise.",
+    )
+    disable_duration: int = Field(
+        3600,
+        description="Duration to disable the collector for if the error tolerance is exceeded. 0 to disable indefinitely.",
+        ge=0,
+    )
+
+    @validator("error_duration")
+    def _validate_error_duration_is_greater(cls, v: int, values: Dict[str, Any]) -> int:
+        error_tolerance = values["error_tolerance"]
+        update_interval = values["update_interval"]
+        # If no tolerance, we don't need to be concerned with how long errors
+        # are kept on record, because a single error will disable the collector.
+        if error_tolerance <= 0:
+            # hack to ensure RollingErrorCounter.count() doesn't discard the error
+            # before it is counted
+            return 9999
+        elif (product := error_tolerance * update_interval) > v:
+            raise ValueError(
+                f"Invalid value for error_duration ({v}). It should be greater than error_tolerance ({error_tolerance}) "
+                f"times update_interval ({update_interval}), i.e., greater than {product}. Please adjust accordingly."
+            )
+        return v
 
 
 class Settings(BaseSettings):
