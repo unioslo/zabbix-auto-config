@@ -2,7 +2,7 @@ import logging
 import tomli
 
 import pytest
-from pydantic import Extra, ValidationError
+from pydantic import ValidationError
 import zabbix_auto_config.models as models
 
 
@@ -30,7 +30,7 @@ def test_config_extra_field_allowed(
     # Allow extra fields for this test
     original_extra = models.Settings.model_config["extra"]
     try:
-        models.Settings.model_config["extra"] = Extra.allow
+        models.Settings.model_config["extra"] = "allow"
         models.Settings(**config)
         assert len(caplog.records) == 0
     finally:

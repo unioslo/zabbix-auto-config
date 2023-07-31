@@ -18,8 +18,6 @@ from pydantic import (
     BaseModel,
     BaseModel as PydanticBaseModel,
     Field,
-    validator,
-    Extra,
 )
 
 from . import utils
@@ -28,7 +26,7 @@ from typing_extensions import Annotated
 # TODO: Models aren't validated when making changes to a set/list. Why? How to handle?
 
 
-class ConfigBaseModel(PydanticBaseModel, extra=Extra.ignore):
+class ConfigBaseModel(PydanticBaseModel, extra="ignore"):
     """Base class for all config models. Warns if unknown fields are passed in."""
     # https://pydantic-docs.helpmanual.io/usage/model_config/#change-behaviour-globally
 
@@ -38,7 +36,7 @@ class ConfigBaseModel(PydanticBaseModel, extra=Extra.ignore):
         """Checks for unknown fields and logs a warning if any are found.
         Does not log warnings if extra is set to `Extra.allow`.
         """
-        if cls.model_config["extra"] == Extra.allow:
+        if cls.model_config["extra"] == "allow":
             return values
         for key in values:
             if key not in cls.model_fields:
@@ -83,7 +81,7 @@ class ZacSettings(ConfigBaseModel):
     health_file: Optional[Path] = None
 
 
-class SourceCollectorSettings(ConfigBaseModel, extra=Extra.allow):
+class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
     module_name: str
     update_interval: int
     error_tolerance: int = Field(
