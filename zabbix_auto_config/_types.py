@@ -3,8 +3,8 @@
 Leading underscore in module name to avoid name collision with built-in module `types`.
 """
 
-from typing import Any, Dict, Protocol, TypedDict, runtime_checkable, List
-from .models import Host
+from typing import Any, Protocol, TypedDict, runtime_checkable, List
+from .models import Host, SourceCollectorSettings
 
 
 @runtime_checkable
@@ -40,4 +40,4 @@ class SourceCollectorDict(TypedDict):
 
     name: str
     module: SourceCollectorModule
-    config: Dict[str, Any]
+    config: SourceCollectorSettings

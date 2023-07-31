@@ -1,4 +1,5 @@
 import copy
+import datetime
 import ipaddress
 import logging
 import multiprocessing
@@ -160,3 +161,8 @@ def drain_queue(q: multiprocessing.Queue) -> None:
             q.get_nowait()
         except queue.Empty:
             break
+
+
+def timedelta_to_str(td: datetime.timedelta) -> str:
+    """Converts a timedelta to a string of the form HH:MM:SS."""
+    return str(td).partition(".")[0]
