@@ -64,7 +64,7 @@ def test_source_collector_disable_on_failure():
         module=FaultySourceCollector,
         config=SourceCollectorSettings(
             module_name="faulty_source_collector",
-            update_interval=0.1,
+            update_interval=1,
             disable_duration=3600,
             exit_on_error=False,
             error_duration=10,
@@ -77,7 +77,7 @@ def test_source_collector_disable_on_failure():
     # if we terminate the process before it has the chance to
     # set state["ok"] to False, the test will fail.
     process.start()
-    time.sleep(0.5)  # wait for process to start
+    time.sleep(1.5)  # wait for process to start
     process.stop_event.set()
     process.join(timeout=0.5)
 

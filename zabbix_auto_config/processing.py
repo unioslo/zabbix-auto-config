@@ -106,8 +106,8 @@ class SourceCollectorProcess(BaseProcess):
         self.update_interval = self.config.update_interval
 
         # Pop off the config fields from the config we pass to the module
-        self.collector_config = config.dict()
-        for key in self.config.__fields__:
+        self.collector_config = config.model_dump()
+        for key in self.config.model_fields:
             self.collector_config.pop(key, None)
 
         # Repeated errors will disable the source
@@ -264,12 +264,18 @@ class SourceHandlerProcess(BaseProcess):
                 else:
                     # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
                     with self.db_connection, self.db_connection.cursor() as db_cursor:
-                        db_cursor.execute(f"UPDATE {self.db_source_table} SET data = %s WHERE data->>'hostname' = %s AND data->'sources' ? %s", [host.json(), host.hostname, source])
+                        db_cursor.execute(
+                            f"UPDATE {self.db_source_table} SET data = %s WHERE data->>'hostname' = %s AND data->'sources' ? %s",
+                            [host.model_dump_json(), host.hostname, source],
+                        )
                     replaced_hosts += 1
             else:
                 # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
                 with self.db_connection, self.db_connection.cursor() as db_cursor:
-                    db_cursor.execute(f"INSERT INTO {self.db_source_table} (data) VALUES (%s)", [host.json()])
+                    db_cursor.execute(
+                        f"INSERT INTO {self.db_source_table} (data) VALUES (%s)",
+                        [host.model_dump_json()],
+                    )
                 inserted_hosts += 1
 
         logging.info("Done handling hosts from source, '%s', in %.2f seconds. Equal hosts: %d, replaced hosts: %d, inserted hosts: %d, removed hosts: %d. Next update: %s", source, time.time() - start_time, equal_hosts, replaced_hosts, inserted_hosts, removed_hosts, self.next_update.isoformat(timespec="seconds"))
@@ -400,12 +406,18 @@ class SourceMergerProcess(BaseProcess):
                 else:
                     # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
                     with self.db_connection, self.db_connection.cursor() as db_cursor:
-                        db_cursor.execute(f"UPDATE {self.db_hosts_table} SET data = %s WHERE data->>'hostname' = %s", [host.json(), hostname])
+                        db_cursor.execute(
+                            f"UPDATE {self.db_hosts_table} SET data = %s WHERE data->>'hostname' = %s",
+                            [host.model_dump_json(), hostname],
+                        )
                         replaced_hosts += 1
             else:
                 # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
                 with self.db_connection, self.db_connection.cursor() as db_cursor:
-                    db_cursor.execute(f"INSERT INTO {self.db_hosts_table} (data) VALUES (%s)", [host.json()])
+                    db_cursor.execute(
+                        f"INSERT INTO {self.db_hosts_table} (data) VALUES (%s)",
+                        [host.model_dump_json()],
+                    )
                     inserted_hosts += 1
 
         logging.info("Done with merge in %.2f seconds. Equal hosts: %d, replaced hosts: %d, inserted hosts: %d, removed hosts: %d. Next update: %s", time.time() - start_time, equal_hosts, replaced_hosts, inserted_hosts, removed_hosts, self.next_update.isoformat(timespec="seconds"))

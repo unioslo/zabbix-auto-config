@@ -120,9 +120,6 @@ def main():
     multiprocessing_logging.install_mp_handler()
     logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
 
-    if config.zac.health_file is not None:
-        health_file = os.path.abspath(config.zac.health_file)
-
     logging.info("Main start (%d) version %s", os.getpid(), __version__)
 
     stop_event = multiprocessing.Event()
@@ -165,8 +162,13 @@ def main():
 
         while not stop_event.is_set():
             if next_status < datetime.datetime.now():
-                if health_file is not None:
-                    write_health(health_file, processes, source_hosts_queues, config.zabbix.failsafe)
+                if config.zac.health_file is not None:
+                    write_health(
+                        config.zac.health_file,
+                        processes,
+                        source_hosts_queues,
+                        config.zabbix.failsafe,
+                    )
                 log_process_status(processes)
                 next_status = datetime.datetime.now() + datetime.timedelta(seconds=status_interval)
 

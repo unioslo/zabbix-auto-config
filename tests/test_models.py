@@ -24,53 +24,51 @@ def test_invalid_proxy_pattern(invalid_hosts):
     host = find_host_by_hostname(invalid_hosts, "invalid-proxy-pattern")
     with pytest.raises(ValidationError) as exc_info:
         models.Host(**host)
-    assert exc_info.value.errors() == [
-        {
-            "loc": ("proxy_pattern",),
-            "msg": "Must be valid regexp pattern: '['",
-            "type": "assertion_error",
-        }
-    ]
+    errors = exc_info.value.errors()
+    assert len(errors) == 1
+    error = errors[0]
+    assert error["loc"] == ("proxy_pattern",)
+    assert error["msg"] == "Assertion failed, Must be valid regexp pattern: '['"
+    assert error["type"] == "assertion_error"
 
 
 def test_invalid_interface(invalid_hosts):
     host = find_host_by_hostname(invalid_hosts, "invalid-interface")
     with pytest.raises(ValidationError) as exc_info:
         models.Host(**host)
-    assert exc_info.value.errors() == [
-        {
-            "loc": ("interfaces", 0, "type"),
-            "msg": "Interface of type 2 must have details set",
-            "type": "value_error",
-        }
-    ]
+    errors = exc_info.value.errors()
+    assert len(errors) == 1
+    error = errors[0]
+    assert error["loc"] == ("interfaces", 0)
+    assert error["msg"] == "Value error, Interface of type 2 must have details set"
+    assert error["type"] == "value_error"
 
 
 def test_duplicate_interface(invalid_hosts):
     host = find_host_by_hostname(invalid_hosts, "duplicate-interface")
     with pytest.raises(ValidationError) as exc_info:
         models.Host(**host)
-    assert exc_info.value.errors() == [
-        {
-            "loc": ("interfaces",),
-            "msg": "No duplicate interface types: [1, 1]",
-            "type": "assertion_error",
-        }
-    ]
+    errors = exc_info.value.errors()
+    assert len(errors) == 1
+    error = errors[0]
+    assert error["loc"] == ("interfaces",)
+    assert error["msg"] == "Assertion failed, No duplicate interface types: [1, 1]"
+    assert error["type"] == "assertion_error"
+
 
 
 def test_invalid_importance(invalid_hosts):
     host = find_host_by_hostname(invalid_hosts, "invalid-importance")
     with pytest.raises(ValidationError) as exc_info:
         models.Host(**host)
-    assert exc_info.value.errors() == [
-        {
-            "loc": ("importance",),
-            "msg": "ensure this value is greater than or equal to 0",
-            "type": "value_error.number.not_ge",
-            "ctx": {"limit_value": 0},
-        }
-    ]
+    errors = exc_info.value.errors()
+    assert len(errors) == 1
+    error = errors[0]
+    assert error["loc"] == ("importance",)
+    assert error["msg"] == "Input should be greater than or equal to 0"
+    assert error["input"] == -1
+    assert error["ctx"] == {"ge": 0}
+    assert error["type"] == "greater_than_equal"
 
 
 

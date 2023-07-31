@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from typing import (
     Any,
@@ -11,33 +12,36 @@ from typing import (
 )
 
 from pydantic import (
+    field_validator,
+    model_validator,
+    ConfigDict,
     BaseModel,
-    BaseSettings as PydanticBaseSettings,
+    BaseModel as PydanticBaseModel,
     Field,
-    conint,
-    root_validator,
     validator,
     Extra,
 )
-from pydantic.fields import ModelField
 
 from . import utils
+from typing_extensions import Annotated
 
 # TODO: Models aren't validated when making changes to a set/list. Why? How to handle?
 
 
-class BaseSettings(PydanticBaseSettings, extra=Extra.ignore):
+class ConfigBaseModel(PydanticBaseModel, extra=Extra.ignore):
+    """Base class for all config models. Warns if unknown fields are passed in."""
     # https://pydantic-docs.helpmanual.io/usage/model_config/#change-behaviour-globally
 
-    @root_validator(pre=True)
+    @model_validator(mode="before")
+    @classmethod
     def _check_unknown_fields(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         """Checks for unknown fields and logs a warning if any are found.
         Does not log warnings if extra is set to `Extra.allow`.
         """
-        if cls.__config__.extra == Extra.allow:
+        if cls.model_config["extra"] == Extra.allow:
             return values
         for key in values:
-            if key not in cls.__fields__:
+            if key not in cls.model_fields:
                 logging.warning(
                     "%s: Got unknown config field '%s'.",
                     getattr(cls, "__name__", str(cls)),
@@ -46,7 +50,7 @@ class BaseSettings(PydanticBaseSettings, extra=Extra.ignore):
         return values
 
 
-class ZabbixSettings(BaseSettings):
+class ZabbixSettings(ConfigBaseModel):
     map_dir: str
     url: str
     username: str
@@ -72,15 +76,14 @@ class ZabbixSettings(BaseSettings):
     # These groups are not managed by ZAC beyond creating them.
     extra_siteadmin_hostgroup_prefixes: Set[str] = set()
 
-class ZacSettings(BaseSettings):
+class ZacSettings(ConfigBaseModel):
     source_collector_dir: str
     host_modifier_dir: str
     db_uri: str
+    health_file: Optional[Path] = None
 
-    health_file: str = None
 
-
-class SourceCollectorSettings(BaseSettings, extra=Extra.allow):
+class SourceCollectorSettings(ConfigBaseModel, extra=Extra.allow):
     module_name: str
     update_interval: int
     error_tolerance: int = Field(
@@ -106,25 +109,25 @@ class SourceCollectorSettings(BaseSettings, extra=Extra.allow):
         ge=0,
     )
 
-    @validator("error_duration")
-    def _validate_error_duration_is_greater(cls, v: int, values: Dict[str, Any]) -> int:
-        error_tolerance = values["error_tolerance"]
-        update_interval = values["update_interval"]
+    @model_validator(mode="after")
+    def _validate_error_duration_is_greater(self) -> "SourceCollectorSettings":
         # If no tolerance, we don't need to be concerned with how long errors
         # are kept on record, because a single error will disable the collector.
-        if error_tolerance <= 0:
+        if self.error_tolerance <= 0:
             # hack to ensure RollingErrorCounter.count() doesn't discard the error
             # before it is counted
-            return 9999
-        elif (product := error_tolerance * update_interval) > v:
+            self.error_duration = 9999
+        elif (
+            product := self.error_tolerance * self.update_interval
+        ) > self.error_duration:
             raise ValueError(
-                f"Invalid value for error_duration ({v}). It should be greater than error_tolerance ({error_tolerance}) "
-                f"times update_interval ({update_interval}), i.e., greater than {product}. Please adjust accordingly."
+                f"Invalid value for error_duration ({self.error_duration}). It should be greater than error_tolerance ({self.error_tolerance}) "
+                f"times update_interval ({self.update_interval}), i.e., greater than {product}. Please adjust accordingly."
             )
-        return v
+        return self
 
 
-class Settings(BaseSettings):
+class Settings(ConfigBaseModel):
     zac: ZacSettings
     zabbix: ZabbixSettings
     source_collectors: Dict[str, SourceCollectorSettings]
@@ -135,57 +138,55 @@ class Interface(BaseModel):
     endpoint: str
     port: str  # Ports could be macros, i.e. strings
     type: int
+    model_config = ConfigDict(validate_assignment=True)
 
-    class Config:
-        validate_assignment = True
-
-    # These validators look static, but pydantic uses the class argument.
-    # pylint: disable=no-self-use, no-self-argument
-    @validator("type")
-    def type_2_must_have_details(cls, v, values):
-        if v == 2 and not values["details"]:
+    @model_validator(mode="after")
+    def type_2_must_have_details(self) -> "Interface":
+        if self.type == 2 and not self.details:
             raise ValueError("Interface of type 2 must have details set")
-        return v
+        return self
 
 
 class Host(BaseModel):
     enabled: bool
     hostname: str
 
-    importance: Optional[conint(ge=0)]  # type: ignore # mypy blows up: https://github.com/pydantic/pydantic/issues/239 & https://github.com/pydantic/pydantic/issues/156
+    importance: Optional[Annotated[int, Field(ge=0)]] = None
     interfaces: List[Interface] = []
     inventory: Dict[str, str] = {}
     macros: Optional[None] = None  # TODO: What should macros look like?
     properties: Set[str] = set()
-    proxy_pattern: Optional[str]  # NOTE: replace with Optional[typing.Pattern]?
+    proxy_pattern: Optional[str] = None  # NOTE: replace with Optional[typing.Pattern]?
     siteadmins: Set[str] = set()
     sources: Set[str] = set()
     tags: Set[Tuple[str, str]] = set()
+    model_config = ConfigDict(validate_assignment=True)
 
-    class Config:
-        validate_assignment = True
-
-    # pylint: disable=no-self-use, no-self-argument
-    @validator("*", pre=True)
-    def none_defaults_to_field_default(cls, v: Any, field: ModelField) -> Any:
-        """The field's default value or factory is returned if the value is None."""
+    @model_validator(mode="before")
+    @classmethod
+    def none_defaults_to_field_default(cls, data: Any) -> Any:
+        """The field's default value or factory is used if the value is None."""
         # TODO: add field type check
-        if v is None:
-            if field.default is not None:
-                return field.default
-            elif field.default_factory is not None:
-                return field.default_factory()
-        return v
+        if not isinstance(data, dict):
+            return data  # pydantic will handle the error
+        for field_name, value in data.items():
+            if value is None:
+                field = cls.model_fields[field_name]
+                if field.default is not None:
+                    data[field_name] = field.default
+                elif field.default_factory is not None:
+                    data[field_name] = field.default_factory()
+        return data
 
-    # pylint: disable=no-self-use, no-self-argument
-    @validator("interfaces")
+    @field_validator("interfaces")
+    @classmethod
     def no_duplicate_interface_types(cls, v: List[Interface]) -> List[Interface]:
         types = [interface.type for interface in v]
         assert len(types) == len(set(types)), f"No duplicate interface types: {types}"
         return v
 
-    # pylint: disable=no-self-use, no-self-argument
-    @validator("proxy_pattern")
+    @field_validator("proxy_pattern")
+    @classmethod
     def must_be_valid_regexp_pattern(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
             assert utils.is_valid_regexp(v), f"Must be valid regexp pattern: {v!r}"
