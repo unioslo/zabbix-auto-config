@@ -3,6 +3,11 @@ from pydantic import ValidationError
 from zabbix_auto_config import models
 
 
+# NOTE: Do not test msg and ctx of Pydantic errors!
+# They are not guaranteed to be stable between minor versions.
+# https://docs.pydantic.dev/latest/version-compatibility/#pydantic-v2-changes
+
+
 def find_host_by_hostname(hosts, hostname):
     for host in hosts:
         if host["hostname"].startswith(hostname):
@@ -28,7 +33,7 @@ def test_invalid_proxy_pattern(invalid_hosts):
     assert len(errors) == 1
     error = errors[0]
     assert error["loc"] == ("proxy_pattern",)
-    assert error["msg"] == "Assertion failed, Must be valid regexp pattern: '['"
+    assert "Must be valid regexp pattern: '['" in error["msg"]
     assert error["type"] == "assertion_error"
 
 
@@ -40,7 +45,7 @@ def test_invalid_interface(invalid_hosts):
     assert len(errors) == 1
     error = errors[0]
     assert error["loc"] == ("interfaces", 0)
-    assert error["msg"] == "Value error, Interface of type 2 must have details set"
+    assert "Interface of type 2 must have details set" in error["msg"]
     assert error["type"] == "value_error"
 
 
@@ -52,7 +57,7 @@ def test_duplicate_interface(invalid_hosts):
     assert len(errors) == 1
     error = errors[0]
     assert error["loc"] == ("interfaces",)
-    assert error["msg"] == "Assertion failed, No duplicate interface types: [1, 1]"
+    assert "No duplicate interface types: [1, 1]" in error["msg"]
     assert error["type"] == "assertion_error"
 
 
@@ -65,9 +70,7 @@ def test_invalid_importance(invalid_hosts):
     assert len(errors) == 1
     error = errors[0]
     assert error["loc"] == ("importance",)
-    assert error["msg"] == "Input should be greater than or equal to 0"
     assert error["input"] == -1
-    assert error["ctx"] == {"ge": 0}
     assert error["type"] == "greater_than_equal"
 
 
