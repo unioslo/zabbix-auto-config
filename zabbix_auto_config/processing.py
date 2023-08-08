@@ -1,3 +1,5 @@
+from collections import Counter, defaultdict
+from enum import Enum
 import multiprocessing
 import logging
 import datetime
@@ -11,9 +13,10 @@ import sys
 import signal
 import itertools
 import queue
-from typing import Dict, List, Optional
+from typing import Dict, List, TYPE_CHECKING, Optional
 
 import psycopg2
+from pydantic import ValidationError
 import pyzabbix
 import requests.exceptions
 
@@ -23,6 +26,10 @@ from . import models
 from . import utils
 from .errcount import RollingErrorCounter
 from ._types import HostModifierDict, SourceCollectorModule, HostModifierModule
+
+if TYPE_CHECKING:
+    from psycopg2.extensions import connection as Connection
+    from psycopg2.extensions import cursor as Cursor
 
 class BaseProcess(multiprocessing.Process):
     def __init__(self, name, state):
@@ -201,6 +208,13 @@ class SourceCollectorProcess(BaseProcess):
 
         logging.info("Done collecting %d hosts from source, '%s', in %.2f seconds. Next update: %s", len(valid_hosts), self.name, time.time() - start_time, self.next_update.isoformat(timespec="seconds"))
 
+class HostAction(Enum):
+    INSERT = "insert"
+    UPDATE = "update"
+    DELETE = "delete"
+    NO_CHANGE = "no_change"
+    NOT_FOUND = "not_found"
+
 
 class SourceHandlerProcess(BaseProcess):
     def __init__(self, name, state, db_uri, source_hosts_queues):
@@ -237,9 +251,57 @@ class SourceHandlerProcess(BaseProcess):
             logging.debug("Handling %d hosts from source, '%s', from queue. Current queue size: %d", len(source_hosts["hosts"]), source, source_hosts_queue.qsize())
             self.handle_source_hosts(source, hosts)
 
-    def handle_source_hosts(self, source, hosts):
+    def handle_source_host(
+        self,
+        cursor: "Cursor",
+        host: models.Host,
+        current_host: Optional[models.Host],
+        source: str,
+    ) -> HostAction:
+        # TODO: still some optimizations to be done here with regards to bulk insertions/updates
+        if current_host:
+            if current_host == host:
+                return HostAction.NO_CHANGE
+            else:
+                # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
+                cursor.execute(
+                    f"UPDATE {self.db_source_table} SET data = %s WHERE data->>'hostname' = %s AND data->'sources' ? %s",
+                    [host.json(), host.hostname, source],
+                )
+                return HostAction.UPDATE
+        else:
+            # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
+            cursor.execute(
+                f"INSERT INTO {self.db_source_table} (data) VALUES (%s)", [host.json()]
+            )
+            return HostAction.INSERT
+
+    def get_current_source_hosts(
+        self, cursor: "Cursor", source: str
+    ) -> Dict[str, models.Host]:
+        hosts = {}  # type: Dict[str, models.Host]
+        cursor.execute(
+            f"SELECT data FROM {self.db_source_table} WHERE data->'sources' ? %s",
+            [source],
+        )
+        for result in cursor.fetchall():
+            try:
+                host = models.Host(**result[0])
+            except ValidationError as e:
+                # TODO: ensure this actually identifies the faulty host
+                logging.exception(f"Invalid host in source hosts table: {e}")
+            except Exception as e:
+                logging.exception(
+                    f"Error when parsing host from source hosts table: {e}"
+                )
+            else:
+                hosts[host.hostname] = host
+        return hosts
+
+    def handle_source_hosts(self, source: str, hosts: List[models.Host]) -> None:
         start_time = time.time()
-        equal_hosts, replaced_hosts, inserted_hosts, removed_hosts = (0, 0, 0, 0)
+
+        actions = Counter()  # type: Counter[HostAction]
 
         source_hostnames = {host.hostname for host in hosts}
         with self.db_connection, self.db_connection.cursor() as db_cursor:
@@ -250,29 +312,25 @@ class SourceHandlerProcess(BaseProcess):
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             for removed_hostname in removed_hostnames:
                 db_cursor.execute(f"DELETE FROM {self.db_source_table} WHERE data->>'hostname' = %s AND data->'sources' ? %s", [removed_hostname, source])
-                removed_hosts += 1
+                actions[HostAction.DELETE] += 1
 
-        for host in hosts:
-            with self.db_connection, self.db_connection.cursor() as db_cursor:
-                db_cursor.execute(f"SELECT data FROM {self.db_source_table} WHERE data->>'hostname' = %s AND data->'sources' ? %s", [host.hostname, source])
-                result = db_cursor.fetchall()
-                current_host = models.Host(**result[0][0]) if result else None
+        with self.db_connection, self.db_connection.cursor() as db_cursor:
+            current_hosts = self.get_current_source_hosts(db_cursor, source)
+            for host in hosts:
+                current_host = current_hosts.get(host.hostname)
+                action = self.handle_source_host(db_cursor, host, current_host, source)
+                actions[action] += 1
 
-            if current_host:
-                if current_host == host:
-                    equal_hosts += 1
-                else:
-                    # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
-                    with self.db_connection, self.db_connection.cursor() as db_cursor:
-                        db_cursor.execute(f"UPDATE {self.db_source_table} SET data = %s WHERE data->>'hostname' = %s AND data->'sources' ? %s", [host.json(), host.hostname, source])
-                    replaced_hosts += 1
-            else:
-                # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
-                with self.db_connection, self.db_connection.cursor() as db_cursor:
-                    db_cursor.execute(f"INSERT INTO {self.db_source_table} (data) VALUES (%s)", [host.json()])
-                inserted_hosts += 1
-
-        logging.info("Done handling hosts from source, '%s', in %.2f seconds. Equal hosts: %d, replaced hosts: %d, inserted hosts: %d, removed hosts: %d. Next update: %s", source, time.time() - start_time, equal_hosts, replaced_hosts, inserted_hosts, removed_hosts, self.next_update.isoformat(timespec="seconds"))
+        logging.info(
+            "Done handling hosts from source, '%s', in %.2f seconds. Equal hosts: %d, replaced hosts: %d, inserted hosts: %d, removed hosts: %d. Next update: %s",
+            source,
+            time.time() - start_time,
+            actions[HostAction.NO_CHANGE],
+            actions[HostAction.UPDATE],
+            actions[HostAction.INSERT],
+            actions[HostAction.DELETE],
+            self.next_update.isoformat(timespec="seconds"),
+        )
 
 
 class SourceMergerProcess(BaseProcess):
@@ -329,25 +387,105 @@ class SourceMergerProcess(BaseProcess):
     def work(self):
         self.merge_sources()
 
-    def merge_hosts(self, hostname):
-        with self.db_connection, self.db_connection.cursor() as db_cursor:
-            db_cursor.execute(f"SELECT data FROM {self.db_source_table} WHERE data->>'hostname' = %s", [hostname])
-            hosts = [models.Host(**t[0]) for t in db_cursor.fetchall()]
-
-        if len(hosts) == 0:
-            # Host not found. TODO: Raise error?
-            return None
+    def merge_hosts(self, hosts: List[models.Host]) -> models.Host:
+        # merge_sources() guarantees the list is not empty
+        # however, that could change without this method being updated.
+        # Do an assert here so it's easier to debug if that happens.
+        assert len(hosts) > 0, "Cannot merge empty list of hosts"
 
         merged_host = hosts[0]
         for host in hosts[1:]:
             merged_host.merge(host)
-
         return merged_host
+
+    def handle_host(
+        self,
+        cursor: "Cursor",
+        current_host: Optional[models.Host],
+        source_hosts: List[models.Host],
+    ) -> HostAction:
+        host = self.merge_hosts(source_hosts)
+
+        for host_modifier in self.host_modifiers:
+            try:
+                modified_host = host_modifier["module"].modify(host.copy(deep=True))
+                assert isinstance(
+                    modified_host, models.Host
+                ), f"Modifier returned invalid type: {type(modified_host)}"
+                assert (
+                    host.hostname == modified_host.hostname
+                ), f"Modifier changed the hostname, '{host.hostname}' -> '{modified_host.hostname}'"
+                host = modified_host
+            except AssertionError as e:
+                logging.warning(
+                    "Host, '%s', was modified to be invalid by modifier: '%s'. Error: %s",
+                    host.hostname,
+                    host_modifier["name"],
+                    str(e),
+                )
+            except Exception as e:
+                logging.warning(
+                    "Error when running modifier %s on host '%s': %s",
+                    host_modifier["name"],
+                    host.hostname,
+                    str(e),
+                )
+                # TODO: Do more?
+
+        if current_host:
+            if current_host == host:
+                # logging.debug(f"Host <{host['hostname']}> from source <{source}> is equal to current host")
+                return HostAction.NO_CHANGE
+            else:
+                # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
+                cursor.execute(
+                    f"UPDATE {self.db_hosts_table} SET data = %s WHERE data->>'hostname' = %s",
+                    [host.json(), host.hostname],
+                )
+                return HostAction.UPDATE
+        else:
+            # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
+            cursor.execute(
+                f"INSERT INTO {self.db_hosts_table} (data) VALUES (%s)", [host.json()]
+            )
+            return HostAction.INSERT
+
+    def get_source_hosts(self, cursor: "Cursor") -> Dict[str, List[models.Host]]:
+        cursor.execute(f"SELECT data FROM {self.db_source_table}")
+        source_hosts = defaultdict(list)  # type: Dict[str, List[models.Host]]
+        for host in cursor.fetchall():
+            try:
+                host_model = models.Host(**host[0])
+            except ValidationError as e:
+                # TODO: ensure this actually identifies the faulty host
+                logging.exception(f"Invalid host in source hosts table: {e}")
+            except Exception as e:
+                logging.exception(
+                    f"Error when parsing host from source hosts table: {e}"
+                )
+            else:
+                source_hosts[host_model.hostname].append(host_model)
+        return source_hosts
+
+    def get_hosts(self, cursor: "Cursor") -> Dict[str, models.Host]:
+        cursor.execute(f"SELECT data FROM {self.db_hosts_table}")
+        hosts = {}  # type: Dict[str, models.Host]
+        for host in cursor.fetchall():
+            try:
+                host_model = models.Host(**host[0])
+            except ValidationError as e:
+                # TODO: ensure this log actually identifies the faulty host
+                logging.exception(f"Invalid host in hosts table: {e}")
+            except Exception as e:
+                logging.exception(f"Error when parsing host from hosts table: {e}")
+            else:
+                hosts[host_model.hostname] = host_model
+        return hosts
 
     def merge_sources(self):
         start_time = time.time()
         logging.info("Merge starting")
-        equal_hosts, replaced_hosts, inserted_hosts, removed_hosts = (0, 0, 0, 0)
+        actions = Counter()  # type: Counter[HostAction]
 
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT DISTINCT data->>'hostname' FROM {self.db_source_table}")
@@ -355,6 +493,7 @@ class SourceMergerProcess(BaseProcess):
             db_cursor.execute(f"SELECT DISTINCT data->>'hostname' FROM {self.db_hosts_table}")
             current_hostnames = {t[0] for t in db_cursor.fetchall()}
 
+        # TODO: refactor to bulk delete
         removed_hostnames = current_hostnames - source_hostnames
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             for removed_hostname in removed_hostnames:
@@ -362,53 +501,38 @@ class SourceMergerProcess(BaseProcess):
                     logging.debug("Told to stop. Breaking")
                     break
                 db_cursor.execute(f"DELETE FROM {self.db_hosts_table} WHERE data->>'hostname' = %s", [removed_hostname])
-                removed_hosts += 1
+                actions[HostAction.DELETE] += 1
 
-        for hostname in source_hostnames:
-            if self.stop_event.is_set():
-                logging.debug("Told to stop. Breaking")
-                break
-            host = self.merge_hosts(hostname)
-            if not host:
-                # TODO: Raise error? How to handle? Handle inside merge_hosts?
-                continue
+        # Update all hosts in a single transaction for performance
+        with self.db_connection, self.db_connection.cursor() as db_cursor:
+            source_hosts_map = self.get_source_hosts(db_cursor)
+            hosts = self.get_hosts(db_cursor)
+            for hostname in source_hostnames:
+                # NOTE: Should we finish handling all hosts before stopping?
+                if self.stop_event.is_set():
+                    logging.debug("Told to stop. Breaking")
+                    break
 
-            for host_modifier in self.host_modifiers:
-                try:
-                    modified_host = host_modifier["module"].modify(host.copy(deep=True))
-                    assert isinstance(
-                        modified_host, models.Host
-                    ), f"Modifier returned invalid type: {type(modified_host)}"
-                    assert (
-                        hostname == modified_host.hostname
-                    ), f"Modifier changed the hostname, '{hostname}' -> '{modified_host.hostname}'"
-                    host = modified_host
-                except AssertionError as e:
-                    logging.warning("Host, '%s', was modified to be invalid by modifier: '%s'. Error: %s", hostname, host_modifier["name"], str(e))
-                except Exception as e:
-                    logging.warning("Error when running modifier %s on host '%s': %s", host_modifier["name"], hostname, str(e))
-                    # TODO: Do more?
+                source_hosts = source_hosts_map.get(hostname)
+                host = hosts.get(hostname)
+                if not source_hosts:
+                    logging.warning(
+                        f"Host '{hostname}' not found in source hosts table"
+                    )
+                    continue
 
-            with self.db_connection, self.db_connection.cursor() as db_cursor:
-                db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'hostname' = %s", [hostname])
-                result = db_cursor.fetchall()
-                current_host = models.Host(**result[0][0]) if result else None
+                host_action = self.handle_host(db_cursor, host, source_hosts)
+                actions[host_action] += 1
 
-            if current_host:
-                if current_host == host:
-                    equal_hosts += 1
-                else:
-                    # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
-                    with self.db_connection, self.db_connection.cursor() as db_cursor:
-                        db_cursor.execute(f"UPDATE {self.db_hosts_table} SET data = %s WHERE data->>'hostname' = %s", [host.json(), hostname])
-                        replaced_hosts += 1
-            else:
-                # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
-                with self.db_connection, self.db_connection.cursor() as db_cursor:
-                    db_cursor.execute(f"INSERT INTO {self.db_hosts_table} (data) VALUES (%s)", [host.json()])
-                    inserted_hosts += 1
-
-        logging.info("Done with merge in %.2f seconds. Equal hosts: %d, replaced hosts: %d, inserted hosts: %d, removed hosts: %d. Next update: %s", time.time() - start_time, equal_hosts, replaced_hosts, inserted_hosts, removed_hosts, self.next_update.isoformat(timespec="seconds"))
+        logging.info(
+            "Done with merge in %.2f seconds. Equal hosts: %d, replaced hosts: %d, inserted hosts: %d, removed hosts: %d. Next update: %s",
+            time.time() - start_time,
+            actions[HostAction.NO_CHANGE],
+            actions[HostAction.UPDATE],
+            actions[HostAction.INSERT],
+            actions[HostAction.DELETE],
+            self.next_update.isoformat(timespec="seconds"),
+        )
 
 
 class ZabbixUpdater(BaseProcess):
