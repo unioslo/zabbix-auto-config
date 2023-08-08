@@ -45,6 +45,10 @@ def test_sourcecollectorsettings_defaults():
     )
     assert settings.module_name == "foo"
     assert settings.update_interval == 60
+    assert settings.error_duration > 0
+    assert settings.error_tolerance == 0
+    assert settings.exit_on_error is True
+    assert settings.disable_duration == 3600
 
 
 
