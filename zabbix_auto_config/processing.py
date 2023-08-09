@@ -266,13 +266,14 @@ class SourceHandlerProcess(BaseProcess):
                 # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
                 cursor.execute(
                     f"UPDATE {self.db_source_table} SET data = %s WHERE data->>'hostname' = %s AND data->'sources' ? %s",
-                    [host.json(), host.hostname, source],
+                    [host.model_dump_json(), host.hostname, source],
                 )
                 return HostAction.UPDATE
         else:
             # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
             cursor.execute(
-                f"INSERT INTO {self.db_source_table} (data) VALUES (%s)", [host.json()]
+                f"INSERT INTO {self.db_source_table} (data) VALUES (%s)",
+                [host.model_dump_json()],
             )
             return HostAction.INSERT
 
@@ -440,13 +441,14 @@ class SourceMergerProcess(BaseProcess):
                 # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
                 cursor.execute(
                     f"UPDATE {self.db_hosts_table} SET data = %s WHERE data->>'hostname' = %s",
-                    [host.json(), host.hostname],
+                    [host.model_dump_json(), host.hostname],
                 )
                 return HostAction.UPDATE
         else:
             # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
             cursor.execute(
-                f"INSERT INTO {self.db_hosts_table} (data) VALUES (%s)", [host.json()]
+                f"INSERT INTO {self.db_hosts_table} (data) VALUES (%s)",
+                [host.model_dump_json()],
             )
             return HostAction.INSERT
 
