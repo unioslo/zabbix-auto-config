@@ -144,7 +144,7 @@ class Host(BaseModel):
     siteadmins: Set[str] = set()
     sources: Set[str] = set()
     tags: Set[Tuple[str, str]] = set()
-    model_config = ConfigDict(validate_assignment=True)
+    model_config = ConfigDict(validate_assignment=True, revalidate_instances="always")
 
     @model_validator(mode="before")
     @classmethod
