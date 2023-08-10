@@ -113,8 +113,8 @@ class SourceCollectorProcess(BaseProcess):
         self.update_interval = self.config.update_interval
 
         # Pop off the config fields from the config we pass to the module
-        self.collector_config = config.dict()
-        for key in self.config.__fields__:
+        self.collector_config = config.model_dump()
+        for key in self.config.model_fields:
             self.collector_config.pop(key, None)
 
         # Repeated errors will disable the source
@@ -266,13 +266,14 @@ class SourceHandlerProcess(BaseProcess):
                 # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
                 cursor.execute(
                     f"UPDATE {self.db_source_table} SET data = %s WHERE data->>'hostname' = %s AND data->'sources' ? %s",
-                    [host.json(), host.hostname, source],
+                    [host.model_dump_json(), host.hostname, source],
                 )
                 return HostAction.UPDATE
         else:
             # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
             cursor.execute(
-                f"INSERT INTO {self.db_source_table} (data) VALUES (%s)", [host.json()]
+                f"INSERT INTO {self.db_source_table} (data) VALUES (%s)",
+                [host.model_dump_json()],
             )
             return HostAction.INSERT
 
@@ -408,14 +409,17 @@ class SourceMergerProcess(BaseProcess):
 
         for host_modifier in self.host_modifiers:
             try:
-                modified_host = host_modifier["module"].modify(host.copy(deep=True))
+                modified_host = host_modifier["module"].modify(
+                    host.model_copy(deep=True)
+                )
                 assert isinstance(
                     modified_host, models.Host
                 ), f"Modifier returned invalid type: {type(modified_host)}"
                 assert (
                     host.hostname == modified_host.hostname
                 ), f"Modifier changed the hostname, '{host.hostname}' -> '{modified_host.hostname}'"
-                host = modified_host
+                # Re-validate the host after modification
+                host = host.model_validate(modified_host)
             except AssertionError as e:
                 logging.warning(
                     "Host, '%s', was modified to be invalid by modifier: '%s'. Error: %s",
@@ -440,13 +444,14 @@ class SourceMergerProcess(BaseProcess):
                 # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
                 cursor.execute(
                     f"UPDATE {self.db_hosts_table} SET data = %s WHERE data->>'hostname' = %s",
-                    [host.json(), host.hostname],
+                    [host.model_dump_json(), host.hostname],
                 )
                 return HostAction.UPDATE
         else:
             # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
             cursor.execute(
-                f"INSERT INTO {self.db_hosts_table} (data) VALUES (%s)", [host.json()]
+                f"INSERT INTO {self.db_hosts_table} (data) VALUES (%s)",
+                [host.model_dump_json()],
             )
             return HostAction.INSERT
 

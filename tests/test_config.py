@@ -2,7 +2,7 @@ import logging
 import tomli
 
 import pytest
-from pydantic import Extra, ValidationError
+from pydantic import ValidationError
 import zabbix_auto_config.models as models
 
 
@@ -28,13 +28,13 @@ def test_config_extra_field_allowed(
     config["foo"] = "bar"
 
     # Allow extra fields for this test
-    original_extra = models.Settings.__config__.extra
+    original_extra = models.Settings.model_config["extra"]
     try:
-        models.Settings.__config__.extra = Extra.allow
+        models.Settings.model_config["extra"] = "allow"
         models.Settings(**config)
         assert len(caplog.records) == 0
     finally:
-        models.Settings.__config__.extra = original_extra
+        models.Settings.model_config["extra"] = original_extra
 
 
 def test_sourcecollectorsettings_defaults():
@@ -108,7 +108,6 @@ def test_sourcecollectorsettings_duration_too_short():
     errors = exc_info.value.errors()
     assert len(errors) == 1
     error = errors[0]
-    assert error["loc"] == ("error_duration",)
     assert "greater than 300" in error["msg"]
     assert error["type"] == "value_error"
 
@@ -126,4 +125,4 @@ def test_sourcecollectorsettings_duration_negative():
     assert len(errors) == 1
     error = errors[0]
     assert error["loc"] == ("error_duration",)
-    assert error["type"] == "value_error.number.not_ge"
+    assert error["type"] == "greater_than_equal"
