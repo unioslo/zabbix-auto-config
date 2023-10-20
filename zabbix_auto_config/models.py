@@ -62,6 +62,7 @@ class ZabbixSettings(ConfigBaseModel):
 
     hostgroup_source_prefix: str = "Source-"
     hostgroup_importance_prefix: str = "Importance-"
+    templategroup_prefix: str = "Templates-"
 
     # Prefixes for extra host groups to create based on the host groups
     # in the siteadmin mapping. 

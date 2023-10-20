@@ -1094,6 +1094,39 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                         continue
                     self.create_hostgroup(hostgroup)
 
+    def create_templategroup(self, templategroup_name: str) -> Optional[str]:
+        if not self.config.dryrun:
+            logging.debug("Creating template group: '%s'", templategroup_name)
+            try:
+                result = self.api.templategroup.create(name=templategroup_name)
+                return result["groupids"][0]
+            except pyzabbix.ZabbixAPIException as e:
+                logging.error(
+                    "Error when creating template group '%s': %s",
+                    templategroup_name,
+                    e.args,
+                )
+                return None
+        else:
+            logging.debug("DRYRUN: Creating template group: '%s'", templategroup_name)
+            return "-1"
+
+    def create_templategroups(self) -> None:
+        """>=6.4. ONLY: Creates template groups for each host group in
+        the mapping file."""
+        tgroups = self.api.templategroup.get(output=["name", "groupid"])
+        templategroup_names = [h["name"] for h in tgroups]
+
+        mapping = utils.mapping_values_with_prefix(
+            self.siteadmin_hostgroup_map,  # this is copied in the function
+            prefix=self.config.templategroup_prefix,
+        )
+        for templategroups in mapping.values():
+            for templategroup in templategroups:
+                if templategroup in templategroup_names:
+                    continue
+                self.create_templategroup(templategroup)
+
     def do_update(self):
         managed_hostgroup_names = set(
             itertools.chain.from_iterable(self.property_hostgroup_map.values())
@@ -1107,6 +1140,9 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         # Create extra host groups if necessary
         if self.config.extra_siteadmin_hostgroup_prefixes:
             self.create_extra_hostgroups(existing_hostgroups)
+        
+        # Create template groups if necessary
+        self.create_templategroups()
 
         zabbix_hostgroups = {}
         for zabbix_hostgroup in existing_hostgroups:
