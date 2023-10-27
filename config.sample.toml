@@ -55,7 +55,7 @@ managed_inventory = ["location"]
 #hostgroup_source_prefix = "Source-"
 #hostgroup_importance_prefix = "Importance-"
 #extra_siteadmin_hostgroup_prefixes = []
-templategroup_prefix = "Templates-"
+#templategroup_prefix = "Templates-"
 
 [source_collectors.mysource]
 # Name of the source collector module without the .py extension

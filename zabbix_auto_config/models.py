@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple, Union
 
 from pydantic import BaseModel, ValidationInfo
 from pydantic import BaseModel as PydanticBaseModel
@@ -51,6 +53,7 @@ class ZabbixSettings(ConfigBaseModel):
         description="The timeout in seconds for HTTP requests to Zabbix.",
         ge=0,
     )
+    create_templategroups: bool = True
 
     tags_prefix: str = "zac_"
     managed_inventory: List[str] = []
@@ -66,10 +69,10 @@ class ZabbixSettings(ConfigBaseModel):
 
     # Prefixes for extra host groups to create based on the host groups
     # in the siteadmin mapping. 
-    # e.g. Siteadmin-foo -> Templates-foo if list is ["Templates-"]
+    # e.g. Siteadmin-foo -> Secondary-foo if list is ["Secondary-"]
     # The groups must have prefixes separated by a hyphen (-) in order 
     # to replace them with any of these prefixes.
-    # These groups are not managed by ZAC beyond creating them.
+    # These groups are not managed by ZAC beyond their creation.
     extra_siteadmin_hostgroup_prefixes: Set[str] = set()
 
     @field_validator("timeout")
@@ -278,6 +281,23 @@ class Host(BaseModel):
             self.proxy_pattern = sorted(list(proxy_patterns))[0]
         elif len(proxy_patterns) == 1:
             self.proxy_pattern = proxy_patterns.pop()
+
+
+class ZabbixVersion(NamedTuple):
+    major: int
+    minor: int
+    patch: int
+
+    @classmethod
+    def from_version_string(cls, version_string: str) -> ZabbixVersion:
+        parts = version_string.split(".")
+        if len(parts) != 3:
+            raise ValueError(f"Cannot parse Zabbix version string: {version_string}")
+        return cls(
+            major=int(parts[0]),
+            minor=int(parts[1]),
+            patch=int(parts[2]),
+        )
 
 
 class HostActions(BaseModel):
