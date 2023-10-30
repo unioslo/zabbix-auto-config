@@ -2,6 +2,7 @@ import logging
 from typing import Optional
 import pytest
 from pydantic import ValidationError
+
 from zabbix_auto_config import models
 
 
