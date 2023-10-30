@@ -290,6 +290,10 @@ class ZabbixVersion(NamedTuple):
 
     @classmethod
     def from_version_string(cls, version_string: str) -> ZabbixVersion:
+        """Constructs a ZabbixVersion from a semantic version string from the API.
+        
+        See: <https://www.zabbix.com/documentation/current/en/manual/api/reference/apiinfo/version>
+        """
         parts = version_string.split(".")
         if len(parts) != 3:
             raise ValueError(f"Cannot parse Zabbix version string: {version_string}")
