@@ -1120,7 +1120,11 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
     def create_templategroups(self) -> None:
         """>=6.4 ONLY: Creates template groups for each host group in
         the mapping file."""
-        if self.zabbix_version < (6, 4, 0) or not self.config.create_templategroups:
+        if not self.config.create_templategroups:
+            logger.debug("Skipping template group creation. Feature is disabled.")
+            return
+        elif self.zabbix_version < (6, 4, 0):
+            logger.info("Skipping template group creation. Feature requires Zabbix >= 6.4.0.")
             return
 
         tgroups = self.api.templategroup.get(output=["name", "groupid"])
