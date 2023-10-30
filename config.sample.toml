@@ -49,13 +49,17 @@ tags_prefix = "zac_"
 managed_inventory = ["location"]
 
 # Names of hostgroups that zabbix-auto-config will manage.
-#hostgroup_all = "All-hosts"
-#hostgroup_manual = "All-manual-hosts"
-#hostgroup_disabled = "All-auto-disabled-hosts"
-#hostgroup_source_prefix = "Source-"
-#hostgroup_importance_prefix = "Importance-"
-#extra_siteadmin_hostgroup_prefixes = []
-#templategroup_prefix = "Templates-"
+hostgroup_all = "All-hosts"
+hostgroup_manual = "All-manual-hosts"
+hostgroup_disabled = "All-auto-disabled-hosts"
+hostgroup_source_prefix = "Source-"
+hostgroup_importance_prefix = "Importance-"
+
+# Template group creation (Zabbix >=6.4 only)
+create_templategroups = true
+templategroup_prefix = "Templates-"
+
+extra_siteadmin_hostgroup_prefixes = []
 
 [source_collectors.mysource]
 # Name of the source collector module without the .py extension
@@ -88,5 +92,5 @@ another_kwarg = "value2"         # We can pass an arbitrary number of kwargs to 
 module_name = "mysource"
 update_interval = 60
 error_tolerance = 0      # no tolerance for errors (default)
-exit_on_error = true     # exit application if source fails
+exit_on_error = true     # exit application if source fails (default)
 source = "other"         # extra kwarg used in mysource module
