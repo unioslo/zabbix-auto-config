@@ -40,10 +40,12 @@ class ZabbixSettings(ConfigBaseModel):
     username: str
     password: str
     dryrun: bool
+    failsafe: int = 20
 
     tags_prefix: str = "zac_"
     managed_inventory: List[str] = []
-    failsafe: int = 20
+    property_tag = "property"
+    property_tagging: bool = False
 
     hostgroup_all: str = "All-hosts"
     hostgroup_manual: str = "All-manual-hosts"

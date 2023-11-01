@@ -696,6 +696,42 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             logging.info("DRYRUN: Setting tags (%s) on host: '%s' (%s)", tags, zabbix_host["host"], zabbix_host["hostid"])
 
+    def set_property_tags(
+        self, db_host: models.Host, zabbix_host: dict[str, Any]
+    ) -> None:
+        tags = zabbix_host.get("tags", [])  # type: list[dict[str, str]]
+        new_tags = []
+        for prop in db_host.properties:  # complexity too high? nested loop
+            for tag in tags:
+                if tag["tag"] != self.config.property_tag:
+                    continue
+                if tag["value"] == prop:  # same name and value
+                    break
+            else:
+                # Multiple tags can have the same name, but different values.
+                new_tags.append({"tag": self.config.property_tag, "value": prop})
+
+        if self.config.dryrun:
+            if new_tags:
+                logging.info(
+                    "DRYRUN: Setting new property tags %s on host: '%s' (%s)",
+                    [t["value"] for t in new_tags],
+                    zabbix_host["host"],
+                    zabbix_host["hostid"],
+                )
+            return
+
+        if new_tags:
+            logger.info(
+                "Setting new property tags %s on host '%s' (%s)",
+                [t["value"] for t in new_tags],
+                zabbix_host["host"],
+                zabbix_host["hostid"],
+            )
+            tags.extend(new_tags)
+            self.api.host.update(hostid=zabbix_host["hostid"], tags=tags)
+
+
     def do_update(self):
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
@@ -853,6 +889,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 if tags_to_add:
                     logging.debug("Going to add tags '%s' to host '%s'.", tags_to_add, zabbix_host["host"])
                 self.set_tags(zabbix_host, tags)
+
+            if db_host.properties and self.config.property_tagging:
+                self.set_property_tags(db_host, zabbix_host)
 
             if int(zabbix_host["inventory_mode"]) != 1:
                 self.set_inventory_mode(zabbix_host, 1)
