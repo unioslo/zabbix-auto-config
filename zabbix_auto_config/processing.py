@@ -703,13 +703,13 @@ class ZabbixHostUpdater(ZabbixUpdater):
         new_tags = list(tags)
         for prop in db_host.properties:  # complexity too high? nested loop
             for tag in tags:
-                if tag["tag"] != self.config.property_tag:
+                if tag["tag"] != self.config.property_tagging.tag:
                     continue
                 if tag["value"] == prop:  # same name and value
                     break
             else:
                 # Multiple tags can have the same name, but different values.
-                new_tags.append({"tag": self.config.property_tag, "value": prop})
+                new_tags.append({"tag": self.config.property_tagging.tag, "value": prop})
 
         if self.config.dryrun:
             if new_tags:
@@ -892,7 +892,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                     logging.debug("Going to add tags '%s' to host '%s'.", tags_to_add, zabbix_host["host"])
                 self.set_tags(zabbix_host, tags)
 
-            if db_host.properties and self.config.property_tagging:
+            if db_host.properties and self.config.property_tagging.enabled:
                 self.set_property_tags(db_host, zabbix_host)
 
             if int(zabbix_host["inventory_mode"]) != 1:

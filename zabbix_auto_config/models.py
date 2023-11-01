@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union, Pattern
 
 from pydantic import BaseModel
 from pydantic import BaseModel as PydanticBaseModel
@@ -34,6 +34,13 @@ class ConfigBaseModel(PydanticBaseModel, extra="ignore"):
         return values
 
 
+class PropertyTaggingSettings(ConfigBaseModel):
+    enabled: bool = False
+    tag: str = "property"
+    include_patterns: List[Pattern] = []
+    exclude_patterns: List[Pattern] = []
+
+
 class ZabbixSettings(ConfigBaseModel):
     map_dir: str
     url: str
@@ -44,8 +51,7 @@ class ZabbixSettings(ConfigBaseModel):
 
     tags_prefix: str = "zac_"
     managed_inventory: List[str] = []
-    property_tag = "property"
-    property_tagging: bool = False
+
 
     hostgroup_all: str = "All-hosts"
     hostgroup_manual: str = "All-manual-hosts"
@@ -61,6 +67,9 @@ class ZabbixSettings(ConfigBaseModel):
     # to replace them with any of these prefixes.
     # These groups are not managed by ZAC beyond creating them.
     extra_siteadmin_hostgroup_prefixes: Set[str] = set()
+
+    property_tagging: PropertyTaggingSettings = Field(default_factory=PropertyTaggingSettings)
+
 
 class ZacSettings(ConfigBaseModel):
     source_collector_dir: str

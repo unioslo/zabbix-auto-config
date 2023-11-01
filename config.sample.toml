@@ -22,6 +22,12 @@ managed_inventory = ["location"]
 #hostgroup_importance_prefix = "Importance-"
 #extra_siteadmin_hostgroup_prefixes = []
 
+[zabbix.property_tagging]
+enabled = false
+tag = "property"
+include_patterns = []
+exclude_patterns = []
+
 [source_collectors.mysource]
 module_name = "mysource"
 update_interval = 60
