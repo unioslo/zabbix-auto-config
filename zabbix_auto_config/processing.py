@@ -1075,7 +1075,9 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         logging.debug("Creating hostgroup: '%s'", hostgroup_name)
         try:
             result = self.api.hostgroup.create(name=hostgroup_name)
-            return result["groupids"][0]
+            groupid = result["groupids"][0]
+            logger.info("Created host group '%s' (%s)", hostgroup_name, groupid)
+            return groupid
         except pyzabbix.ZabbixAPIException as e:
             logging.error(
                 "Error when creating hostgroups '%s': %s", hostgroup_name, e.args
@@ -1108,7 +1110,9 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         logging.debug("Creating template group: '%s'", templategroup_name)
         try:
             result = self.api.templategroup.create(name=templategroup_name)
-            return result["groupids"][0]
+            groupid = result["groupids"][0]
+            logger.info("Created template group '%s' (%s)", templategroup_name, groupid)
+            return groupid
         except pyzabbix.ZabbixAPIException as e:
             logging.error(
                 "Error when creating template group '%s': %s",
