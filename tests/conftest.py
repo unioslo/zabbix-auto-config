@@ -100,8 +100,14 @@ def sample_config():
         yield config.read()
 
 
+@pytest.fixture(scope="function")
+def map_dir(tmp_path: Path) -> Iterable[Path]:
+    mapdir = tmp_path / "maps"
+    mapdir.mkdir()
+    yield mapdir
+
 @pytest.fixture
-def hostgroup_map_file(tmp_path: Path) -> Iterable[Path]:
+def hostgroup_map_file(map_dir: Path) -> Iterable[Path]:
     contents = """
 # This file defines assosiation between siteadm fetched from Nivlheim and hostsgroups in Zabbix.
 # A siteadm can be assosiated only with one hostgroup or usergroup.
@@ -119,9 +125,41 @@ user2@example.com:Hostgroup-user2-secondary
 #
 user3@example.com:Hostgroup-user3-primary
 """
-    map_file_path = tmp_path / "siteadmin_hostgroup_map.txt"
+    map_file_path = map_dir / "siteadmin_hostgroup_map.txt"
     map_file_path.write_text(contents)
     yield map_file_path
+
+
+@pytest.fixture
+def property_hostgroup_map_file(map_dir: Path) -> Iterable[Path]:
+    contents = """
+is_app_server:Role-app-servers
+is_adfs_server:Role-adfs-servers
+"""
+    map_file_path = map_dir / "property_hostgroup_map.txt"
+    map_file_path.write_text(contents)
+    yield map_file_path
+
+
+@pytest.fixture
+def property_template_map_file(map_dir: Path) -> Iterable[Path]:
+    contents = """
+is_app_server:Template-app-server
+is_adfs_server:Template-adfs-server
+"""
+    map_file_path = map_dir / "property_template_map.txt"
+    map_file_path.write_text(contents)
+    yield map_file_path
+
+
+@pytest.fixture
+def map_dir_with_files(
+    map_dir: Path,
+    hostgroup_map_file: Path,
+    property_hostgroup_map_file: Path,
+    property_template_map_file: Path,
+) -> Iterable[Path]:
+    yield map_dir
 
 
 @pytest.fixture(autouse=True, scope="session")
