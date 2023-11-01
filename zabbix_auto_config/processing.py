@@ -13,7 +13,7 @@ import sys
 import signal
 import itertools
 import queue
-from typing import Dict, List, TYPE_CHECKING, Optional
+from typing import Any, Dict, List, TYPE_CHECKING, Optional
 
 import psycopg2
 from pydantic import ValidationError
