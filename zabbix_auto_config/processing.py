@@ -699,39 +699,51 @@ class ZabbixHostUpdater(ZabbixUpdater):
     def set_property_tags(
         self, db_host: models.Host, zabbix_host: dict[str, Any]
     ) -> None:
-        tags = zabbix_host.get("tags", [])  # type: list[dict[str, str]]
-        new_tags = list(tags)
-        for prop in db_host.properties:  # complexity too high? nested loop
-            for tag in tags:
-                if tag["tag"] != self.config.property_tagging.tag:
+        """Adds tags to a host based on its properties."""        
+        matched_properties = set()  # type: set[str]
+        for prop in db_host.properties:  
+            if self.config.property_tagging.exclude_patterns:
+                matched, pattern = utils.matches_patterns(prop, self.config.property_tagging.exclude_patterns)
+                if matched:
+                    logger.debug("Skipping property '%s' due to exclude pattern '%s'", prop, str(pattern))
                     continue
-                if tag["value"] == prop:  # same name and value
-                    break
-            else:
-                # Multiple tags can have the same name, but different values.
-                new_tags.append({"tag": self.config.property_tagging.tag, "value": prop})
+            if self.config.property_tagging.include_patterns:
+                matched, _ = utils.matches_patterns(prop, self.config.property_tagging.include_patterns)
+                if not matched:
+                    logger.debug("Skipping property '%s'. No include patterns matched.", prop, self.config.property_tagging.include_patterns)
+                    continue
+            matched_properties.add(prop)
+        
+        # Create updated list of tags with host's properties
+        # Keep existing tags that don't use the property tag name
+        tags = zabbix_host.get("tags", [])  # type: list[dict[str, str]]
+        new_tags = [t for t in tags if t["tag"] != self.config.property_tagging.tag]
+        for prop in matched_properties: # Ensures only active property tags are applied
+            new_tags.append({"tag": self.config.property_tagging.tag, "value": prop})
+
+        # NOTE: how expensive is this comparison? Is there a cheaper way to do it?
+        if new_tags == tags:
+            logger.debug("No changes to property tags for host '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
+            return
 
         if self.config.dryrun:
-            if new_tags:
-                logging.info(
-                    "DRYRUN: Setting property tags host '%s' (%s). Old: %s. New: %s",
-                    zabbix_host["host"],
-                    zabbix_host["hostid"],
-                    tags,
-                    new_tags,
-                )
-            return
-        
-        # We never remove tags, so longer list means updated tags
-        if len(new_tags) > len(tags):
-            logger.info(
-                "Setting property tags host '%s' (%s). Old: %s. New: %s",
+            logging.info(
+                "DRYRUN: Setting property tags host '%s' (%s). Old: %s. New: %s",
                 zabbix_host["host"],
                 zabbix_host["hostid"],
                 tags,
                 new_tags,
             )
-            self.api.host.update(hostid=zabbix_host["hostid"], tags=new_tags)
+            return
+
+        logger.info(
+            "Setting property tags host '%s' (%s). Old: %s. New: %s",
+            zabbix_host["host"],
+            zabbix_host["hostid"],
+            tags,
+            new_tags,
+        )
+        self.api.host.update(hostid=zabbix_host["hostid"], tags=new_tags)
 
 
     def do_update(self):
