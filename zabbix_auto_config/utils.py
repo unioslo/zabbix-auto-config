@@ -6,7 +6,7 @@ import multiprocessing
 from pathlib import Path
 import queue
 import re
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Set, Tuple, Union
+from typing import Dict, Iterable, List, MutableMapping, Optional, Set, Tuple, Union
 
 def is_valid_regexp(pattern: str):
     try:
@@ -166,3 +166,12 @@ def drain_queue(q: multiprocessing.Queue) -> None:
 def timedelta_to_str(td: datetime.timedelta) -> str:
     """Converts a timedelta to a string of the form HH:MM:SS."""
     return str(td).partition(".")[0]
+
+
+def matches_patterns(text: str, patterns: List[re.Pattern]) -> Tuple[bool, Optional[re.Pattern]]:
+    """Returns True if `text` matches any of the patterns in `patterns`."""
+    for pattern in patterns:
+        if pattern.match(text):
+            return True, pattern
+    return False, None
+
