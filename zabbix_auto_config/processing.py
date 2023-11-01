@@ -728,7 +728,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
         if self.config.dryrun:
             logging.info(
-                "DRYRUN: Setting property tags host '%s' (%s). Old: %s. New: %s",
+                "DRYRUN: Setting property tags on host '%s' (%s). Old: %s. New: %s",
                 zabbix_host["host"],
                 zabbix_host["hostid"],
                 tags,
@@ -737,7 +737,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             return
 
         logger.info(
-            "Setting property tags host '%s' (%s). Old: %s. New: %s",
+            "Setting property tags on host '%s' (%s). Old: %s. New: %s",
             zabbix_host["host"],
             zabbix_host["hostid"],
             tags,
