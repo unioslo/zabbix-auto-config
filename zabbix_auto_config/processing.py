@@ -700,7 +700,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         self, db_host: models.Host, zabbix_host: dict[str, Any]
     ) -> None:
         tags = zabbix_host.get("tags", [])  # type: list[dict[str, str]]
-        new_tags = []
+        new_tags = list(tags)
         for prop in db_host.properties:  # complexity too high? nested loop
             for tag in tags:
                 if tag["tag"] != self.config.property_tag:
@@ -714,22 +714,24 @@ class ZabbixHostUpdater(ZabbixUpdater):
         if self.config.dryrun:
             if new_tags:
                 logging.info(
-                    "DRYRUN: Setting new property tags %s on host: '%s' (%s)",
-                    [t["value"] for t in new_tags],
+                    "DRYRUN: Setting property tags host '%s' (%s). Old: %s. New: %s",
                     zabbix_host["host"],
                     zabbix_host["hostid"],
+                    tags,
+                    new_tags,
                 )
             return
-
-        if new_tags:
+        
+        # We never remove tags, so longer list means updated tags
+        if len(new_tags) > len(tags):
             logger.info(
-                "Setting new property tags %s on host '%s' (%s)",
-                [t["value"] for t in new_tags],
+                "Setting property tags host '%s' (%s). Old: %s. New: %s",
                 zabbix_host["host"],
                 zabbix_host["hostid"],
+                tags,
+                new_tags,
             )
-            tags.extend(new_tags)
-            self.api.host.update(hostid=zabbix_host["hostid"], tags=tags)
+            self.api.host.update(hostid=zabbix_host["hostid"], tags=new_tags)
 
 
     def do_update(self):
