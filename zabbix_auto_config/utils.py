@@ -192,7 +192,7 @@ def match_host_properties(
 ) -> Set[str]:
     """Matches a host's properties based on include and exclude patterns.
 
-    All patterns are matched if both lists are empty.
+    All properties are matched if both include and exclude patterns are empty.
 
     Parameters
     ----------
