@@ -6,7 +6,20 @@ import multiprocessing
 from pathlib import Path
 import queue
 import re
-from typing import Dict, Iterable, List, MutableMapping, Optional, Set, Tuple, Union
+from typing import (
+    Dict,
+    Iterable,
+    List,
+    MutableMapping,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+    TYPE_CHECKING,
+)
+
+if TYPE_CHECKING:
+    from zabbix_auto_config.models import Host
 
 def is_valid_regexp(pattern: str):
     try:
@@ -145,9 +158,7 @@ def mapping_values_with_prefix(
             try:
                 new_value = with_prefix(text=v, prefix=prefix, separator=separator)
             except ValueError:
-                logging.warning(
-                    f"Unable to replace prefix in '%s' with '%s'", v, prefix
-                )
+                logging.warning("Unable to replace prefix in '%s' with '%s'", v, prefix)
                 continue
             new_values.append(new_value)
         m[key] = new_values
@@ -168,10 +179,57 @@ def timedelta_to_str(td: datetime.timedelta) -> str:
     return str(td).partition(".")[0]
 
 
-def matches_patterns(text: str, patterns: List[re.Pattern]) -> Tuple[bool, Optional[re.Pattern]]:
-    """Returns True if `text` matches any of the patterns in `patterns`."""
+def matches_patterns(text: str, patterns: List[re.Pattern]) -> Optional[re.Pattern]:
+    """Returns the first pattern that matches `text` or None if no pattern matches."""
     for pattern in patterns:
         if pattern.match(text):
-            return True, pattern
-    return False, None
+            return pattern
+    return None
 
+
+def match_host_properties(
+    host: "Host", include_patterns: List[re.Pattern], exclude_patterns: List[re.Pattern]
+) -> Set[str]:
+    """Matches a host's properties based on include and exclude patterns.
+
+    All patterns are matched if both lists are empty.
+
+    Parameters
+    ----------
+    host : Host
+        A Zabbix Host object.
+    include_patterns : List[re.Pattern]
+        List of compiled regexps to match against the host's properties.
+        If non-empty, at least one include pattern must match.
+    exclude_patterns : List[re.Pattern]
+        List of compiled regexps to match against the host's properties.
+        If non-empty, no exclude pattern must match.
+
+    Returns
+    -------
+    Set[str]
+        Set of matched properties.
+    """
+    matched_properties = set()  # type: set[str]
+    for prop in host.properties:
+        if exclude_patterns:
+            matched = matches_patterns(prop, exclude_patterns)
+            if matched:
+                logging.debug(
+                    "Skipping property '%s' for host '%s' (exclude pattern: '%s')",
+                    prop,
+                    host.hostname,
+                    matched.pattern,
+                )
+                continue
+        if include_patterns:
+            matched = matches_patterns(prop, include_patterns)
+            if not matched:
+                logging.debug(
+                    "Skipping property '%s' for host '%s'. No include patterns matched.",
+                    prop,
+                    host.hostname,
+                )
+                continue
+        matched_properties.add(prop)
+    return matched_properties

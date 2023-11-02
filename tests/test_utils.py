@@ -1,6 +1,7 @@
 import logging
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
+import re
 from typing import Dict, List, Set, Tuple, Union
 
 import pytest
@@ -9,6 +10,7 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from zabbix_auto_config import utils
+from zabbix_auto_config.models import Host
 
 
 @pytest.mark.parametrize(
@@ -230,3 +232,65 @@ def test_mapping_values_with_prefix_no_prefix_separator(
     )
     assert res == {"user1@example.com": ["Foouser1-primary", "Foouser1-secondary"]}
     assert caplog.text.count("WARNING") == 2
+
+
+@pytest.mark.parametrize(
+    "properties,include_patterns,exclude_patterns,expected",
+    [
+        pytest.param(
+            {"is_app_server", "is_adfs_server"},
+            [re.compile(r"is_app_server")],
+            [],
+            {"is_app_server"},
+            id="include (simple pattern)",
+        ),
+        pytest.param(
+            {"is_app_server", "is_adfs_server"},
+            [],
+            [re.compile(r"is_app_server")],
+            {"is_adfs_server"},
+            id="exclude (simple pattern)",
+        ),
+        pytest.param(
+            {"is_app_server", "is_adfs_server"},
+            [],
+            [re.compile(r"is_.*_server")],
+            set(),
+            id="exclude (wildcard pattern)",
+        ),
+        pytest.param(
+            {"is_app_server", "is_adfs_server", "foo"},
+            [re.compile(r"is_.*_server")],
+            [re.compile(r"is_adfs.*")],
+            {"is_app_server"},
+            id="include+exclude (wildcard pattern)",
+        ),
+        pytest.param(
+            {"is_app_server", "is_adfs_server", "foo"},
+            [re.compile(r"is_.*"), re.compile(r".*_server")],
+            [],
+            {"is_app_server", "is_adfs_server"},
+            id="multiple include patterns",
+        ),
+        pytest.param(
+            {"is_app_server", "is_adfs_server", "is_dhcp_server"},
+            [re.compile(r"is_.*"), re.compile(r".*_server")],
+            [re.compile(r".*adfs.*"), re.compile(r".*dhcp.*")],
+            {"is_app_server"},
+            id="multiple include+exclude patterns",
+        ),
+    ],
+)
+def test_match_host_properties(
+    minimal_host_obj: Host,
+    properties: Set[str],
+    include_patterns: List[re.Pattern],
+    exclude_patterns: List[re.Pattern],
+    expected: Set[str],
+) -> None:
+    host = minimal_host_obj
+    host.properties = properties
+    assert (
+        utils.match_host_properties(host, include_patterns, exclude_patterns)
+        == expected
+    )

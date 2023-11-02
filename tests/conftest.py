@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from typing import Iterable
 import pytest
-
+from zabbix_auto_config.models import Host
 
 @pytest.fixture(scope="function")
 def minimal_hosts():
@@ -168,3 +168,11 @@ def setup_multiprocessing_start_method() -> None:
     # when using multiprocessing-logging
     if os.uname == "Darwin":
         multiprocessing.set_start_method("fork", force=True)
+
+
+@pytest.fixture(scope="function")
+def minimal_host_obj() -> Host:
+    return Host(
+        enabled=True,
+        hostname="foo.example.com",
+    )
