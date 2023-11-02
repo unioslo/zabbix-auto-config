@@ -232,9 +232,58 @@ See the [`Host`](https://github.com/unioslo/zabbix-auto-config/blob/2b45f1cb7da0
 
 ## Host inventory
 
-Zac manages only inventory properties configured as `managed_inventory` in `config.toml`. An inventory property will not be removed/blanked from Zabbix even if the inventory property is removed from `managed_inventory` list or from the host in the source e.g:
+ZAC manages only inventory properties configured as `managed_inventory` in `config.toml`. An inventory property will not be removed/blanked from Zabbix even if the inventory property is removed from `managed_inventory` list or from the host in the source e.g:
 
 1. Add "location=x" to a host in a source and wait for sync
 2. Remove the "location" property from the host in the source
 3. "location=x" will remain in Zabbix
 
+## Host property tagging
+
+ZAC can automatically tag hosts with their source properties. Host Properties is metadata/annotations for a host assigned by source collectors. See `collect()` function from `mysource.py` in [Application](#application) and [Source collectors](#source-collectors) for more information on how to assign properties.
+
+By default, property tagging is disabled, but can be enabled in the config file:
+
+```toml
+[zabbix.property_tagging]
+enabled = true
+tag = "property"
+include_patterns = []
+exclude_patterns = []
+```
+
+With this configuration, each of the host's properties are used to create a tag with the format `property:<property_name>`. For example, if a host has the property `is_dhcp_server`, it will be tagged with `property:is_dhcp_server`. Zabbix hosts can have multiple tags with the same name as long as their values are different. For a host with multiple properties, each property will create a tag named `property` with different values corresponding to the property names.
+
+The name of the tag can be configured with the `tag` option, so if we, for example, want to change the tag format to `role:<property_name>`, we can do so by changing the value of `tag`:
+
+```toml
+tag = "role"
+```
+
+### Filtering
+
+The properties used for tagging can be filtered using the options `include_patterns` & `exclude_patterns`, which are lists of regular expressions. If no patterns are included, all properties are used.
+
+If a host has a property called `broken_server` and we want to exclude it from being used as a tag, we can add an exclude pattern:
+
+```toml
+exclude_patterns = ["broken_server"]
+```
+
+If we want to exclude all properties starting with `broken_`, we can add a wildcard pattern:
+
+```toml
+exclude_patterns = ["broken_.*"]
+```
+
+If we only want to include properties that follow the `is_<type>_server` pattern, we can use an include pattern:
+```toml
+include_patterns = ["is_.*_server"]
+```
+
+We can also combine include and exclude patterns to create more advanced filters:
+
+```toml
+include_patterns = ["is_.*_server"]
+exclude_patterns = ["is_broken_server", "is_bad_server"]
+```
