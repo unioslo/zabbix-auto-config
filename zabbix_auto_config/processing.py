@@ -705,12 +705,12 @@ class ZabbixHostUpdater(ZabbixUpdater):
             if self.config.property_tagging.exclude_patterns:
                 matched, pattern = utils.matches_patterns(prop, self.config.property_tagging.exclude_patterns)
                 if matched:
-                    logger.debug("Skipping property '%s' due to exclude pattern '%s'", prop, str(pattern))
+                    logging.debug("Skipping property '%s' due to exclude pattern '%s'", prop, str(pattern))
                     continue
             if self.config.property_tagging.include_patterns:
                 matched, _ = utils.matches_patterns(prop, self.config.property_tagging.include_patterns)
                 if not matched:
-                    logger.debug("Skipping property '%s'. No include patterns matched.", prop, self.config.property_tagging.include_patterns)
+                    logging.debug("Skipping property '%s'. No include patterns matched.", prop, self.config.property_tagging.include_patterns)
                     continue
             matched_properties.add(prop)
         
@@ -723,7 +723,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
         # NOTE: how expensive is this comparison? Is there a cheaper way to do it?
         if new_tags == tags:
-            logger.debug("No changes to property tags for host '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
+            logging.debug("No changes to property tags for host '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
             return
 
         if self.config.dryrun:
@@ -736,7 +736,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             )
             return
 
-        logger.info(
+        logging.info(
             "Setting property tags on host '%s' (%s). Old: %s. New: %s",
             zabbix_host["host"],
             zabbix_host["hostid"],
