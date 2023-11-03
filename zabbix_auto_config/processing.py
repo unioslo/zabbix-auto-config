@@ -1076,7 +1076,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         try:
             result = self.api.hostgroup.create(name=hostgroup_name)
             groupid = result["groupids"][0]
-            logger.info("Created host group '%s' (%s)", hostgroup_name, groupid)
+            logging.info("Created host group '%s' (%s)", hostgroup_name, groupid)
             return groupid
         except pyzabbix.ZabbixAPIException as e:
             logging.error(
@@ -1111,7 +1111,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         try:
             result = self.api.templategroup.create(name=templategroup_name)
             groupid = result["groupids"][0]
-            logger.info("Created template group '%s' (%s)", templategroup_name, groupid)
+            logging.info("Created template group '%s' (%s)", templategroup_name, groupid)
             return groupid
         except pyzabbix.ZabbixAPIException as e:
             logging.error(
@@ -1125,10 +1125,10 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         """>=6.4 ONLY: Creates template groups for each host group in
         the mapping file."""
         if not self.config.create_templategroups:
-            logger.debug("Skipping template group creation. Feature is disabled.")
+            logging.debug("Skipping template group creation. Feature is disabled.")
             return
         elif self.zabbix_version < (6, 4, 0):
-            logger.info("Skipping template group creation. Feature requires Zabbix >= 6.4.0.")
+            logging.info("Skipping template group creation. Feature requires Zabbix >= 6.4.0.")
             return
 
         tgroups = self.api.templategroup.get(output=["name", "groupid"])
