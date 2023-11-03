@@ -1121,12 +1121,19 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             )
             return None
 
-    def create_templategroups(self, managed_hostgroup_names: Set[str], existing_hostgroups: List[Dict[str, str]]) -> None:
-        """Creates template groups for each managed host group.
-        
-        For Zabbix <6.4, host groups with the configured template group prefix
-        are created instead."""
-        tgroups = set(utils.with_prefix(hg, self.config.templategroup_prefix) for hg in managed_hostgroup_names)
+    def create_templategroups(self, existing_hostgroups: List[Dict[str, str]]) -> None:
+        """Creates template groups for each host group in the siteadmin
+        mapping file with the configured template group prefix.
+
+        For Zabbix <6.4, host groups are created instead of template groups."""
+        # Construct a set of all template group names from siteadmin mapping file
+        # by replacing the host group prefix with the template group prefix
+        tgroups = set(
+            utils.with_prefix(tg, self.config.templategroup_prefix)
+            for tg in itertools.chain.from_iterable(
+                self.siteadmin_hostgroup_map.values()
+            )
+        )
         if self.zabbix_version >= (6, 4, 0):
             logging.debug("Zabbix version is %s. Creating template groups.", self.zabbix_version)
             self._create_templategroups(tgroups)
@@ -1176,7 +1183,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         
         # Create template groups if enabled
         if self.config.create_templategroups:
-            self.create_templategroups(managed_hostgroup_names, existing_hostgroups)
+            self.create_templategroups(existing_hostgroups)
 
         zabbix_hostgroups = {}
         for zabbix_hostgroup in existing_hostgroups:

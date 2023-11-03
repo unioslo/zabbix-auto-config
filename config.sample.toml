@@ -55,7 +55,8 @@ hostgroup_disabled = "All-auto-disabled-hosts"
 hostgroup_source_prefix = "Source-"
 hostgroup_importance_prefix = "Importance-"
 
-# Template group creation (Zabbix >=6.4 only)
+# Template group creation
+# NOTE: will create host groups if enabled on Zabbix <6.4
 create_templategroups = true
 templategroup_prefix = "Templates-"
 
