@@ -1085,22 +1085,18 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             return None
 
     def create_extra_hostgroups(
-        self, existing_hostgroups: List[Dict[str, str]]
+        self, managed_hostgroup_names: Set[str], existing_hostgroups: List[Dict[str, str]]
     ) -> None:
         """Creates additonal host groups based on the prefixes specified
         in the config file. These host groups are not assigned hosts by ZAC."""
         hostgroup_names = set(h["name"] for h in existing_hostgroups)
 
         for prefix in self.config.extra_siteadmin_hostgroup_prefixes:
-            mapping = utils.mapping_values_with_prefix(
-                self.siteadmin_hostgroup_map,  # this is copied in the function
-                prefix=prefix,
-            )
-            for hostgroups in mapping.values():
-                for hostgroup in hostgroups:
-                    if hostgroup in hostgroup_names:
-                        continue
-                    self.create_hostgroup(hostgroup)
+            hgroups = [utils.with_prefix(hg, prefix) for hg in managed_hostgroup_names]
+            for hostgroup in hgroups:
+                if hostgroup in hostgroup_names:
+                    continue
+                self.create_hostgroup(hostgroup)
 
     def create_templategroup(self, templategroup_name: str) -> Optional[str]:
         if self.config.dryrun:
@@ -1172,7 +1168,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
         # Create extra host groups if necessary
         if self.config.extra_siteadmin_hostgroup_prefixes:
-            self.create_extra_hostgroups(existing_hostgroups)
+            self.create_extra_hostgroups(managed_hostgroup_names, existing_hostgroups)
         
         # Create template groups if enabled
         if self.config.create_templategroups:
