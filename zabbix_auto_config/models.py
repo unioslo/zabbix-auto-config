@@ -290,6 +290,9 @@ class ZabbixVersion(NamedTuple):
     minor: int
     patch: int
 
+    def __str__(self) -> str:
+        return f"{self.major}.{self.minor}.{self.patch}"
+
     @classmethod
     def from_version_string(cls, version_string: str) -> ZabbixVersion:
         """Constructs a ZabbixVersion from a semantic version string from the API.
