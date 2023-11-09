@@ -1146,8 +1146,6 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         """Zabbix >=6.4 template group creation method."""
         res = self.api.templategroup.get(output=["name", "groupid"])
         existing_tgroups = set(tg["name"] for tg in res)
-
-        # for templategroups in mapping.values():
         for tgroup in tgroups:
             if tgroup in existing_tgroups:
                 continue
@@ -1161,7 +1159,6 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         Creates template host groups for all groups in the siteadmin
         mapping file with the configured template group prefix."""
         existing_hgroup_names = set(h["name"] for h in existing_hostgroups)
-
         for tgroup in tgroups:
             if tgroup in existing_hgroup_names:
                 continue
