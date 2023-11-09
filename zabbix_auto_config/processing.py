@@ -13,7 +13,7 @@ import sys
 import signal
 import itertools
 import queue
-from typing import Any, Dict, List, TYPE_CHECKING, Optional
+from typing import Dict, List, TYPE_CHECKING, Optional
 
 import psycopg2
 from pydantic import ValidationError
@@ -28,7 +28,6 @@ from .errcount import RollingErrorCounter
 from ._types import HostModifierDict, SourceCollectorModule, HostModifierModule
 
 if TYPE_CHECKING:
-    from psycopg2.extensions import connection as Connection
     from psycopg2.extensions import cursor as Cursor
 
 class BaseProcess(multiprocessing.Process):
