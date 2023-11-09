@@ -3,7 +3,14 @@ import os
 from pathlib import Path
 from typing import Iterable
 import pytest
-from zabbix_auto_config.models import Host
+from zabbix_auto_config.models import (
+    Host,
+    Settings,
+    ZabbixSettings,
+    ZacSettings,
+    PropertyTaggingSettings,
+)
+
 
 @pytest.fixture(scope="function")
 def minimal_hosts():
@@ -159,6 +166,7 @@ def map_dir_with_files(
     property_hostgroup_map_file: Path,
     property_template_map_file: Path,
 ) -> Iterable[Path]:
+    """Creates all mapping files and returns the path to their directory."""
     yield map_dir
 
 
@@ -175,4 +183,38 @@ def minimal_host_obj() -> Host:
     return Host(
         enabled=True,
         hostname="foo.example.com",
+    )
+
+
+@pytest.fixture(name="config", scope="function")
+def _config(map_dir_with_files: Path, tmp_path: Path) -> Settings:
+    # NOTE: consider moving this to conftest, so we can reuse it.
+    modifier_dir = tmp_path / "host_modifiers"
+    modifier_dir.mkdir()
+    source_collector_dir = tmp_path / "source_collectors"
+    source_collector_dir.mkdir()
+    return Settings(
+        zac=ZacSettings(
+            source_collector_dir=str(source_collector_dir),
+            host_modifier_dir=str(modifier_dir),
+            db_uri="dbname='zac' user='zabbix' host='localhost' password='secret' port=5432 connect_timeout=2",
+            health_file=tmp_path / "zac_health.json",
+        ),
+        zabbix=ZabbixSettings(
+            map_dir=str(map_dir_with_files),
+            url="http://localhost",
+            username="Admin",
+            password="zabbix",
+            dryrun=False,
+            failsafe=20,
+            tags_prefix="zac_",
+            managed_inventory=[],
+            property_tagging=PropertyTaggingSettings(
+                enabled=True,
+                tag="property",
+                include=[],
+                exclude=[],
+            ),
+        ),
+        source_collectors={},
     )

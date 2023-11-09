@@ -556,7 +556,7 @@ class SourceMergerProcess(BaseProcess):
         tag_name = f"{tag_prefix}{tagging.tag}"
         new_tags = set(t for t in host.tags if t[0] != tag_name)
         matched_properties = utils.match_host_properties(
-            host, tagging.include_patterns, tagging.exclude_patterns
+            host, tagging.include, tagging.exclude
         )
         for prop in matched_properties:
             new_tags.add((tag_name, prop))

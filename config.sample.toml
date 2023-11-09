@@ -24,6 +24,7 @@ managed_inventory = ["location"]
 
 [zabbix.property_tagging]
 enabled = false
+# name of tag without prefix. e.g. "property" becomes "zac_property"
 tag = "property"
 # Regular expressions to include/exclude properties with
 include = []
