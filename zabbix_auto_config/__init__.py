@@ -114,14 +114,13 @@ def log_process_status(processes):
 
 
 def main():
+    multiprocessing_logging.install_mp_handler()
     logging.basicConfig(format='%(asctime)s %(levelname)s [%(processName)s %(process)d] [%(name)s] %(message)s', datefmt="%Y-%m-%dT%H:%M:%S%z", level=logging.DEBUG)
     config = get_config()
-
-    multiprocessing_logging.install_mp_handler()
+    logging.getLogger().setLevel(config.zac.log_level)
     logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
 
     logging.info("Main start (%d) version %s", os.getpid(), __version__)
-
     stop_event = multiprocessing.Event()
     state_manager = multiprocessing.Manager()
     processes = []
@@ -198,3 +197,7 @@ def main():
             alive_processes = [process for process in processes if process.is_alive()]
 
     logging.info("Main exit")
+
+
+if __name__ == "__main__":
+    main()

@@ -20,7 +20,6 @@ from pydantic import ValidationError
 import pyzabbix
 import requests.exceptions
 
-
 from . import exceptions
 from . import models
 from . import utils
@@ -148,8 +147,12 @@ class SourceCollectorProcess(BaseProcess):
             self.error_counter.add(exception=e)
             if self.error_counter.tolerance_exceeded():
                 if self.config.exit_on_error:
-                    logging.critical("Error tolerance exceeded. Terminating application.")
+                    logging.critical(
+                        "Error tolerance exceeded. Terminating application."
+                    )
                     self.stop_event.set()
+                    # TODO: raise exception with message above or just an empty exception?
+                    # or just return?
                 else:
                     self.disable()
 
@@ -321,6 +324,10 @@ class SourceHandlerProcess(BaseProcess):
                 current_host = current_hosts.get(host.hostname)
                 action = self.handle_source_host(db_cursor, host, current_host, source)
                 actions[action] += 1
+                if self.stop_event.is_set():
+                    logging.debug("Told to stop. Breaking")
+                    break
+        # self.db_connection.commit()
 
         logging.info(
             "Done handling hosts from source, '%s', in %.2f seconds. Equal hosts: %d, replaced hosts: %d, inserted hosts: %d, removed hosts: %d. Next update: %s",
@@ -601,6 +608,13 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 logging.info("Disabling host: '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
             except pyzabbix.ZabbixAPIException as e:
                 logging.error("Error when disabling host '%s' (%s): %s", zabbix_host["host"], zabbix_host["hostid"], e.args)
+            except IndexError:
+                logging.critical(
+                    "Disabled host group '%s' does not exist in Zabbix. Cannot disable host '%s'",
+                    self.config.hostgroup_disabled,
+                    zabbix_host.get("host"),
+                )
+                self.stop_event.set()
         else:
             logging.info("DRYRUN: Disabling host: '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
 
@@ -629,6 +643,13 @@ class ZabbixHostUpdater(ZabbixUpdater):
                     logging.info("Enabling new host: '%s' (%s)", hostname, result["hostids"][0])
             except pyzabbix.ZabbixAPIException as e:
                 logging.error("Error when enabling/creating host '%s': %s", hostname, e.args)
+            except IndexError:
+                logging.critical(
+                    "Enabled host group '%s' does not exist in Zabbix. Cannot enable host '%s'",
+                    self.config.hostgroup_all,
+                    hostname,
+                )
+                self.stop_event.set()
         else:
             logging.info("DRYRUN: Enabling host: '%s'", hostname)
 
@@ -746,6 +767,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
         if len(hostnames_to_remove) > self.config.failsafe or len(hostnames_to_add) > self.config.failsafe:
             logging.warning("Too many hosts to change (failsafe=%d). Remove: %d, Add: %d. Aborting", self.config.failsafe, len(hostnames_to_remove), len(hostnames_to_add))
+            # TODO: Don't abort here when running in dry run mode
             raise exceptions.ZACException("Failsafe triggered")
 
         for hostname in hostnames_to_remove:
