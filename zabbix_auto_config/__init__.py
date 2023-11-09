@@ -138,7 +138,9 @@ def main():
         process = processing.SourceHandlerProcess("source-handler", state_manager.dict(), config.zac.db_uri, source_hosts_queues)
         processes.append(process)
 
-        process = processing.SourceMergerProcess("source-merger", state_manager.dict(), config.zac.db_uri, config.zac.host_modifier_dir)
+        process = processing.SourceMergerProcess(
+            "source-merger", state_manager.dict(), config
+        )
         processes.append(process)
 
         process = processing.ZabbixHostUpdater("zabbix-host-updater", state_manager.dict(), config.zac.db_uri, config.zabbix)

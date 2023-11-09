@@ -22,6 +22,14 @@ managed_inventory = ["location"]
 #hostgroup_importance_prefix = "Importance-"
 #extra_siteadmin_hostgroup_prefixes = []
 
+[zabbix.property_tagging]
+enabled = false
+# name of tag without prefix. e.g. "property" becomes "zac_property"
+tag = "property"
+# Regular expressions to include/exclude properties with
+include = []
+exclude = []
+
 [source_collectors.mysource]
 module_name = "mysource"
 update_interval = 60

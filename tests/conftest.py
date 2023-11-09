@@ -3,6 +3,13 @@ import os
 from pathlib import Path
 from typing import Iterable
 import pytest
+from zabbix_auto_config.models import (
+    Host,
+    Settings,
+    ZabbixSettings,
+    ZacSettings,
+    PropertyTaggingSettings,
+)
 
 
 @pytest.fixture(scope="function")
@@ -100,8 +107,14 @@ def sample_config():
         yield config.read()
 
 
+@pytest.fixture(scope="function")
+def map_dir(tmp_path: Path) -> Iterable[Path]:
+    mapdir = tmp_path / "maps"
+    mapdir.mkdir()
+    yield mapdir
+
 @pytest.fixture
-def hostgroup_map_file(tmp_path: Path) -> Iterable[Path]:
+def hostgroup_map_file(map_dir: Path) -> Iterable[Path]:
     contents = """
 # This file defines assosiation between siteadm fetched from Nivlheim and hostsgroups in Zabbix.
 # A siteadm can be assosiated only with one hostgroup or usergroup.
@@ -119,9 +132,42 @@ user2@example.com:Hostgroup-user2-secondary
 #
 user3@example.com:Hostgroup-user3-primary
 """
-    map_file_path = tmp_path / "siteadmin_hostgroup_map.txt"
+    map_file_path = map_dir / "siteadmin_hostgroup_map.txt"
     map_file_path.write_text(contents)
     yield map_file_path
+
+
+@pytest.fixture
+def property_hostgroup_map_file(map_dir: Path) -> Iterable[Path]:
+    contents = """
+is_app_server:Role-app-servers
+is_adfs_server:Role-adfs-servers
+"""
+    map_file_path = map_dir / "property_hostgroup_map.txt"
+    map_file_path.write_text(contents)
+    yield map_file_path
+
+
+@pytest.fixture
+def property_template_map_file(map_dir: Path) -> Iterable[Path]:
+    contents = """
+is_app_server:Template-app-server
+is_adfs_server:Template-adfs-server
+"""
+    map_file_path = map_dir / "property_template_map.txt"
+    map_file_path.write_text(contents)
+    yield map_file_path
+
+
+@pytest.fixture
+def map_dir_with_files(
+    map_dir: Path,
+    hostgroup_map_file: Path,
+    property_hostgroup_map_file: Path,
+    property_template_map_file: Path,
+) -> Iterable[Path]:
+    """Creates all mapping files and returns the path to their directory."""
+    yield map_dir
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -130,3 +176,45 @@ def setup_multiprocessing_start_method() -> None:
     # when using multiprocessing-logging
     if os.uname == "Darwin":
         multiprocessing.set_start_method("fork", force=True)
+
+
+@pytest.fixture(scope="function")
+def minimal_host_obj() -> Host:
+    return Host(
+        enabled=True,
+        hostname="foo.example.com",
+    )
+
+
+@pytest.fixture(name="config", scope="function")
+def _config(map_dir_with_files: Path, tmp_path: Path) -> Settings:
+    # NOTE: consider moving this to conftest, so we can reuse it.
+    modifier_dir = tmp_path / "host_modifiers"
+    modifier_dir.mkdir()
+    source_collector_dir = tmp_path / "source_collectors"
+    source_collector_dir.mkdir()
+    return Settings(
+        zac=ZacSettings(
+            source_collector_dir=str(source_collector_dir),
+            host_modifier_dir=str(modifier_dir),
+            db_uri="dbname='zac' user='zabbix' host='localhost' password='secret' port=5432 connect_timeout=2",
+            health_file=tmp_path / "zac_health.json",
+        ),
+        zabbix=ZabbixSettings(
+            map_dir=str(map_dir_with_files),
+            url="http://localhost",
+            username="Admin",
+            password="zabbix",
+            dryrun=False,
+            failsafe=20,
+            tags_prefix="zac_",
+            managed_inventory=[],
+            property_tagging=PropertyTaggingSettings(
+                enabled=True,
+                tag="property",
+                include=[],
+                exclude=[],
+            ),
+        ),
+        source_collectors={},
+    )

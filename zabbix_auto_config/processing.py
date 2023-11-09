@@ -28,7 +28,6 @@ from .errcount import RollingErrorCounter
 from ._types import HostModifierDict, SourceCollectorModule, HostModifierModule
 
 if TYPE_CHECKING:
-    from psycopg2.extensions import connection as Connection
     from psycopg2.extensions import cursor as Cursor
 
 class BaseProcess(multiprocessing.Process):
@@ -335,13 +334,13 @@ class SourceHandlerProcess(BaseProcess):
 
 
 class SourceMergerProcess(BaseProcess):
-    def __init__(self, name, state, db_uri, host_modifier_dir):
+    def __init__(self, name: str, state: dict, config: models.Settings):
         super().__init__(name, state)
-
-        self.db_uri = db_uri
+        self.config = config
+        self.db_uri = self.config.zac.db_uri
         self.db_source_table = "hosts_source"
         self.db_hosts_table = "hosts"
-        self.host_modifier_dir = host_modifier_dir
+        self.host_modifier_dir = self.config.zac.host_modifier_dir
 
         self.host_modifiers = self.get_host_modifiers()
         logging.info("Loaded %d host modifiers: %s", len(self.host_modifiers), ", ".join([repr(modifier["name"]) for modifier in self.host_modifiers]))
@@ -435,6 +434,10 @@ class SourceMergerProcess(BaseProcess):
                     str(e),
                 )
                 # TODO: Do more?
+
+        # Set tags for host based on its properties
+        if host.properties and self.config.zabbix.property_tagging.enabled:
+            self.set_property_tags(host)
 
         if current_host:
             if current_host == host:
@@ -538,6 +541,46 @@ class SourceMergerProcess(BaseProcess):
             actions[HostAction.DELETE],
             self.next_update.isoformat(timespec="seconds"),
         )
+
+    def set_property_tags(self, host: models.Host) -> None:
+        """Adds tags to a host based on its properties.
+        
+        Modifies the Host object in-place."""
+        tagging = self.config.zabbix.property_tagging
+        tag_prefix = self.config.zabbix.tags_prefix
+
+        # Remove current property tags, then set new ones.
+        # This ensures we always discard old tags for properties that have
+        # been removed since the last time the host was collected.
+        tag_name = f"{tag_prefix}{tagging.tag}"
+        new_tags = set(t for t in host.tags if t[0] != tag_name)
+        matched_properties = utils.match_host_properties(
+            host, tagging.include, tagging.exclude
+        )
+        for prop in matched_properties:
+            new_tags.add((tag_name, prop))
+
+        # We can't directly compare new and old, because the order of the tags might be different.
+        if new_tags == host.tags:
+            logging.debug("No changes to property tags for host '%s'", host.hostname)
+            return
+
+        if self.config.zabbix.dryrun:
+            logging.info(
+                "DRYRUN: Setting property tags on host '%s'. Old: %s. New: %s",
+                host.hostname,
+                host.tags,
+                new_tags,
+            )
+            return
+
+        logging.info(
+            "Setting property tags on host '%s'. Old: %s. New: %s",
+            host.hostname,
+            host.tags,
+            new_tags,
+        )
+        host.tags = new_tags
 
 
 class ZabbixUpdater(BaseProcess):
