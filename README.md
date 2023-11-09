@@ -240,7 +240,7 @@ ZAC manages only inventory properties configured as `managed_inventory` in `conf
 
 ## Host property tagging
 
-ZAC can automatically tag hosts with their source properties. Host Properties is metadata/annotations for a host assigned by source collectors. See `collect()` function from `mysource.py` in [Application](#application) and [Source collectors](#source-collectors) for more information on how to assign properties.
+ZAC can automatically tag hosts with their source properties. Host Properties is metadata/annotations for a host assigned by source collectors or host modifiers. See `collect()` function from `mysource.py` in [Application](#application) and [Source collectors](#source-collectors) for more information on how to assign properties.
 
 By default, property tagging is disabled, but can be enabled in the config file:
 
@@ -252,9 +252,19 @@ include = []
 exclude = []
 ```
 
-With this configuration, each of the host's properties are used to create a tag with the format `property:<property_name>`. For example, if a host has the property `is_dhcp_server`, it will be tagged with `property:is_dhcp_server`. Zabbix hosts can have multiple tags with the same name as long as their values are different. For a host with multiple properties, each property will create a tag named `property` with different values corresponding to the property names.
+Property tagging uses the configured tag prefix to construct the tag name. The default tag prefix is `zac_`, but can be changed in the config file:
 
-The name of the tag can be configured with the `tag` option, so if we, for example, want to change the tag format to `role:<property_name>`, we can do so by changing the value of `tag`:
+```toml
+[zabbix]
+tags_prefix = "zac_"
+```
+
+With this configuration, each of the host's properties are used to create a tag with the format `zac_property:<property_name>`. 
+
+
+For example, if a host has the property `is_dhcp_server`, it will be tagged with `zac_property:is_dhcp_server`. Zabbix hosts can have multiple tags with the same name as long as their values are different. For a host with multiple properties, each property will create a tag named `zac_property` with different values corresponding to the property names.
+
+The name of the tag can be configured with the `tag` option, so if we, for example, want to change the tag format to `zac_role:<property_name>`, we can do so by changing the value of `tag`:
 
 ```toml
 tag = "role"
@@ -262,7 +272,7 @@ tag = "role"
 
 ### Filtering
 
-The properties used for tagging can be filtered using the options `include` & `exclude`, which are lists of regular expressions. If no patterns are included, all properties are used.
+The properties used for tagging can be filtered using the options `include` & `exclude`, which are lists of regular expressions. If no patterns are provided, all properties are used.
 
 If a host has a property called `broken_server` and we want to exclude it from being used as a tag, we can add an exclude pattern:
 
@@ -279,6 +289,18 @@ exclude = ["broken_.*"]
 If we only want to include properties that follow the `is_<type>_server` pattern, we can use an include pattern:
 ```toml
 include = ["is_.*_server"]
+```
+
+Given multiple include patterns, properties must match at least one pattern to be included:
+
+```toml
+include = ["is_.*_server", "is_.*_host"]
+```
+
+More advanced include patterns can be used to match multiple properties with a single pattern:
+
+```toml
+include = ["is_(good|bad)_(server|host)"]
 ```
 
 We can also combine include and exclude patterns to create more advanced filters:
