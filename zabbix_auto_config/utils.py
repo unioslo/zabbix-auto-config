@@ -188,7 +188,7 @@ def matches_patterns(text: str, patterns: List[re.Pattern]) -> Optional[re.Patte
 
 
 def match_host_properties(
-    host: "Host", include_patterns: List[re.Pattern], exclude_patterns: List[re.Pattern]
+    host: "Host", include: List[re.Pattern], exclude: List[re.Pattern]
 ) -> Set[str]:
     """Matches a host's properties based on include and exclude patterns.
 
@@ -198,10 +198,10 @@ def match_host_properties(
     ----------
     host : Host
         A Zabbix Host object.
-    include_patterns : List[re.Pattern]
+    include : List[re.Pattern]
         List of compiled regexps to match against the host's properties.
         If non-empty, at least one include pattern must match.
-    exclude_patterns : List[re.Pattern]
+    exclude : List[re.Pattern]
         List of compiled regexps to match against the host's properties.
         If non-empty, no exclude pattern must match.
 
@@ -212,8 +212,8 @@ def match_host_properties(
     """
     matched_properties = set()  # type: set[str]
     for prop in host.properties:
-        if exclude_patterns:
-            matched = matches_patterns(prop, exclude_patterns)
+        if exclude:
+            matched = matches_patterns(prop, exclude)
             if matched:
                 logging.debug(
                     "Skipping property '%s' for host '%s' (exclude pattern: '%s')",
@@ -222,8 +222,8 @@ def match_host_properties(
                     matched.pattern,
                 )
                 continue
-        if include_patterns:
-            matched = matches_patterns(prop, include_patterns)
+        if include:
+            matched = matches_patterns(prop, include)
             if not matched:
                 logging.debug(
                     "Skipping property '%s' for host '%s'. No include patterns matched.",

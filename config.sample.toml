@@ -25,8 +25,9 @@ managed_inventory = ["location"]
 [zabbix.property_tagging]
 enabled = false
 tag = "property"
-include_patterns = []
-exclude_patterns = []
+# Regular expressions to include/exclude properties with
+include = []
+exclude = []
 
 [source_collectors.mysource]
 module_name = "mysource"

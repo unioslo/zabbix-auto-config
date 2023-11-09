@@ -22,8 +22,8 @@ def _zabbix_settings(map_dir_with_files: Path) -> ZabbixSettings:
         property_tagging=PropertyTaggingSettings(
             enabled=True,
             tag="property",
-            include_patterns=[],
-            exclude_patterns=[],
+            include=[],
+            exclude=[],
         ),
     )
 

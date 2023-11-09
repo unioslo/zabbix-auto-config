@@ -235,7 +235,7 @@ def test_mapping_values_with_prefix_no_prefix_separator(
 
 
 @pytest.mark.parametrize(
-    "properties,include_patterns,exclude_patterns,expected",
+    "properties,include,exclude,expected",
     [
         pytest.param(
             {"is_app_server", "is_adfs_server"},
@@ -284,13 +284,13 @@ def test_mapping_values_with_prefix_no_prefix_separator(
 def test_match_host_properties(
     minimal_host_obj: Host,
     properties: Set[str],
-    include_patterns: List[re.Pattern],
-    exclude_patterns: List[re.Pattern],
+    include: List[re.Pattern],
+    exclude: List[re.Pattern],
     expected: Set[str],
 ) -> None:
     host = minimal_host_obj
     host.properties = properties
     assert (
-        utils.match_host_properties(host, include_patterns, exclude_patterns)
+        utils.match_host_properties(host, include, exclude)
         == expected
     )

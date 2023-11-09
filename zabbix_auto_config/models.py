@@ -37,8 +37,8 @@ class ConfigBaseModel(PydanticBaseModel, extra="ignore"):
 class PropertyTaggingSettings(ConfigBaseModel):
     enabled: bool = False
     tag: str = "property"
-    include_patterns: List[Pattern] = []
-    exclude_patterns: List[Pattern] = []
+    include: List[Pattern] = []
+    exclude: List[Pattern] = []
 
 
 class ZabbixSettings(ConfigBaseModel):

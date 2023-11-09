@@ -248,8 +248,8 @@ By default, property tagging is disabled, but can be enabled in the config file:
 [zabbix.property_tagging]
 enabled = true
 tag = "property"
-include_patterns = []
-exclude_patterns = []
+include = []
+exclude = []
 ```
 
 With this configuration, each of the host's properties are used to create a tag with the format `property:<property_name>`. For example, if a host has the property `is_dhcp_server`, it will be tagged with `property:is_dhcp_server`. Zabbix hosts can have multiple tags with the same name as long as their values are different. For a host with multiple properties, each property will create a tag named `property` with different values corresponding to the property names.
@@ -262,28 +262,28 @@ tag = "role"
 
 ### Filtering
 
-The properties used for tagging can be filtered using the options `include_patterns` & `exclude_patterns`, which are lists of regular expressions. If no patterns are included, all properties are used.
+The properties used for tagging can be filtered using the options `include` & `exclude`, which are lists of regular expressions. If no patterns are included, all properties are used.
 
 If a host has a property called `broken_server` and we want to exclude it from being used as a tag, we can add an exclude pattern:
 
 ```toml
-exclude_patterns = ["broken_server"]
+exclude = ["broken_server"]
 ```
 
 If we want to exclude all properties starting with `broken_`, we can add a wildcard pattern:
 
 ```toml
-exclude_patterns = ["broken_.*"]
+exclude = ["broken_.*"]
 ```
 
 If we only want to include properties that follow the `is_<type>_server` pattern, we can use an include pattern:
 ```toml
-include_patterns = ["is_.*_server"]
+include = ["is_.*_server"]
 ```
 
 We can also combine include and exclude patterns to create more advanced filters:
 
 ```toml
-include_patterns = ["is_.*_server"]
-exclude_patterns = ["is_broken_server", "is_bad_server"]
+include = ["is_.*_server"]
+exclude = ["is_broken_server", "is_bad_server"]
 ```
