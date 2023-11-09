@@ -168,7 +168,7 @@ def test_zacsettings_log_level_serialize() -> None:
     settings = models.ZacSettings(
         db_uri="", source_collector_dir="", host_modifier_dir="", log_level=logging.INFO
     )
-    assert logging.INFO == 20  # sanity check
+    assert settings.log_level == logging.INFO == 20  # sanity check
 
     # Serialize to dict:
     settings_dict = settings.model_dump()
