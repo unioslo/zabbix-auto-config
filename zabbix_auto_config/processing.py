@@ -20,6 +20,7 @@ from pydantic import ValidationError
 import pyzabbix
 import requests.exceptions
 
+
 from . import exceptions
 from . import models
 from . import utils
