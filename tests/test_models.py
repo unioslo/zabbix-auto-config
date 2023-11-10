@@ -1,3 +1,4 @@
+import logging
 import pytest
 from pydantic import ValidationError
 from zabbix_auto_config import models
@@ -114,3 +115,65 @@ def test_host_merge_invalid(full_hosts):
     h1 = models.Host(**host)
     with pytest.raises(TypeError):
         h1.merge(object())
+
+
+@pytest.mark.parametrize(
+    "level,expect",
+    [
+        ["notset", logging.NOTSET],
+        ["debug", logging.DEBUG],
+        ["info", logging.INFO],
+        ["warn", logging.WARN],
+        ["warning", logging.WARNING],
+        ["error", logging.ERROR],
+        ["fatal", logging.FATAL],
+        ["critical", logging.CRITICAL],
+    ],
+)
+@pytest.mark.parametrize("upper", [True, False])
+def test_zacsettings_log_level_str(level: str, expect: int, upper: bool) -> None:
+    settings = models.ZacSettings(
+        db_uri="",
+        source_collector_dir="",
+        host_modifier_dir="",
+        log_level=level.upper() if upper else level.lower(),
+    )
+    assert settings.log_level == expect
+
+
+@pytest.mark.parametrize(
+    "level,expect",
+    [
+        [0, logging.NOTSET],
+        [10, logging.DEBUG],
+        [20, logging.INFO],
+        [30, logging.WARN],
+        [30, logging.WARNING],
+        [40, logging.ERROR],
+        [50, logging.FATAL],
+        [50, logging.CRITICAL],
+    ],
+)
+def test_zacsettings_log_level_int(level: str, expect: int) -> None:
+    settings = models.ZacSettings(
+        db_uri="",
+        source_collector_dir="",
+        host_modifier_dir="",
+        log_level=level,
+    )
+    assert settings.log_level == expect
+
+
+def test_zacsettings_log_level_serialize() -> None:
+    settings = models.ZacSettings(
+        db_uri="", source_collector_dir="", host_modifier_dir="", log_level=logging.INFO
+    )
+    assert settings.log_level == logging.INFO == 20  # sanity check
+
+    # Serialize to dict:
+    settings_dict = settings.model_dump()
+    assert settings_dict["log_level"] == "INFO"
+
+    # Serialize to JSON:
+    settings_json = settings.model_dump_json()
+    assert '"log_level":"INFO"' in settings_json

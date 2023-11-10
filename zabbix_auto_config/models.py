@@ -4,7 +4,13 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from pydantic import BaseModel
 from pydantic import BaseModel as PydanticBaseModel
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    ConfigDict,
+    Field,
+    field_validator,
+    field_serializer,
+    model_validator,
+)
 from typing_extensions import Annotated
 
 from . import utils
@@ -60,11 +66,43 @@ class ZabbixSettings(ConfigBaseModel):
     # These groups are not managed by ZAC beyond creating them.
     extra_siteadmin_hostgroup_prefixes: Set[str] = set()
 
+
 class ZacSettings(ConfigBaseModel):
     source_collector_dir: str
     host_modifier_dir: str
     db_uri: str
     health_file: Optional[Path] = None
+    log_level: int = Field(logging.DEBUG, description="The log level to use.")
+
+    @field_serializer("log_level")
+    def _serialize_log_level(self, v: str) -> str:
+        """Serializes the log level as a string.
+        Ensures consistent semantics between loading/storing log level in config.
+        E.g. we dump `"INFO"` instead of `20`.
+        """
+        return logging.getLevelName(v)
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _validate_log_level(cls, v: Any) -> int:
+        """Validates the log level and converts it to an integer.
+        The log level can be specified as an integer or a string."""
+        if isinstance(v, int):
+            if v not in logging._levelToName:
+                raise ValueError(
+                    f"Invalid log level: {v} is not a valid log level integer."
+                )
+            return v
+        elif isinstance(v, str):
+            v = v.upper()
+            level_int = logging._nameToLevel.get(v, None)
+            if level_int is None:
+                raise ValueError(
+                    f"Invalid log level: {v} is not a valid log level name."
+                )
+            return level_int
+        else:
+            raise TypeError("Log level must be an integer or string.")
 
 
 class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
