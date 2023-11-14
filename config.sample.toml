@@ -56,7 +56,7 @@ hostgroup_source_prefix = "Source-"
 hostgroup_importance_prefix = "Importance-"
 
 # Template group creation
-# NOTE: will create host groups if enabled on Zabbix <6.4
+# NOTE: will create host groups if enabled on Zabbix <6.2
 create_templategroups = true
 templategroup_prefix = "Templates-"
 
