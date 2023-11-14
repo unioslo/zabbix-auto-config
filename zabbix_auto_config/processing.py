@@ -15,6 +15,7 @@ import itertools
 import queue
 from typing import Dict, List, TYPE_CHECKING, Optional, Set
 
+from packaging.version import Version
 import psycopg2
 from pydantic import ValidationError
 import pyzabbix
@@ -605,7 +606,7 @@ class ZabbixUpdater(BaseProcess):
         )
 
         ver = self.api.apiinfo.version()
-        self.zabbix_version = models.ZabbixVersion.from_version_string(ver)
+        self.zabbix_version = Version(ver)
 
     def work(self):
         start_time = time.time()
@@ -1125,7 +1126,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         """Creates template groups for each host group in the siteadmin
         mapping file with the configured template group prefix.
 
-        For Zabbix <6.4, host groups are created instead of template groups."""
+        For Zabbix <6.2, host groups are created instead of template groups."""
         # Construct a set of all template group names from siteadmin mapping file
         # by replacing the host group prefix with the template group prefix
         tgroups = set(
@@ -1134,16 +1135,16 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 self.siteadmin_hostgroup_map.values()
             )
         )
-        if self.zabbix_version >= (6, 4, 0):
+        if self.zabbix_version.release >= (6, 2, 0):
             logging.debug("Zabbix version is %s. Creating template groups.", self.zabbix_version)
             self._create_templategroups(tgroups)
         else:
             logging.debug("Zabbix version is %s. Creating template groups as host groups.", self.zabbix_version)
-            self._create_templategroups_pre_64_compat(tgroups, existing_hostgroups)
+            self._create_templategroups_pre_62_compat(tgroups, existing_hostgroups)
 
         
     def _create_templategroups(self, tgroups: Set[str]) -> None:
-        """Zabbix >=6.4 template group creation method."""
+        """Zabbix >=6.2 template group creation method."""
         res = self.api.templategroup.get(output=["name", "groupid"])
         existing_tgroups = set(tg["name"] for tg in res)
         for tgroup in tgroups:
@@ -1151,9 +1152,9 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 continue
             self.create_templategroup(tgroup)
 
-    def _create_templategroups_pre_64_compat(self, tgroups: Set[str], existing_hostgroups: List[Dict[str, str]]) -> None:
-        """Zabbix <6.4 template group compatibility fallback method.
-        Template groups don't exist in Zabbix <6.4, so we create host
+    def _create_templategroups_pre_62_compat(self, tgroups: Set[str], existing_hostgroups: List[Dict[str, str]]) -> None:
+        """Zabbix <6.2 template group compatibility fallback method.
+        Template groups don't exist in Zabbix <6.2, so we create host
         groups to fulfill the same purpose.
         
         Creates template host groups for all groups in the siteadmin
