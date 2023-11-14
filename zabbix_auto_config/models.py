@@ -46,6 +46,10 @@ class ZabbixSettings(ConfigBaseModel):
     username: str
     password: str
     dryrun: bool
+    timeout: int = Field(
+        60,
+        description="The timeout in seconds for HTTP requests to Zabbix.",
+    )
 
     tags_prefix: str = "zac_"
     managed_inventory: List[str] = []

@@ -12,6 +12,7 @@ username = "Admin"
 password = "zabbix"
 dryrun = true
 failsafe = 20
+timeout = 60                     # Zabbix API timeout in seconds
 tags_prefix = "zac_"
 managed_inventory = ["location"]
 
