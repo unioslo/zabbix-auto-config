@@ -66,6 +66,9 @@ class BaseProcess(multiprocessing.Process):
                 except exceptions.ZACException as e:
                     logging.error("Work exception: %s", str(e))
                     self.state["ok"] = False
+                except requests.exceptions.Timeout as e:
+                    logging.error("Timeout exception: %s", str(e))
+                    self.state["ok"] = False
 
                 if self.update_interval > 1 and self.next_update < datetime.datetime.now():
                     # Only log warning when update_interval is actually changed from default
@@ -561,7 +564,10 @@ class ZabbixUpdater(BaseProcess):
         pyzabbix_logger = logging.getLogger("pyzabbix")
         pyzabbix_logger.setLevel(logging.ERROR)
 
-        self.api = pyzabbix.ZabbixAPI(self.config.url)
+        self.api = pyzabbix.ZabbixAPI(
+            self.config.url,
+            timeout=self.config.timeout,  # timeout for connect AND read
+        )
         try:
             self.api.login(self.config.username, self.config.password)
         except requests.exceptions.ConnectionError as e:
@@ -569,6 +575,11 @@ class ZabbixUpdater(BaseProcess):
             raise exceptions.ZACException(*e.args)
         except (pyzabbix.ZabbixAPIException, requests.exceptions.HTTPError) as e:
             logging.error("Unable to login to Zabbix API: %s", str(e))
+            raise exceptions.ZACException(*e.args)
+        except requests.exceptions.Timeout as e:
+            logging.error(
+                "Timed out while connecting to Zabbix API: %s", self.config.url
+            )
             raise exceptions.ZACException(*e.args)
 
         self.property_template_map = utils.read_map_file(

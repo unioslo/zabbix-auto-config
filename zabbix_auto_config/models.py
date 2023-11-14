@@ -46,6 +46,11 @@ class ZabbixSettings(ConfigBaseModel):
     username: str
     password: str
     dryrun: bool
+    timeout: Optional[int] = Field(
+        60,
+        description="The timeout in seconds for HTTP requests to Zabbix.",
+        ge=0,
+    )
 
     tags_prefix: str = "zac_"
     managed_inventory: List[str] = []
@@ -66,6 +71,12 @@ class ZabbixSettings(ConfigBaseModel):
     # These groups are not managed by ZAC beyond creating them.
     extra_siteadmin_hostgroup_prefixes: Set[str] = set()
 
+    @field_validator("timeout")
+    @classmethod
+    def _validate_timeout(cls, v: Optional[int]) -> Optional[int]:
+        if v == 0:
+            return None
+        return v
 
 class ZacSettings(ConfigBaseModel):
     source_collector_dir: str

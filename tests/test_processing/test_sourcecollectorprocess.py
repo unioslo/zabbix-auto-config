@@ -2,6 +2,8 @@ import multiprocessing
 import time
 from typing import List
 
+import pytest
+
 from zabbix_auto_config.processing import SourceCollectorProcess
 from zabbix_auto_config.models import Host, SourceCollectorSettings
 
@@ -16,12 +18,7 @@ class SourceCollector:
         return [host, host]
 
 
-class FaultySourceCollector:
-    @staticmethod
-    def collect(*args, **kwargs) -> List[Host]:
-        raise Exception("Source collector error!!")
-
-
+@pytest.mark.timeout(5)
 def test_source_collector_process():
     process = SourceCollectorProcess(
         name="test-source",
@@ -38,25 +35,25 @@ def test_source_collector_process():
         source_hosts_queue=multiprocessing.Queue(),
     )
 
-    process.start()
-
-    # FIXME: this is potentially flaky!
-    # We wait for the process to start up completely before we
-    # set the stop event. In order to not have to rewrite the class,
-    # we just wait for a bit. This is not ideal.
-    # The alternative is passing in a an Event which is set when the class
-    # enters run() for the first time. However, this would require a rewrite
-    # of the class and all callers of it, so we'll just wait for now.
-    time.sleep(0.5)  # wait for process to start
-    process.stop_event.set()
-    process.join(timeout=0.1)
-
-    hosts = process.source_hosts_queue.get()
-    assert len(hosts["hosts"]) == 2
-    assert hosts["hosts"][0].hostname == "foo.example.com"
-    assert process.state["ok"] is True
+    try:
+        process.start()
+        hosts = process.source_hosts_queue.get()
+        assert len(hosts["hosts"]) == 2
+        assert hosts["hosts"][0].hostname == "foo.example.com"
+        assert process.state["ok"] is True
+    finally:
+        process.stop_event.set()
+        process.join(timeout=0.01)
 
 
+# NOTE: Has to be defined in the global scope to be pickleable by multiprocessing
+class FaultySourceCollector:
+    @staticmethod
+    def collect(*args, **kwargs) -> List[Host]:
+        raise Exception("Source collector error!!")
+
+
+@pytest.mark.timeout(5)
 def test_source_collector_disable_on_failure():
     process = SourceCollectorProcess(
         name="test-source",
@@ -72,17 +69,14 @@ def test_source_collector_disable_on_failure():
         ),
         source_hosts_queue=multiprocessing.Queue(),
     )
-    # FIXME: potentially flaky test!
-    # In addition to the problem described in the test above,
-    # if we terminate the process before it has the chance to
-    # set state["ok"] to False, the test will fail.
-    process.start()
-    time.sleep(1.5)  # wait for process to start
-    process.stop_event.set()
-    process.join(timeout=0.5)
 
-    assert process.state["ok"] is False
-    assert process.source_hosts_queue.empty() is True
-
-    # TODO: assert that process is disabled.
-    # We probably need to add disablement info to state dict
+    # Start process and wait until it fails
+    try:
+        process.start()
+        while process.state["ok"] is True:
+            time.sleep(0.01)
+        assert process.state["ok"] is False
+        assert process.source_hosts_queue.empty() is True
+        process.stop_event.set()
+    finally:
+        process.join(timeout=0.01)
