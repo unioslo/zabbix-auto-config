@@ -53,7 +53,6 @@ class ZabbixSettings(ConfigBaseModel):
         description="The timeout in seconds for HTTP requests to Zabbix.",
         ge=0,
     )
-    create_templategroups: bool = True
 
     tags_prefix: str = "zac_"
     managed_inventory: List[str] = []
