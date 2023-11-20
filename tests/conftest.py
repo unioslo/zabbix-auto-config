@@ -1,8 +1,10 @@
 import multiprocessing
 import os
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Type
+from unittest.mock import MagicMock
 import pytest
+from unittest import mock
 
 
 @pytest.fixture(scope="function")
@@ -130,3 +132,32 @@ def setup_multiprocessing_start_method() -> None:
     # when using multiprocessing-logging
     if os.uname == "Darwin":
         multiprocessing.set_start_method("fork", force=True)
+
+
+class PicklableMock(MagicMock):
+    def __reduce__(self):
+        return (MagicMock, ())
+
+
+class MockZabbixAPI(PicklableMock):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.apiinfo = PicklableMock()
+        self.apiinfo.version = PicklableMock(return_value="5.0.0")
+        self.login = PicklableMock()
+
+
+# NOTE: if doing integration testing in the future, the definitions of these
+# fixtures should be dependent on some env var, which enables/disables mocking
+
+
+@pytest.fixture(autouse=True)
+def mock_zabbix_api() -> Iterable[Type[MockZabbixAPI]]:
+    with mock.patch("pyzabbix.ZabbixAPI", new=MockZabbixAPI) as api_mock:
+        yield api_mock
+
+
+@pytest.fixture()
+def mock_psycopg2_connect() -> Iterable[PicklableMock]:
+    with mock.patch("psycopg2.connect", PicklableMock()) as psycopg_mock:
+        yield psycopg_mock
