@@ -1,4 +1,3 @@
-import multiprocessing
 from pathlib import Path
 import time
 from unittest.mock import patch
@@ -49,7 +48,6 @@ def test_zabbixupdater_connect_timeout(mock_psycopg2_connect):
 class TimeoutUpdater(ZabbixUpdater):
     def do_update(self):
         raise requests.exceptions.ReadTimeout("read timeout")
-
 
 
 @pytest.mark.timeout(5)
