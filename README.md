@@ -45,10 +45,41 @@ EOF
 
 ## Application
 
+### Installation (production)
+
+For production, installing the project in a virtual environment directly with pip is the recommended way to go:
+
 ```bash
-python3 -m venv venv
+python -m venv venv
 . venv/bin/activate
 pip install -e .
+```
+
+### Installation (development)
+
+For local development, installing through Hatch is highly recommended. Hatch automatically creates a virtual environment and installs all application and development dependencies. If Hatch is not installed, install it with pipx:
+
+```bash
+pipx install hatch
+```
+
+Install the application with Hatch and enter the virtual environment:
+
+```bash
+hatch shell
+```
+
+The current Hatch environment can be found with: 
+
+```bash
+hatch env find
+```
+
+### Configuration (testing)
+
+A ZAC environment with mock source collectors, host modifiers, and mapping files can be set up with the following commands:
+
+```bash
 cp config.sample.toml config.toml
 sed -i 's/^dryrun = true$/dryrun = false/g' config.toml
 mkdir -p path/to/source_collector_dir/ path/to/host_modifier_dir/ path/to/map_dir/
@@ -104,7 +135,9 @@ bob@example.com:Hostgroup-bob-hosts
 EOF
 ```
 
-Run the application:
+### Running
+
+Installing the application adds the `zac` command to your path. You can run the application with:
 
 ```bash
 zac
