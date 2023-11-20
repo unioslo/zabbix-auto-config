@@ -6,6 +6,7 @@ import pytest
 
 from zabbix_auto_config.processing import SourceCollectorProcess
 from zabbix_auto_config.models import Host, SourceCollectorSettings
+from zabbix_auto_config.state import get_manager
 
 
 class SourceCollector:
@@ -22,7 +23,7 @@ class SourceCollector:
 def test_source_collector_process():
     process = SourceCollectorProcess(
         name="test-source",
-        state=multiprocessing.Manager().dict(),
+        state=get_manager().State(),
         module=SourceCollector,
         config=SourceCollectorSettings(
             module_name="source_collector",
@@ -40,7 +41,7 @@ def test_source_collector_process():
         hosts = process.source_hosts_queue.get()
         assert len(hosts["hosts"]) == 2
         assert hosts["hosts"][0].hostname == "foo.example.com"
-        assert process.state["ok"] is True
+        assert process.state.ok is True
     finally:
         process.stop_event.set()
         process.join(timeout=0.01)
@@ -57,7 +58,7 @@ class FaultySourceCollector:
 def test_source_collector_disable_on_failure():
     process = SourceCollectorProcess(
         name="test-source",
-        state=multiprocessing.Manager().dict(),
+        state=get_manager().State(),
         module=FaultySourceCollector,
         config=SourceCollectorSettings(
             module_name="faulty_source_collector",
@@ -73,9 +74,9 @@ def test_source_collector_disable_on_failure():
     # Start process and wait until it fails
     try:
         process.start()
-        while process.state["ok"] is True:
+        while process.state.ok is True:
             time.sleep(0.01)
-        assert process.state["ok"] is False
+        assert process.state.ok is False
         assert process.source_hosts_queue.empty() is True
         process.stop_event.set()
     finally:

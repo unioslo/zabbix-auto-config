@@ -10,6 +10,7 @@ from zabbix_auto_config import exceptions
 
 from zabbix_auto_config.models import ZabbixSettings
 from zabbix_auto_config.processing import ZabbixUpdater
+from zabbix_auto_config.state import get_manager
 
 
 def raises_connect_timeout(*args, **kwargs):
@@ -32,7 +33,7 @@ def test_zabbixupdater_connect_timeout(mock_psycopg2_connect):
         ZabbixUpdater(
             name="connect-timeout",
             db_uri="",
-            state=multiprocessing.Manager().State(),
+            state=get_manager().State(),
             zabbix_config=ZabbixSettings(
                 map_dir="",
                 url="",
@@ -63,7 +64,7 @@ def test_zabbixupdater_read_timeout(tmp_path: Path, mock_psycopg2_connect):
     process = TimeoutUpdater(
         name="read-timeout",
         db_uri="",
-        state=multiprocessing.Manager().dict(),
+        state=get_manager().State(),
         zabbix_config=ZabbixSettings(
             map_dir=str(map_dir),
             url="",
@@ -77,9 +78,11 @@ def test_zabbixupdater_read_timeout(tmp_path: Path, mock_psycopg2_connect):
     # Start the process and wait for it to be marked as unhealthy
     try:
         process.start()
-        while process.state["ok"] is True:
+        while process.state.ok is True:
             time.sleep(0.1)
-        assert process.state["ok"] is False
+        assert process.state.ok is False
+        assert process.state.error_type == "ReadTimeout"
+        assert process.state.error_count == 1
         process.stop_event.set()
     finally:
         process.join(timeout=0.01)
