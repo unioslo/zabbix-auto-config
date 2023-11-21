@@ -19,9 +19,7 @@ from . import exceptions
 from . import models
 from . import processing
 from ._types import SourceCollectorDict, SourceCollectorModule
-
-
-__version__ = importlib.metadata.version(os.path.basename(os.path.dirname(__file__)))
+from .__about__ import __version__
 
 
 def get_source_collectors(config: models.Settings) -> List[SourceCollectorDict]:
