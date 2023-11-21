@@ -55,27 +55,7 @@ python -m venv venv
 pip install -e .
 ```
 
-### Installation (development)
-
-For local development, installing through Hatch is highly recommended. Hatch automatically creates a virtual environment and installs all application and development dependencies. If Hatch is not installed, install it with pipx:
-
-```bash
-pipx install hatch
-```
-
-Install the application with Hatch and enter the virtual environment:
-
-```bash
-hatch shell
-```
-
-The current Hatch environment can be found with: 
-
-```bash
-hatch env find
-```
-
-### Configuration (testing)
+### Configuration (mock environment)
 
 A ZAC environment with mock source collectors, host modifiers, and mapping files can be set up with the following commands:
 
@@ -271,3 +251,42 @@ Zac manages only inventory properties configured as `managed_inventory` in `conf
 2. Remove the "location" property from the host in the source
 3. "location=x" will remain in Zabbix
 
+## Development
+
+We use the project management tool [Hatch](https://hatch.pypa.io/latest/) for developing the project. The tool manages virtual environment creation, dependency installation, as well as building and publishing of the project, and more.
+
+Install Hatch with pipx:
+
+```bash
+pipx install hatch
+```
+
+Install the application with Hatch and enter the virtual environment:
+
+```bash
+hatch shell
+```
+
+The path to the current Hatch environment can always be found with: 
+
+```bash
+hatch env find
+```
+
+### Testing
+
+Inside a Hatch environment, tests can be run in two ways.
+
+With Hatch:
+
+```bash
+hatch run test
+```
+
+Or by directly invoking pytest:
+
+```bash
+pytest
+```
+
+The only difference is that Hatch will automatically check dependencies and install/upgrade them if necessary before running the tests.
