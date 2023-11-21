@@ -290,3 +290,12 @@ pytest
 ```
 
 The only difference is that Hatch will automatically check dependencies and install/upgrade them if necessary before running the tests.
+
+#### Testing without Hatch
+
+If you just want to run tests without Hatch, you can do so by installing the development dependencies independently:
+
+```bash
+# Set up venv or similar ...
+pip install .[test]
+```
