@@ -4,6 +4,12 @@ Zabbix-auto-config is an utility that aims to automatically configure hosts, hos
 
 Note: This is only tested with Zabbix 5.0 LTS.
 
+## Requirements
+
+* Python >=3.8
+* pip >=21.3
+* Zabbix >=5.0
+
 # Quick start
 
 This is a crash course in how to quickly get this application up and running in a local test environment:
@@ -45,10 +51,23 @@ EOF
 
 ## Application
 
+### Installation (production)
+
+For production, installing the project in a virtual environment directly with pip is the recommended way to go:
+
 ```bash
-python3 -m venv venv
+python -m venv venv
 . venv/bin/activate
 pip install -e .
+```
+
+When installing from source, installing in editable mode is recommended, as it allows for pulling in changes from git without having to reinstall the project.
+
+### Configuration (mock environment)
+
+A ZAC environment with mock source collectors, host modifiers, and mapping files can be set up with the following commands:
+
+```bash
 cp config.sample.toml config.toml
 sed -i 's/^dryrun = true$/dryrun = false/g' config.toml
 mkdir -p path/to/source_collector_dir/ path/to/host_modifier_dir/ path/to/map_dir/
@@ -104,7 +123,9 @@ bob@example.com:Hostgroup-bob-hosts
 EOF
 ```
 
-Run the application:
+### Running
+
+Installing the application adds the `zac` command to your path. You can run the application with:
 
 ```bash
 zac
@@ -238,3 +259,51 @@ Zac manages only inventory properties configured as `managed_inventory` in `conf
 2. Remove the "location" property from the host in the source
 3. "location=x" will remain in Zabbix
 
+## Development
+
+We use the project management tool [Hatch](https://hatch.pypa.io/latest/) for developing the project. The tool manages virtual environment creation, dependency installation, as well as building and publishing of the project, and more.
+
+Install Hatch with pipx:
+
+```bash
+pipx install hatch
+```
+
+Install the application with Hatch and enter the virtual environment:
+
+```bash
+hatch shell
+```
+
+The path to the current Hatch environment can always be found with: 
+
+```bash
+hatch env find
+```
+
+### Testing
+
+Inside a Hatch environment, tests can be run in two ways.
+
+With Hatch:
+
+```bash
+hatch run test
+```
+
+Or by directly invoking pytest:
+
+```bash
+pytest
+```
+
+The only difference is that Hatch will automatically check dependencies and install/upgrade them if necessary before running the tests.
+
+#### Testing without Hatch
+
+If you just want to run tests without Hatch, you can do so by installing the development dependencies independently:
+
+```bash
+# Set up venv or similar ...
+pip install .[test]
+```
