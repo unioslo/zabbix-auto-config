@@ -4,14 +4,15 @@ Zabbix-auto-config is an utility that aims to automatically configure hosts, hos
 
 Note: This is only tested with Zabbix 5.0 LTS.
 
+## Requirements
+
+* Python >=3.8
+* pip >=21.3
+* Zabbix >=5.0
+
 # Quick start
 
 This is a crash course in how to quickly get this application up and running in a local test environment:
-
-## Requirements
-
-* Python 3.8+
-* pip 21.3+
 
 ## Zabbix test instance
 
