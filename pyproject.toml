@@ -52,7 +52,7 @@ dependencies = ["zabbix-auto-config[test]"]
 test = "pytest {args}"
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/.github", "/tests", "/path", "venv"]
+exclude = ["/.github", "/tests", "/path"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["zabbix_auto_config"]
