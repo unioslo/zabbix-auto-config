@@ -8,6 +8,11 @@ Note: This is only tested with Zabbix 5.0 LTS.
 
 This is a crash course in how to quickly get this application up and running in a local test environment:
 
+## Requirements
+
+* Python 3.8+
+* pip 21.3+
+
 ## Zabbix test instance
 
 Setup a Zabbix test instance with [podman](https://podman.io/) and [podman-compose](https://github.com/containers/podman-compose/).
@@ -54,6 +59,8 @@ python -m venv venv
 . venv/bin/activate
 pip install -e .
 ```
+
+When installing from source, installing in editable mode is recommended, as it allows for pulling in changes from git without having to reinstall the project.
 
 ### Configuration (mock environment)
 
