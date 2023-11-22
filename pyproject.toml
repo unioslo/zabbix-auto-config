@@ -31,7 +31,7 @@ dependencies = [
     "pyzabbix>=1.3.0",
     "requests>=1.0.0",
     "tomli>=2.0.0",
-    "packaging>=24.0",
+    "packaging>=23.2",
 ]
 
 [project.optional-dependencies]
