@@ -147,3 +147,32 @@ def test_state_asdict_ok(use_manager: bool) -> None:
         "error_count": 0,
         "error_time": None,
     }
+
+
+class CustomException(Exception):
+    pass
+
+
+@pytest.mark.parametrize("use_manager", [True, False])
+def test_state_asdict_error(use_manager: bool) -> None:
+    if use_manager:
+        state = get_manager().State()
+    else:
+        state = State()
+
+    # Mocking datetime in subprocesses is a bit of a chore, so we just
+    # check that the error_time is a timestamp value within a given range
+    pre = datetime.datetime.now().timestamp()
+    state.set_error(CustomException("Test error"))
+    post = datetime.datetime.now().timestamp()
+    d = state.asdict()
+
+    assert post >= d["error_time"] >= pre
+    d.pop("error_time")
+
+    assert d == {
+        "ok": False,
+        "error": "Test error",
+        "error_type": "CustomException",
+        "error_count": 1,
+    }
