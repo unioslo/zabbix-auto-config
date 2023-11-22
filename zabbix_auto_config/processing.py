@@ -163,8 +163,8 @@ class SourceCollectorProcess(BaseProcess):
                 else:
                     self.disable()
             raise exceptions.ZACException(
-                f"Failed to collect from source {self.name!r}"
-            )
+                f"Failed to collect from source {self.name!r}: {e}"
+            ) from e
 
     def disable(self) -> None:
         if self.disabled:
@@ -194,8 +194,8 @@ class SourceCollectorProcess(BaseProcess):
         try:
             hosts = self.module.collect(**self.collector_config)
             assert isinstance(hosts, list), "Collect module did not return a list"
-        except (AssertionError, Exception) as e:
-            raise exceptions.SourceCollectorError(f"Unable to collect from module ({self.config.module_name}): {str(e)}")
+        except Exception as e:
+            raise exceptions.SourceCollectorError(e) from e
 
         valid_hosts = []  # type: List[models.Host]
         for host in hosts:
