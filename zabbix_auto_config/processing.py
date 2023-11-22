@@ -623,6 +623,13 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 logging.info("Disabling host: '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
             except pyzabbix.ZabbixAPIException as e:
                 logging.error("Error when disabling host '%s' (%s): %s", zabbix_host["host"], zabbix_host["hostid"], e.args)
+            except IndexError:
+                logging.critical(
+                    "Disabled host group '%s' does not exist in Zabbix. Cannot disable host '%s'",
+                    self.config.hostgroup_disabled,
+                    zabbix_host.get("host"),
+                )
+                self.stop_event.set()
         else:
             logging.info("DRYRUN: Disabling host: '%s' (%s)", zabbix_host["host"], zabbix_host["hostid"])
 
@@ -651,6 +658,13 @@ class ZabbixHostUpdater(ZabbixUpdater):
                     logging.info("Enabling new host: '%s' (%s)", hostname, result["hostids"][0])
             except pyzabbix.ZabbixAPIException as e:
                 logging.error("Error when enabling/creating host '%s': %s", hostname, e.args)
+            except IndexError:
+                logging.critical(
+                    "Enabled host group '%s' does not exist in Zabbix. Cannot enable host '%s'",
+                    self.config.hostgroup_all,
+                    hostname,
+                )
+                self.stop_event.set()
         else:
             logging.info("DRYRUN: Enabling host: '%s'", hostname)
 
