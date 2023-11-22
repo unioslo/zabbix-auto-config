@@ -13,6 +13,8 @@ from typing import List
 import multiprocessing_logging
 import tomli
 
+from zabbix_auto_config.state import get_manager
+
 from . import exceptions
 from . import models
 from . import processing
@@ -65,7 +67,9 @@ def get_config():
     return config
 
 
-def write_health(health_file, processes, queues, failsafe):
+def write_health(
+    health_file, processes: List[processing.BaseProcess], queues, failsafe
+):
     now = datetime.datetime.now()
     health = {
         "date": now.isoformat(timespec="seconds"),
@@ -79,14 +83,16 @@ def write_health(health_file, processes, queues, failsafe):
     }
 
     for process in processes:
-        health["processes"].append({
-            "name": process.name,
-            "pid": process.pid,
-            "alive": process.is_alive(),
-            "ok": process.state.get("ok")
-        })
+        health["processes"].append(
+            {
+                "name": process.name,
+                "pid": process.pid,
+                "alive": process.is_alive(),
+                **process.state.asdict(),
+            }
+        )
 
-    health["all_ok"] = all([p["ok"] for p in health["processes"]])
+    health["all_ok"] = all(p.state.ok for p in processes)
 
     for queue in queues:
         health["queues"].append({
@@ -96,8 +102,8 @@ def write_health(health_file, processes, queues, failsafe):
     try:
         with open(health_file, "w") as f:
             f.write(json.dumps(health))
-    except:
-        logging.error("Unable to write health file: %s", health_file)
+    except Exception as e:
+        logging.error("Unable to write health file %s: %s", health_file, e)
 
 
 def log_process_status(processes):
@@ -108,7 +114,7 @@ def log_process_status(processes):
         process_status = "alive" if process.is_alive() else "dead"
         process_statuses.append(f"{process_name} is {process_status}")
 
-    logging.debug("Process status: %s", ', '.join(process_statuses))
+    logging.info("Process status: %s", ", ".join(process_statuses))
 
 
 def main():
@@ -120,31 +126,62 @@ def main():
 
     logging.info("Main start (%d) version %s", os.getpid(), __version__)
     stop_event = multiprocessing.Event()
-    state_manager = multiprocessing.Manager()
-    processes = []
+    state_manager = get_manager()
+    processes = []  # type: List[processing.BaseProcess]
 
     source_hosts_queues = []
     source_collectors = get_source_collectors(config)
     for source_collector in source_collectors:
         source_hosts_queue = multiprocessing.Queue(maxsize=1)
-        process = processing.SourceCollectorProcess(source_collector["name"], state_manager.dict(), source_collector["module"], source_collector["config"], source_hosts_queue)
+        process = processing.SourceCollectorProcess(
+            source_collector["name"],
+            state_manager.State(),
+            source_collector["module"],
+            source_collector["config"],
+            source_hosts_queue,
+        )
         source_hosts_queues.append(source_hosts_queue)
         processes.append(process)
 
     try:
-        process = processing.SourceHandlerProcess("source-handler", state_manager.dict(), config.zac.db_uri, source_hosts_queues)
+        process = processing.SourceHandlerProcess(
+            "source-handler",
+            state_manager.State(),
+            config.zac.db_uri,
+            source_hosts_queues,
+        )
         processes.append(process)
 
-        process = processing.SourceMergerProcess("source-merger", state_manager.dict(), config.zac.db_uri, config.zac.host_modifier_dir)
+        process = processing.SourceMergerProcess(
+            "source-merger",
+            state_manager.State(),
+            config.zac.db_uri,
+            config.zac.host_modifier_dir,
+        )
         processes.append(process)
 
-        process = processing.ZabbixHostUpdater("zabbix-host-updater", state_manager.dict(), config.zac.db_uri, config.zabbix)
+        process = processing.ZabbixHostUpdater(
+            "zabbix-host-updater",
+            state_manager.State(),
+            config.zac.db_uri,
+            config.zabbix,
+        )
         processes.append(process)
 
-        process = processing.ZabbixHostgroupUpdater("zabbix-hostgroup-updater", state_manager.dict(), config.zac.db_uri, config.zabbix)
+        process = processing.ZabbixHostgroupUpdater(
+            "zabbix-hostgroup-updater",
+            state_manager.State(),
+            config.zac.db_uri,
+            config.zabbix,
+        )
         processes.append(process)
 
-        process = processing.ZabbixTemplateUpdater("zabbix-template-updater", state_manager.dict(), config.zac.db_uri, config.zabbix)
+        process = processing.ZabbixTemplateUpdater(
+            "zabbix-template-updater",
+            state_manager.State(),
+            config.zac.db_uri,
+            config.zabbix,
+        )
         processes.append(process)
     except exceptions.ZACException as e:
         logging.error("Failed to initialize child processes. Exiting: %s", str(e))

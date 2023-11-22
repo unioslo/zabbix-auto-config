@@ -25,6 +25,7 @@ from . import exceptions
 from . import models
 from . import utils
 from .errcount import RollingErrorCounter
+from .state import State
 from ._types import HostModifierDict, SourceCollectorModule, HostModifierModule
 
 if TYPE_CHECKING:
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
     from psycopg2.extensions import cursor as Cursor
 
 class BaseProcess(multiprocessing.Process):
-    def __init__(self, name, state):
+    def __init__(self, name: str, state: State):
         super().__init__()
         self.name = name
         self.state = state
@@ -40,7 +41,7 @@ class BaseProcess(multiprocessing.Process):
         self.update_interval = 1
         self.next_update = datetime.datetime.now()
 
-        self.state["ok"] = True
+        self.state.set_ok()
         self.stop_event = multiprocessing.Event()
 
     def run(self):
@@ -62,13 +63,16 @@ class BaseProcess(multiprocessing.Process):
 
                 try:
                     self.work()
-                    self.state["ok"] = True
-                except exceptions.ZACException as e:
-                    logging.error("Work exception: %s", str(e))
-                    self.state["ok"] = False
-                except requests.exceptions.Timeout as e:
-                    logging.error("Timeout exception: %s", str(e))
-                    self.state["ok"] = False
+                    self.state.set_ok()
+                except Exception as e:
+                    # These are the error types we handle ourselves then continue
+                    if isinstance(e, requests.exceptions.Timeout):
+                        logging.error("Timeout exception: %s", str(e))
+                    elif isinstance(e, exceptions.ZACException):
+                        logging.error("Work exception: %s", str(e))
+                    else:
+                        raise e # all other exceptions are fatal
+                    self.state.set_error(e)
 
                 if self.update_interval > 1 and self.next_update < datetime.datetime.now():
                     # Only log warning when update_interval is actually changed from default
@@ -151,10 +155,16 @@ class SourceCollectorProcess(BaseProcess):
             self.error_counter.add(exception=e)
             if self.error_counter.tolerance_exceeded():
                 if self.config.exit_on_error:
-                    logging.critical("Error tolerance exceeded. Terminating application.")
+                    logging.critical(
+                        "Error tolerance exceeded. Terminating application."
+                    )
                     self.stop_event.set()
+                    # TODO: raise exception with message above or just an empty exception?
                 else:
                     self.disable()
+            raise exceptions.ZACException(
+                f"Failed to collect from source {self.name!r}: {e}"
+            ) from e
 
     def disable(self) -> None:
         if self.disabled:
@@ -177,14 +187,15 @@ class SourceCollectorProcess(BaseProcess):
         # Reset the error counter so that previous errors don't count towards
         # the error counter in the next run in case the disable duration is short
         self.error_counter.reset()
+        # TODO: raise specific exception here instead of ZACException
 
     def collect(self) -> None:
         start_time = time.time()
         try:
             hosts = self.module.collect(**self.collector_config)
             assert isinstance(hosts, list), "Collect module did not return a list"
-        except (AssertionError, Exception) as e:
-            raise exceptions.SourceCollectorError(f"Unable to collect from module ({self.config.module_name}): {str(e)}")
+        except Exception as e:
+            raise exceptions.SourceCollectorError(e) from e
 
         valid_hosts = []  # type: List[models.Host]
         for host in hosts:
