@@ -739,10 +739,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
         If a failsafe OK file exists, the method will remove it and proceed with the changes.
         Otherwise, it will write the list of hosts to add and remove to a failsafe file and
         raise a ZACException."""
-        if self.settings.zac.failsafe_ok_file:
-            if self._check_failsafe_ok_file():
-                logging.info("Failsafe OK file exists. Proceeding with changes.")
-                return
+        if self._check_failsafe_ok_file():
+            logging.info("Failsafe OK file exists. Proceeding with changes.")
+            return
         self.write_failsafe_hosts(to_add, to_remove)
         logging.warning(
             "Too many hosts to change (failsafe=%d). Remove: %d, Add: %d. Aborting",
@@ -769,6 +768,10 @@ class ZabbixHostUpdater(ZabbixUpdater):
         if not self.settings.zac.failsafe_ok_file:
             return False
         if not self.settings.zac.failsafe_ok_file.exists():
+            logging.info(
+                "Failsafe OK file %s does not exist. Create it to approve changes.",
+                self.settings.zac.failsafe_ok_file,
+            )
             return False
         try:
             self.settings.zac.failsafe_ok_file.unlink()
