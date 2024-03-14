@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationInfo
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import (
     ConfigDict,
@@ -84,6 +84,18 @@ class ZacSettings(ConfigBaseModel):
     db_uri: str
     health_file: Optional[Path] = None
     log_level: int = Field(logging.DEBUG, description="The log level to use.")
+    failsafe_file: Optional[Path] = None
+
+    @field_validator("failsafe_file", "health_file", mode="after")
+    @classmethod
+    def _validate_file_path(cls, v: Optional[Path], info: ValidationInfo) -> Optional[Path]:
+        if v is None:
+            return v
+        if v.exists() and v.is_dir():
+            raise ValueError(f"'{info.field_name}' cannot be a directory")
+        if not v.exists():
+            utils.make_parent_dirs(v)
+        return v
 
     @field_serializer("log_level")
     def _serialize_log_level(self, v: str) -> str:
@@ -263,3 +275,12 @@ class Host(BaseModel):
             self.proxy_pattern = sorted(list(proxy_patterns))[0]
         elif len(proxy_patterns) == 1:
             self.proxy_pattern = proxy_patterns.pop()
+
+
+class HostActions(BaseModel):
+    add: List[str] = []
+    remove: List[str] = []
+
+    def write_json(self, path: Path) -> None:
+        """Writes a JSON serialized representation of self to a file."""
+        utils.write_file(path, self.model_dump_json(indent=2))

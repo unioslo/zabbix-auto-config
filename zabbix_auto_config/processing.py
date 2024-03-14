@@ -105,7 +105,7 @@ class SourceCollectorProcess(BaseProcess):
     def __init__(
         self,
         name: str,
-        state: dict,
+        state: State,
         module: SourceCollectorModule,
         config: models.SourceCollectorSettings,
         source_hosts_queue: multiprocessing.Queue,
@@ -555,7 +555,7 @@ class SourceMergerProcess(BaseProcess):
 
 
 class ZabbixUpdater(BaseProcess):
-    def __init__(self, name, state, db_uri, zabbix_config: models.ZabbixSettings):
+    def __init__(self, name, state, db_uri, settings: models.Settings):
         super().__init__(name, state)
 
         self.db_uri = db_uri
@@ -568,7 +568,8 @@ class ZabbixUpdater(BaseProcess):
             logging.error("Unable to connect to database. Process exiting with error")
             raise exceptions.ZACException(*e.args)
 
-        self.config = zabbix_config
+        self.config = settings.zabbix
+        self.settings = settings
 
         self.update_interval = 60
 
@@ -732,6 +733,20 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             logging.info("DRYRUN: Setting tags (%s) on host: '%s' (%s)", tags, zabbix_host["host"], zabbix_host["hostid"])
 
+
+    def write_failsafe_hosts(self, to_add: List[str], to_remove: List[str]) -> None:
+        if not self.settings.zac.failsafe_file:
+            logging.info(
+                "Unable to write failsafe hosts. No diagnostics directory configured."
+            )
+            return
+        h = models.HostActions(add=to_add, remove=to_remove)
+        h.write_json(self.settings.zac.failsafe_file)
+        logging.info(
+            "Wrote list of hosts to add and remove to %s",
+            self.settings.zac.failsafe_file,
+        )
+
     def do_update(self):
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'")
@@ -782,6 +797,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
         if len(hostnames_to_remove) > self.config.failsafe or len(hostnames_to_add) > self.config.failsafe:
             logging.warning("Too many hosts to change (failsafe=%d). Remove: %d, Add: %d. Aborting", self.config.failsafe, len(hostnames_to_remove), len(hostnames_to_add))
+            self.write_failsafe_hosts(hostnames_to_add, hostnames_to_remove)
             raise exceptions.ZACException("Failsafe triggered")
 
         for hostname in hostnames_to_remove:

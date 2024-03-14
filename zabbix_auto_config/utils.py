@@ -8,6 +8,7 @@ import queue
 import re
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Set, Tuple, Union
 
+
 def is_valid_regexp(pattern: str):
     try:
         re.compile(pattern)
@@ -166,3 +167,33 @@ def drain_queue(q: multiprocessing.Queue) -> None:
 def timedelta_to_str(td: datetime.timedelta) -> str:
     """Converts a timedelta to a string of the form HH:MM:SS."""
     return str(td).partition(".")[0]
+
+
+def write_file(path: Union[str, Path], content: str) -> None:
+    """Writes `content` to `path`. Ensures content ends with a newline."""
+    path = Path(path)
+    # Ensure parent dirs exist
+    make_parent_dirs(path)
+
+    try:
+        with open(path, "w") as f:
+            if not content.endswith("\n"):
+                content += "\n"
+            f.write(content)
+    except OSError as e:
+        logging.error("Failed to write to file '%s': %s", path, e)
+        raise
+
+
+def make_parent_dirs(path: Union[str, Path]) -> Path:
+    """Attempts to create all parent directories given a path.
+
+    NOTE: Intended for usage with Pydantic models, and as such it will raise
+    a ValueError instead of OSError if the directory cannot be created."""
+    path = Path(path)
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise ValueError(f"Failed to create parent directories for {path}: {e}") from e
+    return path
