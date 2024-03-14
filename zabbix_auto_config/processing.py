@@ -733,6 +733,24 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             logging.info("DRYRUN: Setting tags (%s) on host: '%s' (%s)", tags, zabbix_host["host"], zabbix_host["hostid"])
 
+    def handle_failsafe_limit(self, to_add: List[str], to_remove: List[str]) -> None:
+        """Handles situations where the number of hosts to add/remove exceeds the failsafe.
+
+        If a failsafe OK file exists, the method will remove it and proceed with the changes.
+        Otherwise, it will write the list of hosts to add and remove to a failsafe file and
+        raise a ZACException."""
+        if self.settings.zac.failsafe_ok_file:
+            if self._check_failsafe_ok_file():
+                logging.info("Failsafe OK file exists. Proceeding with changes.")
+                return
+        self.write_failsafe_hosts(to_add, to_remove)
+        logging.warning(
+            "Too many hosts to change (failsafe=%d). Remove: %d, Add: %d. Aborting",
+            self.config.failsafe,
+            len(to_remove),
+            len(to_add),
+        )
+        raise exceptions.ZACException("Failsafe triggered")
 
     def write_failsafe_hosts(self, to_add: List[str], to_remove: List[str]) -> None:
         if not self.settings.zac.failsafe_file:
@@ -746,6 +764,18 @@ class ZabbixHostUpdater(ZabbixUpdater):
             "Wrote list of hosts to add and remove to %s",
             self.settings.zac.failsafe_file,
         )
+
+    def _check_failsafe_ok_file(self) -> bool:
+        if not self.settings.zac.failsafe_ok_file:
+            return False
+        if not self.settings.zac.failsafe_ok_file.exists():
+            return False
+        try:
+            self.settings.zac.failsafe_ok_file.unlink()
+        except OSError as e:
+            logging.error("Unable to delete failsafe OK file: %s", e)
+            return False
+        return True
 
     def do_update(self):
         with self.db_connection, self.db_connection.cursor() as db_cursor:
@@ -795,10 +825,11 @@ class ZabbixHostUpdater(ZabbixUpdater):
         logging.debug("Only in db: %s", " ".join(hostnames_to_add[:10]))
         logging.debug("In both: %d", len(hostnames_in_both))
 
-        if len(hostnames_to_remove) > self.config.failsafe or len(hostnames_to_add) > self.config.failsafe:
-            logging.warning("Too many hosts to change (failsafe=%d). Remove: %d, Add: %d. Aborting", self.config.failsafe, len(hostnames_to_remove), len(hostnames_to_add))
-            self.write_failsafe_hosts(hostnames_to_add, hostnames_to_remove)
-            raise exceptions.ZACException("Failsafe triggered")
+        if (
+            len(hostnames_to_remove) > self.config.failsafe
+            or len(hostnames_to_add) > self.config.failsafe
+        ):
+            self.handle_failsafe_limit(hostnames_to_add, hostnames_to_remove)
 
         for hostname in hostnames_to_remove:
             if self.stop_event.is_set():

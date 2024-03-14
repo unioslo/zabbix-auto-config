@@ -82,11 +82,12 @@ class ZacSettings(ConfigBaseModel):
     source_collector_dir: str
     host_modifier_dir: str
     db_uri: str
-    health_file: Optional[Path] = None
     log_level: int = Field(logging.DEBUG, description="The log level to use.")
+    health_file: Optional[Path] = None
     failsafe_file: Optional[Path] = None
+    failsafe_ok_file: Optional[Path] = None
 
-    @field_validator("failsafe_file", "health_file", mode="after")
+    @field_validator("health_file", "failsafe_file", "failsafe_ok_file", mode="after")
     @classmethod
     def _validate_file_path(cls, v: Optional[Path], info: ValidationInfo) -> Optional[Path]:
         if v is None:
