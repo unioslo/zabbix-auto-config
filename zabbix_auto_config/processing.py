@@ -740,7 +740,6 @@ class ZabbixHostUpdater(ZabbixUpdater):
         Otherwise, it will write the list of hosts to add and remove to a failsafe file and
         raise a ZACException."""
         if self._check_failsafe_ok_file():
-            logging.info("Failsafe OK file exists. Proceeding with changes.")
             return
         self.write_failsafe_hosts(to_add, to_remove)
         logging.warning(
@@ -780,6 +779,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 "Failsafe cannot be approved. Unable to delete failsafe OK file: %s", e
             )
             return False
+        logging.info("Failsafe OK file exists. Proceeding with changes.")
         return True
 
     def do_update(self):
