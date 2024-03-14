@@ -776,7 +776,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
         try:
             self.settings.zac.failsafe_ok_file.unlink()
         except OSError as e:
-            logging.error("Unable to delete failsafe OK file: %s", e)
+            logging.error(
+                "Failsafe cannot be approved. Unable to delete failsafe OK file: %s", e
+            )
             return False
         return True
 
