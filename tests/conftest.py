@@ -6,6 +6,10 @@ from unittest.mock import MagicMock
 import pytest
 from unittest import mock
 
+import tomli
+
+from zabbix_auto_config import models
+
 
 @pytest.fixture(scope="function")
 def minimal_hosts():
@@ -101,6 +105,10 @@ def sample_config():
     ) as config:
         yield config.read()
 
+
+@pytest.fixture(name="config")
+def config(sample_config: str) -> Iterable[models.Settings]:
+    yield models.Settings(**tomli.loads(sample_config))
 
 @pytest.fixture
 def hostgroup_map_file(tmp_path: Path) -> Iterable[Path]:

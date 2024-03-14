@@ -8,6 +8,7 @@ from ..conftest import MockZabbixAPI, PicklableMock
 from zabbix_auto_config import exceptions
 
 from zabbix_auto_config.models import ZabbixSettings
+from zabbix_auto_config.models import Settings
 from zabbix_auto_config.processing import ZabbixUpdater
 from zabbix_auto_config.state import get_manager
 
@@ -27,20 +28,21 @@ class TimeoutAPI(MockZabbixAPI):
 
 @pytest.mark.timeout(10)
 @patch("pyzabbix.ZabbixAPI", TimeoutAPI())  # mock with timeout on login
-def test_zabbixupdater_connect_timeout(mock_psycopg2_connect):
-    with pytest.raises(exceptions.ZACException) as exc_info:
-        ZabbixUpdater(
-            name="connect-timeout",
-            db_uri="",
-            state=get_manager().State(),
-            zabbix_config=ZabbixSettings(
+def test_zabbixupdater_connect_timeout(mock_psycopg2_connect, config: Settings):
+    config.zabbix = ZabbixSettings(
                 map_dir="",
                 url="",
                 username="",
                 password="",
                 dryrun=False,
                 timeout=1,
-            ),
+    )
+    with pytest.raises(exceptions.ZACException) as exc_info:
+        ZabbixUpdater(
+            name="connect-timeout",
+            db_uri="",
+            state=get_manager().State(),
+            settings=config,
         )
     assert "connect timeout" in exc_info.exconly()
 
@@ -51,7 +53,9 @@ class TimeoutUpdater(ZabbixUpdater):
 
 
 @pytest.mark.timeout(5)
-def test_zabbixupdater_read_timeout(tmp_path: Path, mock_psycopg2_connect):
+def test_zabbixupdater_read_timeout(
+    tmp_path: Path, mock_psycopg2_connect, config: Settings
+):
     # TODO: use mapping file fixtures from #67
     map_dir = tmp_path / "maps"
     map_dir.mkdir()
@@ -59,18 +63,19 @@ def test_zabbixupdater_read_timeout(tmp_path: Path, mock_psycopg2_connect):
     (map_dir / "property_hostgroup_map.txt").touch()
     (map_dir / "siteadmin_hostgroup_map.txt").touch()
 
-    process = TimeoutUpdater(
-        name="read-timeout",
-        db_uri="",
-        state=get_manager().State(),
-        zabbix_config=ZabbixSettings(
+    config.zabbix = ZabbixSettings(
             map_dir=str(map_dir),
             url="",
             username="",
             password="",
             dryrun=False,
             timeout=1,
-        ),
+    )
+    process = TimeoutUpdater(
+        name="read-timeout",
+        db_uri="",
+        state=get_manager().State(),
+        settings=config,
     )
 
     # Start the process and wait for it to be marked as unhealthy
