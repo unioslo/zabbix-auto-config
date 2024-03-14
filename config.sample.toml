@@ -3,8 +3,13 @@ source_collector_dir = "path/to/source_collector_dir/"
 host_modifier_dir = "path/to/host_modifier_dir/"
 db_uri = "dbname='zac' user='zabbix' host='localhost' password='secret' port=5432 connect_timeout=2"
 log_level = "DEBUG"
+# Health status for each ZAC process.
 health_file = "/tmp/zac_health.json"
+# File containing hostnames of hosts to add/remove when failsafe is reached.
 failsafe_file = "/tmp/zac_failsafe.json"
+# File to signal manual approval of adding/removing hosts when failsafe is reached.
+# The file is automatically removed after changes are made.
+failsafe_ok_file = "/tmp/zac_failsafe_ok"
 
 [zabbix]
 map_dir = "path/to/map_dir/"
