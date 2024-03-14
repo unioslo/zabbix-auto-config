@@ -164,7 +164,7 @@ def main():
             "zabbix-host-updater",
             state_manager.State(),
             config.zac.db_uri,
-            config.zabbix,
+            config,
         )
         processes.append(process)
 
@@ -172,7 +172,7 @@ def main():
             "zabbix-hostgroup-updater",
             state_manager.State(),
             config.zac.db_uri,
-            config.zabbix,
+            config,
         )
         processes.append(process)
 
@@ -180,7 +180,7 @@ def main():
             "zabbix-template-updater",
             state_manager.State(),
             config.zac.db_uri,
-            config.zabbix,
+            config,
         )
         processes.append(process)
     except exceptions.ZACException as e:
