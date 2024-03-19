@@ -86,6 +86,7 @@ class ZacSettings(ConfigBaseModel):
     health_file: Optional[Path] = None
     failsafe_file: Optional[Path] = None
     failsafe_ok_file: Optional[Path] = None
+    failsafe_ok_file_strict: bool = True
 
     @field_validator("health_file", "failsafe_file", "failsafe_ok_file", mode="after")
     @classmethod
