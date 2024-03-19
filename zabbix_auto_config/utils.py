@@ -169,16 +169,16 @@ def timedelta_to_str(td: datetime.timedelta) -> str:
     return str(td).partition(".")[0]
 
 
-def write_file(path: Union[str, Path], content: str) -> None:
-    """Writes `content` to `path`. Ensures content ends with a newline."""
+def write_file(path: Union[str, Path], content: str, end: str = "\n") -> None:
+    """Writes `content` to `path`. Ensures content ends with a given character."""
     path = Path(path)
     # Ensure parent dirs exist
     make_parent_dirs(path)
 
     try:
         with open(path, "w") as f:
-            if not content.endswith("\n"):
-                content += "\n"
+            if end and not content.endswith(end):
+                content += end
             f.write(content)
     except OSError as e:
         logging.error("Failed to write to file '%s': %s", path, e)

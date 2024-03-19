@@ -1,24 +1,50 @@
 [zac]
+# Directory containing the source collector modules.
 source_collector_dir = "path/to/source_collector_dir/"
+
+# Directory containing the host modifier modules.
 host_modifier_dir = "path/to/host_modifier_dir/"
+
+# URI used to connect to the Postgres database.
 db_uri = "dbname='zac' user='zabbix' host='localhost' password='secret' port=5432 connect_timeout=2"
+
+# Log level for the application.
 log_level = "DEBUG"
+
 # Health status for each ZAC process.
 health_file = "/tmp/zac_health.json"
+
 # File containing hostnames of hosts to add/remove when failsafe is reached.
 failsafe_file = "/tmp/zac_failsafe.json"
-# File to signal manual approval of adding/removing hosts when failsafe is reached.
-# The file is automatically removed after changes are made.
+
+# File that admin can create to signal manual approval of adding/removing hosts 
+# when failsafe is reached.
+# The file is automatically deleted after changes are made.
 failsafe_ok_file = "/tmp/zac_failsafe_ok"
 
+# Require that the application can delete the failsafe OK file before making changes.
+# If false, the application will make changes even if it fails to delete the file.
+# It is then up to the administrator to manually delete the file afterwards.
+failsafe_ok_file_strict = true
+
 [zabbix]
+# Directory containing mapping files.
 map_dir = "path/to/map_dir/"
+
 url = "http://localhost:8080"
 username = "Admin"
 password = "zabbix"
+
+# Preview changes without making them.
 dryrun = true
+
+# Maximum number of hosts to add/remove in one go.
 failsafe = 20
-timeout = 60                     # Zabbix API timeout in seconds (0 = no timeout)
+
+# Zabbix API timeout in seconds (0 = no timeout)
+timeout = 60
+
+# Prefix for managed tags
 tags_prefix = "zac_"
 managed_inventory = ["location"]
 
@@ -31,12 +57,28 @@ managed_inventory = ["location"]
 #extra_siteadmin_hostgroup_prefixes = []
 
 [source_collectors.mysource]
+# Name of the source collector module without the .py extension
 module_name = "mysource"
+
+# How often to run the source collector in seconds
 update_interval = 60
-error_tolerance = 5              # Tolerate 5 errors within `error_duration` seconds
-error_duration = 360             # should be greater than update_interval
-exit_on_error = false            # Disable source if it fails
-disable_duration = 3600          # Time in seconds to wait before reactivating a disabled source
+
+# How many errors to tolerate before disabling the source
+error_tolerance = 5 # Tolerate 5 errors within `error_duration` seconds
+
+# How long an error should be kept in the error tally before discarding it
+error_duration = 360 # should be greater than update_interval
+
+# Exit the application if the source fails
+# If true, the application will exit if the source fails
+# If false, the source will be disabled for `disable_duration` seconds
+exit_on_error = false # Disable source if it fails
+
+# How long to wait before reactivating a disabled source
+disable_duration = 3600 # Time in seconds to wait before reactivating a disabled source
+
+# Any other options are passed as keyword arguments to the source collector's 
+# `collect()` function
 kwarg_passed_to_source = "value" # extra fields are passed to the source module as kwargs
 another_kwarg = "value2"         # We can pass an arbitrary number of kwargs to the source module
 

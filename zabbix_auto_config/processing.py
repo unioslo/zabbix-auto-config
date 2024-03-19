@@ -736,11 +736,13 @@ class ZabbixHostUpdater(ZabbixUpdater):
     def handle_failsafe_limit(self, to_add: List[str], to_remove: List[str]) -> None:
         """Handles situations where the number of hosts to add/remove exceeds the failsafe.
 
-        If a failsafe OK file exists, the method will remove it and proceed with the changes.
-        Otherwise, it will write the list of hosts to add and remove to a failsafe file and
-        raise a ZACException."""
+        If a failsafe OK file exists, the method will attempt to remove it
+        and proceed with the changes. Otherwise, it will write the list of
+        hosts to add and remove to a failsafe file and raise a ZACException."""
         if self._check_failsafe_ok_file():
             return
+        # Failsafe OK file does not exist or cannot be deleted.
+        # We must write the hosts to add/remove and raise an exception
         self.write_failsafe_hosts(to_add, to_remove)
         logging.warning(
             "Too many hosts to change (failsafe=%d). Remove: %d, Add: %d. Aborting",
@@ -764,6 +766,8 @@ class ZabbixHostUpdater(ZabbixUpdater):
         )
 
     def _check_failsafe_ok_file(self) -> bool:
+        """Checks the failsafe OK file and returns True if application should proceed."""
+        # Check for presence of file
         if not self.settings.zac.failsafe_ok_file:
             return False
         if not self.settings.zac.failsafe_ok_file.exists():
@@ -772,13 +776,14 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 self.settings.zac.failsafe_ok_file,
             )
             return False
+        # File exists, attempt to delete it
         try:
             self.settings.zac.failsafe_ok_file.unlink()
         except OSError as e:
-            logging.error(
-                "Failsafe cannot be approved. Unable to delete failsafe OK file: %s", e
-            )
-            return False
+            logging.error("Unable to delete failsafe OK file: %s", e)
+            if self.settings.zac.failsafe_ok_file_strict:
+                return False
+            logging.warning("Continuing with changes despite failed deletion.")
         logging.info("Failsafe OK file exists. Proceeding with changes.")
         return True
 
@@ -830,6 +835,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         logging.debug("Only in db: %s", " ".join(hostnames_to_add[:10]))
         logging.debug("In both: %d", len(hostnames_in_both))
 
+        # Check if we have too many hosts to add/remove
         if (
             len(hostnames_to_remove) > self.config.failsafe
             or len(hostnames_to_add) > self.config.failsafe
