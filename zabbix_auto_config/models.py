@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
@@ -62,13 +64,16 @@ class ZabbixSettings(ConfigBaseModel):
 
     hostgroup_source_prefix: str = "Source-"
     hostgroup_importance_prefix: str = "Importance-"
+    
+    create_templategroups: bool = False
+    templategroup_prefix: str = "Templates-"
 
     # Prefixes for extra host groups to create based on the host groups
     # in the siteadmin mapping. 
-    # e.g. Siteadmin-foo -> Templates-foo if list is ["Templates-"]
+    # e.g. Siteadmin-foo -> Secondary-foo if list is ["Secondary-"]
     # The groups must have prefixes separated by a hyphen (-) in order 
     # to replace them with any of these prefixes.
-    # These groups are not managed by ZAC beyond creating them.
+    # These groups are not managed by ZAC beyond their creation.
     extra_siteadmin_hostgroup_prefixes: Set[str] = set()
 
     @field_validator("timeout")

@@ -1,8 +1,8 @@
 # About
 
-Zabbix-auto-config is an utility that aims to automatically configure hosts, host groups, host inventories and templates in the monitoring software [Zabbix](https://www.zabbix.com/).
+Zabbix-auto-config is an utility that aims to automatically configure hosts, host groups, host inventories, template groups and templates in the monitoring software [Zabbix](https://www.zabbix.com/).
 
-Note: This is only tested with Zabbix 5.0 LTS.
+Note: Only tested with Zabbix 6.0 and 6.4.
 
 ## Requirements
 
@@ -101,7 +101,7 @@ def collect(*args: Any, **kwargs: Any) -> List[Host]:
 
 if __name__ == "__main__":
     for host in collect():
-        print(host.json())
+        print(host.model_dump_json())
 EOF
 cat > path/to/host_modifier_dir/mod.py << EOF
 from zabbix_auto_config.models import Host

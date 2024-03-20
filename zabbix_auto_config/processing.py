@@ -13,8 +13,9 @@ import sys
 import signal
 import itertools
 import queue
-from typing import Dict, List, TYPE_CHECKING, Optional
+from typing import Dict, List, TYPE_CHECKING, Optional, Set
 
+from packaging.version import Version
 import psycopg2
 from pydantic import ValidationError
 import pyzabbix
@@ -604,6 +605,9 @@ class ZabbixUpdater(BaseProcess):
             os.path.join(self.config.map_dir, "siteadmin_hostgroup_map.txt")
         )
 
+        ver = self.api.apiinfo.version()
+        self.zabbix_version = Version(ver)
+
     def work(self):
         start_time = time.time()
         logging.info("Zabbix update starting")
@@ -983,8 +987,8 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
             logging.debug("DRYRUN: Clearing templates on host: '%s'", host["host"])
 
     def set_templates(self, templates, host):
-        logging.debug("Setting templates on host: '%s'", host["host"])
         if not self.config.dryrun:
+            logging.debug("Setting templates on host: '%s'", host["host"])
             try:
                 templates = [{"templateid": template_id} for _, template_id in templates.items()]
                 self.api.host.update(hostid=host["hostid"], templates=templates)
@@ -1064,24 +1068,29 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         else:
             logging.debug("DRYRUN: Setting hostgroups on host: '%s'", host["host"])
 
-    def create_hostgroup(self, hostgroup_name):
-        if not self.config.dryrun:
-            logging.debug("Creating hostgroup: '%s'", hostgroup_name)
-            try:
-                result = self.api.hostgroup.create(name=hostgroup_name)
-                return result["groupids"][0]
-            except pyzabbix.ZabbixAPIException as e:
-                logging.error("Error when creating hostgroups '%s': %s", hostgroup_name, e.args)
-        else:
+    def create_hostgroup(self, hostgroup_name: str) -> Optional[str]:
+        if self.config.dryrun:
             logging.debug("DRYRUN: Creating hostgroup: '%s'", hostgroup_name)
-            return "-1"
+            return None
+
+        logging.debug("Creating hostgroup: '%s'", hostgroup_name)
+        try:
+            result = self.api.hostgroup.create(name=hostgroup_name)
+            groupid = result["groupids"][0]
+            logging.info("Created host group '%s' (%s)", hostgroup_name, groupid)
+            return groupid
+        except pyzabbix.ZabbixAPIException as e:
+            logging.error(
+                "Error when creating hostgroups '%s': %s", hostgroup_name, e.args
+            )
+            return None
 
     def create_extra_hostgroups(
         self, existing_hostgroups: List[Dict[str, str]]
     ) -> None:
         """Creates additonal host groups based on the prefixes specified
         in the config file. These host groups are not assigned hosts by ZAC."""
-        hostgroup_names = [h["name"] for h in existing_hostgroups]
+        hostgroup_names = set(h["name"] for h in existing_hostgroups)
 
         for prefix in self.config.extra_siteadmin_hostgroup_prefixes:
             mapping = utils.mapping_values_with_prefix(
@@ -1093,6 +1102,74 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                     if hostgroup in hostgroup_names:
                         continue
                     self.create_hostgroup(hostgroup)
+
+    def create_templategroup(self, templategroup_name: str) -> Optional[str]:
+        if self.config.dryrun:
+            logging.debug("DRYRUN: Creating template group: '%s'", templategroup_name)
+            return None
+
+        logging.debug("Creating template group: '%s'", templategroup_name)
+        try:
+            result = self.api.templategroup.create(name=templategroup_name)
+            groupid = result["groupids"][0]
+            logging.info("Created template group '%s' (%s)", templategroup_name, groupid)
+            return groupid
+        except pyzabbix.ZabbixAPIException as e:
+            logging.error(
+                "Error when creating template group '%s': %s",
+                templategroup_name,
+                e.args,
+            )
+            return None
+
+    def create_templategroups(self, existing_hostgroups: List[Dict[str, str]]) -> None:
+        """Creates template groups for each host group in the siteadmin
+        mapping file with the configured template group prefix.
+
+        For Zabbix <6.2, host groups are created instead of template groups."""
+        # Construct a set of all template group names from siteadmin mapping file
+        # by replacing the host group prefix with the template group prefix
+        tgroups = set(
+            utils.with_prefix(tg, self.config.templategroup_prefix)
+            for tg in itertools.chain.from_iterable(
+                self.siteadmin_hostgroup_map.values()
+            )
+        )
+        if self.zabbix_version.release >= (6, 2, 0):
+            logging.debug("Zabbix version is %s. Creating template groups.", self.zabbix_version)
+            self._create_templategroups(tgroups)
+        else:
+            logging.debug("Zabbix version is %s. Creating template groups as host groups.", self.zabbix_version)
+            self._create_templategroups_pre_62_compat(tgroups, existing_hostgroups)
+
+        
+    def _create_templategroups(self, tgroups: Set[str]) -> None:
+        """Create the given template groups if they don't exist.
+
+        Args:
+            tgroups: A set of template group names to create.
+        """
+        res = self.api.templategroup.get(output=["name", "groupid"])
+        existing_tgroups = set(tg["name"] for tg in res)
+        for tgroup in tgroups:
+            if tgroup in existing_tgroups:
+                continue
+            self.create_templategroup(tgroup)
+
+    def _create_templategroups_pre_62_compat(self, tgroups: Set[str], existing_hostgroups: List[Dict[str, str]]) -> None:
+        """Compatibility method for creating template groups on Zabbix <6.2.
+
+        Because template groups do not exist in <6.2, we instead create
+        host groups with the given names.
+
+        Args:
+            tgroups: A set of template group names to create.
+        """
+        existing_hgroup_names = set(h["name"] for h in existing_hostgroups)
+        for tgroup in tgroups:
+            if tgroup in existing_hgroup_names:
+                continue
+            self.create_hostgroup(tgroup)
 
     def do_update(self):
         managed_hostgroup_names = set(
@@ -1107,6 +1184,10 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         # Create extra host groups if necessary
         if self.config.extra_siteadmin_hostgroup_prefixes:
             self.create_extra_hostgroups(existing_hostgroups)
+        
+        # Create template groups if enabled
+        if self.config.create_templategroups:
+            self.create_templategroups(existing_hostgroups)
 
         zabbix_hostgroups = {}
         for zabbix_hostgroup in existing_hostgroups:
