@@ -125,7 +125,7 @@ def test_host_merge_invalid(full_hosts):
         ["notset", logging.NOTSET],
         ["debug", logging.DEBUG],
         ["info", logging.INFO],
-        ["warn", logging.WARN],
+        ["warn", logging.WARN],  # noqa: LOG009 # we need to test the deprecated name
         ["warning", logging.WARNING],
         ["error", logging.ERROR],
         ["fatal", logging.FATAL],
@@ -149,7 +149,7 @@ def test_zacsettings_log_level_str(level: str, expect: int, upper: bool) -> None
         [0, logging.NOTSET],
         [10, logging.DEBUG],
         [20, logging.INFO],
-        [30, logging.WARN],
+        [30, logging.WARN],  # noqa: LOG009 # we need to test the deprecated name
         [30, logging.WARNING],
         [40, logging.ERROR],
         [50, logging.FATAL],
