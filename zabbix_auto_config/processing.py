@@ -1144,7 +1144,11 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
         
     def _create_templategroups(self, tgroups: Set[str]) -> None:
-        """Zabbix >=6.2 template group creation method."""
+        """Create the given template groups if they don't exist.
+
+        Args:
+            tgroups: A set of template group names to create.
+        """
         res = self.api.templategroup.get(output=["name", "groupid"])
         existing_tgroups = set(tg["name"] for tg in res)
         for tgroup in tgroups:
@@ -1153,12 +1157,14 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             self.create_templategroup(tgroup)
 
     def _create_templategroups_pre_62_compat(self, tgroups: Set[str], existing_hostgroups: List[Dict[str, str]]) -> None:
-        """Zabbix <6.2 template group compatibility fallback method.
-        Template groups don't exist in Zabbix <6.2, so we create host
-        groups to fulfill the same purpose.
-        
-        Creates template host groups for all groups in the siteadmin
-        mapping file with the configured template group prefix."""
+        """Compatibility method for creating template groups on Zabbix <6.2.
+
+        Because template groups do not exist in <6.2, we instead create
+        host groups with the given names.
+
+        Args:
+            tgroups: A set of template group names to create.
+        """
         existing_hgroup_names = set(h["name"] for h in existing_hostgroups)
         for tgroup in tgroups:
             if tgroup in existing_hgroup_names:
