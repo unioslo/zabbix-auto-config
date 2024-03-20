@@ -69,17 +69,16 @@ def read_map_file(path: Union[str, Path]) -> Dict[str, List[str]]:
                     )
             except ValueError:
                 logging.warning(
-                    "Invalid format at line {lineno} in map file '{path}'. Expected 'key:value', got '{line}'.".format(
-                        lineno=lineno, path=path, line=line
-                    ),
+                    "Invalid format at line %d in map file '%s'. Expected 'key:value', got '%s'.",
+                    lineno,
+                    path,
+                    line,
                 )
                 continue
 
             if key in _map:
                 logging.warning(
-                    "Duplicate key {key} at line {lineno} in map file '{path}'.".format(
-                        key=key, lineno=lineno, path=path
-                    )
+                    "Duplicate key %s at line %d in map file '%s'.", key, lineno, path
                 )
                 _map[key].extend(values)
             else:
@@ -90,9 +89,7 @@ def read_map_file(path: Union[str, Path]) -> Dict[str, List[str]]:
         values_dedup = list(dict.fromkeys(values))  # dict.fromkeys() guarantees order
         if len(values) != len(values_dedup):
             logging.warning(
-                "Ignoring duplicate values for key '{key}' in map file '{path}'.".format(
-                    key=key, path=path
-                )
+                "Ignoring duplicate values for key '%s' in map file '%s'.", key, path
             )
         _map[key] = values_dedup
     return _map

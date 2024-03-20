@@ -335,10 +335,10 @@ class SourceHandlerProcess(BaseProcess):
                 host = models.Host(**result[0])
             except ValidationError as e:
                 # TODO: ensure this actually identifies the faulty host
-                logging.exception(f"Invalid host in source hosts table: {e}")
+                logging.exception("Invalid host in source hosts table: %s", e)
             except Exception as e:
                 logging.exception(
-                    f"Error when parsing host from source hosts table: {e}"
+                    "Error when parsing host from source hosts table: %s", e
                 )
             else:
                 hosts[host.hostname] = host
@@ -524,10 +524,10 @@ class SourceMergerProcess(BaseProcess):
                 host_model = models.Host(**host[0])
             except ValidationError as e:
                 # TODO: ensure this actually identifies the faulty host
-                logging.exception(f"Invalid host in source hosts table: {e}")
+                logging.exception("Invalid host in source hosts table: %s", e)
             except Exception as e:
                 logging.exception(
-                    f"Error when parsing host from source hosts table: {e}"
+                    "Error when parsing host from source hosts table: %s", e
                 )
             else:
                 source_hosts[host_model.hostname].append(host_model)
@@ -541,9 +541,9 @@ class SourceMergerProcess(BaseProcess):
                 host_model = models.Host(**host[0])
             except ValidationError as e:
                 # TODO: ensure this log actually identifies the faulty host
-                logging.exception(f"Invalid host in hosts table: {e}")
+                logging.exception("Invalid host in hosts table: %s", e)
             except Exception as e:
-                logging.exception(f"Error when parsing host from hosts table: {e}")
+                logging.exception("Error when parsing host from hosts table: %s", e)
             else:
                 hosts[host_model.hostname] = host_model
         return hosts
@@ -590,7 +590,7 @@ class SourceMergerProcess(BaseProcess):
                 host = hosts.get(hostname)
                 if not source_hosts:
                     logging.warning(
-                        f"Host '{hostname}' not found in source hosts table"
+                        "Host '%s' not found in source hosts table", hostname
                     )
                     continue
 

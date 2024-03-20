@@ -60,7 +60,10 @@ packages = ["zabbix_auto_config"]
 
 [tool.ruff.lint]
 extend-select = [
+    "G", # flake8-logging-format
     "I", # isort
+    "PLE1205", # pylint (too many logging args)
+    "PLE1206", # pylint (too few logging args)
 ]
 
 [tool.ruff.lint.isort]
