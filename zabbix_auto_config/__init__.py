@@ -34,7 +34,11 @@ def get_source_collectors(config: models.Settings) -> List[SourceCollectorDict]:
         try:
             module = importlib.import_module(source_collector_config.module_name)
         except ModuleNotFoundError:
-            logging.error("Unable to find source collector named '%s' in '%s'", source_collector_config.module_name, source_collector_dir)
+            logging.error(
+                "Unable to find source collector named '%s' in '%s'",
+                source_collector_config.module_name,
+                source_collector_dir,
+            )
             continue
 
         if not isinstance(module, SourceCollectorModule):
@@ -95,9 +99,11 @@ def write_health(
     health["all_ok"] = all(p.state.ok for p in processes)
 
     for queue in queues:
-        health["queues"].append({
-            "size": queue.qsize(),
-        })
+        health["queues"].append(
+            {
+                "size": queue.qsize(),
+            }
+        )
 
     try:
         with open(health_file, "w") as f:
@@ -119,7 +125,11 @@ def log_process_status(processes):
 
 def main():
     multiprocessing_logging.install_mp_handler()
-    logging.basicConfig(format='%(asctime)s %(levelname)s [%(processName)s %(process)d] [%(name)s] %(message)s', datefmt="%Y-%m-%dT%H:%M:%S%z", level=logging.DEBUG)
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)s [%(processName)s %(process)d] [%(name)s] %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S%z",
+        level=logging.DEBUG,
+    )
     config = get_config()
     logging.getLogger().setLevel(config.zac.log_level)
     logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
@@ -204,16 +214,25 @@ def main():
                         config.zabbix.failsafe,
                     )
                 log_process_status(processes)
-                next_status = datetime.datetime.now() + datetime.timedelta(seconds=status_interval)
+                next_status = datetime.datetime.now() + datetime.timedelta(
+                    seconds=status_interval
+                )
 
-            dead_process_names = [process.name for process in processes if not process.is_alive()]
+            dead_process_names = [
+                process.name for process in processes if not process.is_alive()
+            ]
             if dead_process_names:
-                logging.error("A child has died: %s. Exiting", ', '.join(dead_process_names))
+                logging.error(
+                    "A child has died: %s. Exiting", ", ".join(dead_process_names)
+                )
                 stop_event.set()
 
             time.sleep(1)
 
-        logging.debug("Queues: %s", ", ".join([str(queue.qsize()) for queue in source_hosts_queues]))
+        logging.debug(
+            "Queues: %s",
+            ", ".join([str(queue.qsize()) for queue in source_hosts_queues]),
+        )
 
         for process in processes:
             logging.info("Terminating: %s(%d)", process.name, process.pid)
@@ -226,7 +245,11 @@ def main():
             log_process_status(processes)  # TODO: Too verbose?
             process.join(10)
             if process.exitcode is None:
-                logging.warning("Process hanging. Signaling new terminate: %s(%d)", process.name, process.pid)
+                logging.warning(
+                    "Process hanging. Signaling new terminate: %s(%d)",
+                    process.name,
+                    process.pid,
+                )
                 process.terminate()
             time.sleep(1)
             alive_processes = [process for process in processes if process.is_alive()]

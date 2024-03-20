@@ -110,6 +110,7 @@ def sample_config():
 def config(sample_config: str) -> Iterable[models.Settings]:
     yield models.Settings(**tomli.loads(sample_config))
 
+
 @pytest.fixture
 def hostgroup_map_file(tmp_path: Path) -> Iterable[Path]:
     contents = """
@@ -118,8 +119,8 @@ def hostgroup_map_file(tmp_path: Path) -> Iterable[Path]:
 # Example: <siteadm>:<host/user groupname>
 #
 #****************************************************************************************
-# ATT: First letter will be capitilazed, leading and trailing spaces will be removed and 
-#      spaces within the hostgroupname will be replaced with "-" by the script automatically 
+# ATT: First letter will be capitilazed, leading and trailing spaces will be removed and
+#      spaces within the hostgroupname will be replaced with "-" by the script automatically
 #****************************************************************************************
 #
 user1@example.com:Hostgroup-user1-primary

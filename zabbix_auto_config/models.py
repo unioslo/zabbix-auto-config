@@ -22,6 +22,7 @@ from . import utils
 
 class ConfigBaseModel(PydanticBaseModel, extra="ignore"):
     """Base class for all config models. Warns if unknown fields are passed in."""
+
     # https://pydantic-docs.helpmanual.io/usage/model_config/#change-behaviour-globally
 
     @model_validator(mode="before")
@@ -64,14 +65,14 @@ class ZabbixSettings(ConfigBaseModel):
 
     hostgroup_source_prefix: str = "Source-"
     hostgroup_importance_prefix: str = "Importance-"
-    
+
     create_templategroups: bool = False
     templategroup_prefix: str = "Templates-"
 
     # Prefixes for extra host groups to create based on the host groups
-    # in the siteadmin mapping. 
+    # in the siteadmin mapping.
     # e.g. Siteadmin-foo -> Secondary-foo if list is ["Secondary-"]
-    # The groups must have prefixes separated by a hyphen (-) in order 
+    # The groups must have prefixes separated by a hyphen (-) in order
     # to replace them with any of these prefixes.
     # These groups are not managed by ZAC beyond their creation.
     extra_siteadmin_hostgroup_prefixes: Set[str] = set()
@@ -82,6 +83,7 @@ class ZabbixSettings(ConfigBaseModel):
         if v == 0:
             return None
         return v
+
 
 class ZacSettings(ConfigBaseModel):
     source_collector_dir: str
@@ -95,7 +97,9 @@ class ZacSettings(ConfigBaseModel):
 
     @field_validator("health_file", "failsafe_file", "failsafe_ok_file", mode="after")
     @classmethod
-    def _validate_file_path(cls, v: Optional[Path], info: ValidationInfo) -> Optional[Path]:
+    def _validate_file_path(
+        cls, v: Optional[Path], info: ValidationInfo
+    ) -> Optional[Path]:
         if v is None:
             return v
         if v.exists() and v.is_dir():
@@ -258,7 +262,11 @@ class Host(BaseModel):
         self.sources.update(other.sources)
         self.tags.update(other.tags)
 
-        importances = [importance for importance in [self.importance, other.importance] if importance]
+        importances = [
+            importance
+            for importance in [self.importance, other.importance]
+            if importance
+        ]
         self.importance = min(importances) if importances else None
 
         self_interface_types = {i.type for i in self.interfaces}
@@ -266,18 +274,33 @@ class Host(BaseModel):
             if other_interface.type not in self_interface_types:
                 self.interfaces.append(other_interface)
             else:
-                logging.warning("Trying to merge host with interface of same type. The other interface is ignored. Host: %s, type: %s", self.hostname, other_interface.type)
+                logging.warning(
+                    "Trying to merge host with interface of same type. The other interface is ignored. Host: %s, type: %s",
+                    self.hostname,
+                    other_interface.type,
+                )
         self.interfaces = sorted(self.interfaces, key=lambda interface: interface.type)
 
         for k, v in other.inventory.items():
             if k in self.inventory and v != self.inventory[k]:
-                logging.warning("Same inventory ('%s') set multiple times for host: '%s'", k, self.hostname)
+                logging.warning(
+                    "Same inventory ('%s') set multiple times for host: '%s'",
+                    k,
+                    self.hostname,
+                )
             else:
                 self.inventory[k] = v
 
-        proxy_patterns = [proxy_pattern for proxy_pattern in [self.proxy_pattern, other.proxy_pattern] if proxy_pattern]
+        proxy_patterns = [
+            proxy_pattern
+            for proxy_pattern in [self.proxy_pattern, other.proxy_pattern]
+            if proxy_pattern
+        ]
         if len(proxy_patterns) > 1:
-            logging.warning("Multiple proxy patterns are provided. Discarding down to one. Host: %s", self.hostname)
+            logging.warning(
+                "Multiple proxy patterns are provided. Discarding down to one. Host: %s",
+                self.hostname,
+            )
             # TODO: Do something different? Is alphabetically first "good enough"? It will be consistent at least.
             self.proxy_pattern = sorted(list(proxy_patterns))[0]
         elif len(proxy_patterns) == 1:

@@ -31,6 +31,7 @@ def test_is_valid_regexp(input: str, expected: bool):
 def test_is_valid_ip(ip_address: Union[IPv4Address, IPv6Address]):
     assert utils.is_valid_ip(str(ip_address))
 
+
 def test_read_map_file(tmp_path: Path, caplog: pytest.LogCaptureFixture):
     tmpfile = tmp_path / "map.txt"
     tmpfile.write_text(

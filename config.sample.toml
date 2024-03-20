@@ -17,7 +17,7 @@ health_file = "/tmp/zac_health.json"
 # File containing hostnames of hosts to add/remove when failsafe is reached.
 failsafe_file = "/tmp/zac_failsafe.json"
 
-# File that admin can create to signal manual approval of adding/removing hosts 
+# File that admin can create to signal manual approval of adding/removing hosts
 # when failsafe is reached.
 # The file is automatically deleted after changes are made.
 failsafe_ok_file = "/tmp/zac_failsafe_ok"
@@ -83,7 +83,7 @@ exit_on_error = false # Disable source if it fails
 # How long to wait before reactivating a disabled source
 disable_duration = 3600 # Time in seconds to wait before reactivating a disabled source
 
-# Any other options are passed as keyword arguments to the source collector's 
+# Any other options are passed as keyword arguments to the source collector's
 # `collect()` function
 kwarg_passed_to_source = "value" # extra fields are passed to the source module as kwargs
 another_kwarg = "value2"         # We can pass an arbitrary number of kwargs to the source module

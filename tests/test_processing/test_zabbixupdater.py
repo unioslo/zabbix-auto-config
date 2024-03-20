@@ -30,12 +30,12 @@ class TimeoutAPI(MockZabbixAPI):
 @patch("pyzabbix.ZabbixAPI", TimeoutAPI())  # mock with timeout on login
 def test_zabbixupdater_connect_timeout(mock_psycopg2_connect, config: Settings):
     config.zabbix = ZabbixSettings(
-                map_dir="",
-                url="",
-                username="",
-                password="",
-                dryrun=False,
-                timeout=1,
+        map_dir="",
+        url="",
+        username="",
+        password="",
+        dryrun=False,
+        timeout=1,
     )
     with pytest.raises(exceptions.ZACException) as exc_info:
         ZabbixUpdater(
@@ -64,12 +64,12 @@ def test_zabbixupdater_read_timeout(
     (map_dir / "siteadmin_hostgroup_map.txt").touch()
 
     config.zabbix = ZabbixSettings(
-            map_dir=str(map_dir),
-            url="",
-            username="",
-            password="",
-            dryrun=False,
-            timeout=1,
+        map_dir=str(map_dir),
+        url="",
+        username="",
+        password="",
+        dryrun=False,
+        timeout=1,
     )
     process = TimeoutUpdater(
         name="read-timeout",

@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Zabbix auto config - ZAC"
 readme = "README.md"
 requires-python = ">=3.8"
-license = "MIT"
+license.file = "LICENSE"
 keywords = []
 authors = [{ name = "Paal Braathen", email = "paal.braathen@usit.uio.no" }]
 maintainers = [{ name = "Peder Hovdan Andresen", email = "pederhan@uio.no" }]

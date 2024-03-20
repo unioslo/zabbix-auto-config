@@ -1,4 +1,4 @@
-"""Santiy testing of Zabbix API version parsing. 
+"""Santiy testing of Zabbix API version parsing.
 
 Tests against known versions of Zabbix. Expects support for alpha, beta and rc.
 """

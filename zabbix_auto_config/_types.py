@@ -1,4 +1,4 @@
-"""Custom types used by Zabbix Auto Config. 
+"""Custom types used by Zabbix Auto Config.
 
 Leading underscore in module name to avoid name collision with built-in module `types`.
 """

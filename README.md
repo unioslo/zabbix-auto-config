@@ -166,7 +166,7 @@ Here's an example of a source collector module that reads hosts from a file:
 from typing import Any, Dict, List
 from zabbix_auto_config.models import Host
 
-DEFAULT_FILE = "hosts.json" 
+DEFAULT_FILE = "hosts.json"
 
 def collect(*args: Any, **kwargs: Any) -> List[Host]:
     filename = kwargs.get("filename", DEFAULT_FILE)
@@ -206,13 +206,13 @@ If `error_tolerance` number of errors occur within `error_duration` seconds, the
 
 #### error_tolerance
 
-`error_tolerance` (default: 0) is the maximum number of errors tolerated within `error_duration` seconds. 
+`error_tolerance` (default: 0) is the maximum number of errors tolerated within `error_duration` seconds.
 
 #### error_duration
 
-`error_duration` (default: 0) specifies the duration in seconds to track and log errors. This value should be at least equal to `error_tolerance * update_interval` to ensure correct error detection. 
+`error_duration` (default: 0) specifies the duration in seconds to track and log errors. This value should be at least equal to `error_tolerance * update_interval` to ensure correct error detection.
 
-For instance, with an `error_tolerance` of 5 and an `update_interval` of 60, `error_duration` should be no less than 300 (5 * 60). However, it is advisable to choose a higher value to compensate for processing intervals between error occurrences and the subsequent error count checks, as well as any potential delays from the source collectors. 
+For instance, with an `error_tolerance` of 5 and an `update_interval` of 60, `error_duration` should be no less than 300 (5 * 60). However, it is advisable to choose a higher value to compensate for processing intervals between error occurrences and the subsequent error count checks, as well as any potential delays from the source collectors.
 
 A useful guide is to set `error_duration` as `(error_tolerance + 1) * update_interval`, providing an additional buffer equivalent to one update interval.
 
@@ -249,7 +249,7 @@ def modify(host: Host) -> Host:
 
 Any module that contains a function named `modify` which takes a `Host` and returns a `Host` is recognized as a host modifier module. Type annotations are optional, but recommended.
 
-See the [`Host`](https://github.com/unioslo/zabbix-auto-config/blob/2b45f1cb7da0d46b8b218005ebbf751cb17f8793/zabbix_auto_config/models.py#L111-L123) class in `zabbix_auto_config/models.py` for the available fields that can be accessed and modified. One restriction applies: the `modify` function should _never_ modify the hostname of the host. Attempting to do so will result in an error. 
+See the [`Host`](https://github.com/unioslo/zabbix-auto-config/blob/2b45f1cb7da0d46b8b218005ebbf751cb17f8793/zabbix_auto_config/models.py#L111-L123) class in `zabbix_auto_config/models.py` for the available fields that can be accessed and modified. One restriction applies: the `modify` function should _never_ modify the hostname of the host. Attempting to do so will result in an error.
 
 ## Host inventory
 
@@ -275,7 +275,7 @@ Install the application with Hatch and enter the virtual environment:
 hatch shell
 ```
 
-The path to the current Hatch environment can always be found with: 
+The path to the current Hatch environment can always be found with:
 
 ```bash
 hatch env find

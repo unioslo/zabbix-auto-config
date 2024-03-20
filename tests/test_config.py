@@ -51,7 +51,6 @@ def test_sourcecollectorsettings_defaults():
     assert settings.disable_duration == 3600
 
 
-
 def test_sourcecollectorsettings_no_tolerance() -> None:
     """Setting no error tolerance will cause the error_duration to be set
     to a non-zero value.
