@@ -1,12 +1,20 @@
+from __future__ import annotations
+
 import copy
 import datetime
 import ipaddress
 import logging
 import multiprocessing
-from pathlib import Path
 import queue
 import re
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Set, Tuple, Union
+from pathlib import Path
+from typing import Dict
+from typing import Iterable
+from typing import List
+from typing import MutableMapping
+from typing import Set
+from typing import Tuple
+from typing import Union
 
 
 def is_valid_regexp(pattern: str):
@@ -133,22 +141,21 @@ def with_prefix(
         )
     return groupname
 
+
 def mapping_values_with_prefix(
     m: MutableMapping[str, List[str]],
     prefix: str,
     separator: str = "-",
 ) -> MutableMapping[str, List[str]]:
     """Calls `with_prefix` on all items in the values (list) in the mapping `m`."""
-    m = copy.copy(m) # don't modify the original mapping
+    m = copy.copy(m)  # don't modify the original mapping
     for key, value in m.items():
         new_values = []
         for v in value:
             try:
                 new_value = with_prefix(text=v, prefix=prefix, separator=separator)
             except ValueError:
-                logging.warning(
-                    f"Unable to replace prefix in '%s' with '%s'", v, prefix
-                )
+                logging.warning("Unable to replace prefix in '%s' with '%s'", v, prefix)
                 continue
             new_values.append(new_value)
         m[key] = new_values

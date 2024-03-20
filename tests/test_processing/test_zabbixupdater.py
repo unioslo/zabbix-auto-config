@@ -1,16 +1,20 @@
-from pathlib import Path
+from __future__ import annotations
+
 import time
+from pathlib import Path
 from unittest.mock import patch
+
 import pytest
 import requests
 
-from ..conftest import MockZabbixAPI, PicklableMock
 from zabbix_auto_config import exceptions
-
-from zabbix_auto_config.models import ZabbixSettings
 from zabbix_auto_config.models import Settings
+from zabbix_auto_config.models import ZabbixSettings
 from zabbix_auto_config.processing import ZabbixUpdater
 from zabbix_auto_config.state import get_manager
+
+from ..conftest import MockZabbixAPI
+from ..conftest import PicklableMock
 
 
 def raises_connect_timeout(*args, **kwargs):
@@ -30,12 +34,12 @@ class TimeoutAPI(MockZabbixAPI):
 @patch("pyzabbix.ZabbixAPI", TimeoutAPI())  # mock with timeout on login
 def test_zabbixupdater_connect_timeout(mock_psycopg2_connect, config: Settings):
     config.zabbix = ZabbixSettings(
-                map_dir="",
-                url="",
-                username="",
-                password="",
-                dryrun=False,
-                timeout=1,
+        map_dir="",
+        url="",
+        username="",
+        password="",
+        dryrun=False,
+        timeout=1,
     )
     with pytest.raises(exceptions.ZACException) as exc_info:
         ZabbixUpdater(
@@ -64,12 +68,12 @@ def test_zabbixupdater_read_timeout(
     (map_dir / "siteadmin_hostgroup_map.txt").touch()
 
     config.zabbix = ZabbixSettings(
-            map_dir=str(map_dir),
-            url="",
-            username="",
-            password="",
-            dryrun=False,
-            timeout=1,
+        map_dir=str(map_dir),
+        url="",
+        username="",
+        password="",
+        dryrun=False,
+        timeout=1,
     )
     process = TimeoutUpdater(
         name="read-timeout",

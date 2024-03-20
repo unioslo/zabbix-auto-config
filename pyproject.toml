@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Zabbix auto config - ZAC"
 readme = "README.md"
 requires-python = ">=3.8"
-license = "MIT"
+license.file = "LICENSE"
 keywords = []
 authors = [{ name = "Paal Braathen", email = "paal.braathen@usit.uio.no" }]
 maintainers = [{ name = "Peder Hovdan Andresen", email = "pederhan@uio.no" }]
@@ -57,3 +57,14 @@ exclude = ["/.github", "/tests", "/path"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["zabbix_auto_config"]
+
+[tool.ruff.lint]
+extend-select = [
+    "I", # isort
+]
+
+[tool.ruff.lint.isort]
+# Force one line per import to simplify diffing and merging
+force-single-line = true
+# Add annotations import to every file
+required-imports = ["from __future__ import annotations"]

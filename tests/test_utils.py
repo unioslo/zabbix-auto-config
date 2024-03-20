@@ -1,12 +1,21 @@
+from __future__ import annotations
+
 import logging
-from ipaddress import IPv4Address, IPv6Address
+from ipaddress import IPv4Address
+from ipaddress import IPv6Address
 from pathlib import Path
-from typing import Dict, List, Set, Tuple, Union
+from typing import Dict
+from typing import List
+from typing import Set
+from typing import Tuple
+from typing import Union
 
 import pytest
-from pytest import LogCaptureFixture
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck
+from hypothesis import given
+from hypothesis import settings
 from hypothesis import strategies as st
+from pytest import LogCaptureFixture
 
 from zabbix_auto_config import utils
 
@@ -30,6 +39,7 @@ def test_is_valid_regexp(input: str, expected: bool):
 @given(st.ip_addresses())
 def test_is_valid_ip(ip_address: Union[IPv4Address, IPv6Address]):
     assert utils.is_valid_ip(str(ip_address))
+
 
 def test_read_map_file(tmp_path: Path, caplog: pytest.LogCaptureFixture):
     tmpfile = tmp_path / "map.txt"

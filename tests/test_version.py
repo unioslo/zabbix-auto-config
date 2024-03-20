@@ -1,11 +1,14 @@
-"""Santiy testing of Zabbix API version parsing. 
+"""Santiy testing of Zabbix API version parsing.
 
 Tests against known versions of Zabbix. Expects support for alpha, beta and rc.
 """
 
+from __future__ import annotations
+
 from typing import Tuple
-from packaging.version import Version
+
 import pytest
+from packaging.version import Version
 
 
 @pytest.mark.parametrize(

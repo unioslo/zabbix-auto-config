@@ -1,10 +1,16 @@
+from __future__ import annotations
+
 import time
 import types
 from dataclasses import asdict
-from multiprocessing.managers import BaseManager, NamespaceProxy
-from typing import Any, Dict, Optional
+from multiprocessing.managers import BaseManager
+from multiprocessing.managers import NamespaceProxy
+from typing import Any
+from typing import Dict
+from typing import Optional
 
 from pydantic.dataclasses import dataclass
+
 
 @dataclass
 class State:
@@ -52,6 +58,7 @@ class StateProxy(NamespaceProxy):
     # As a one-off, we use a static Proxy type, but if we need to do this
     # to other types as well, it might be worth making a Proxy factory function
     """A proxy class that gives access to all attributes of a State object."""
+
     _exposed_ = tuple(dir(State))
 
     def __getattr__(self, name):

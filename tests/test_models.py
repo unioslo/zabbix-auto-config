@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import logging
 from typing import Optional
+
 import pytest
 from pydantic import ValidationError
-from zabbix_auto_config import models
 
+from zabbix_auto_config import models
 
 # NOTE: Do not test msg and ctx of Pydantic errors!
 # They are not guaranteed to be stable between minor versions.
@@ -63,7 +66,6 @@ def test_duplicate_interface(invalid_hosts):
     assert error["type"] == "assertion_error"
 
 
-
 def test_invalid_importance(invalid_hosts):
     host = find_host_by_hostname(invalid_hosts, "invalid-importance")
     with pytest.raises(ValidationError) as exc_info:
@@ -74,7 +76,6 @@ def test_invalid_importance(invalid_hosts):
     assert error["loc"] == ("importance",)
     assert error["input"] == -1
     assert error["type"] == "greater_than_equal"
-
 
 
 def test_host_merge(full_hosts):
@@ -179,24 +180,25 @@ def test_zacsettings_log_level_serialize() -> None:
     settings_json = settings.model_dump_json()
     assert '"log_level":"INFO"' in settings_json
 
+
 @pytest.mark.parametrize(
-        "timeout,expect",
-        [
-            (1, 1),
-            (60, 60),
-            (1234, 1234),
-            (0, None),
-            pytest.param(
-                -1,
-                None,
-                marks=pytest.mark.xfail(
-                    reason="Timeout must be 0 or greater.",
-                    strict=True,
-                    raises=ValidationError,
-                ),
-                id="-1"
-            )
-        ]
+    "timeout,expect",
+    [
+        (1, 1),
+        (60, 60),
+        (1234, 1234),
+        (0, None),
+        pytest.param(
+            -1,
+            None,
+            marks=pytest.mark.xfail(
+                reason="Timeout must be 0 or greater.",
+                strict=True,
+                raises=ValidationError,
+            ),
+            id="-1",
+        ),
+    ],
 )
 def test_zabbix_settings_timeout(timeout: int, expect: Optional[int]) -> None:
     settings = models.ZabbixSettings(

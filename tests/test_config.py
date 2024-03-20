@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import logging
-import tomli
 
 import pytest
+import tomli
 from pydantic import ValidationError
+
 import zabbix_auto_config.models as models
 
 
@@ -49,7 +52,6 @@ def test_sourcecollectorsettings_defaults():
     assert settings.error_tolerance == 0
     assert settings.exit_on_error is True
     assert settings.disable_duration == 3600
-
 
 
 def test_sourcecollectorsettings_no_tolerance() -> None:
