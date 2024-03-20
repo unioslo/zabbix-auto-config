@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 import multiprocessing
 import time
 from typing import List
 
 import pytest
 
+from zabbix_auto_config.models import Host
+from zabbix_auto_config.models import SourceCollectorSettings
 from zabbix_auto_config.processing import SourceCollectorProcess
-from zabbix_auto_config.models import Host, SourceCollectorSettings
 from zabbix_auto_config.state import get_manager
 
 

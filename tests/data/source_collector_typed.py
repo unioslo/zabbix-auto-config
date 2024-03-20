@@ -1,4 +1,8 @@
-from typing import Any, List
+from __future__ import annotations
+
+from typing import Any
+from typing import List
+
 from zabbix_auto_config.models import Host
 
 HOSTS = [

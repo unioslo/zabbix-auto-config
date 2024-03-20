@@ -1,12 +1,20 @@
+from __future__ import annotations
+
 import copy
 import datetime
 import ipaddress
 import logging
 import multiprocessing
-from pathlib import Path
 import queue
 import re
-from typing import Dict, Iterable, List, MutableMapping, Set, Tuple, Union
+from pathlib import Path
+from typing import Dict
+from typing import Iterable
+from typing import List
+from typing import MutableMapping
+from typing import Set
+from typing import Tuple
+from typing import Union
 
 
 def is_valid_regexp(pattern: str):

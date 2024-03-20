@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 import multiprocessing
 import os
 from pathlib import Path
-from typing import Iterable, Type
-from unittest.mock import MagicMock
-import pytest
+from typing import Iterable
+from typing import Type
 from unittest import mock
+from unittest.mock import MagicMock
 
+import pytest
 import tomli
 
 from zabbix_auto_config import models

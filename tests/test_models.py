@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import logging
 from typing import Optional
+
 import pytest
 from pydantic import ValidationError
-from zabbix_auto_config import models
 
+from zabbix_auto_config import models
 
 # NOTE: Do not test msg and ctx of Pydantic errors!
 # They are not guaranteed to be stable between minor versions.

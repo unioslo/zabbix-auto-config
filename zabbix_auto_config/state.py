@@ -1,8 +1,13 @@
+from __future__ import annotations
+
 import time
 import types
 from dataclasses import asdict
-from multiprocessing.managers import BaseManager, NamespaceProxy
-from typing import Any, Dict, Optional
+from multiprocessing.managers import BaseManager
+from multiprocessing.managers import NamespaceProxy
+from typing import Any
+from typing import Dict
+from typing import Optional
 
 from pydantic.dataclasses import dataclass
 

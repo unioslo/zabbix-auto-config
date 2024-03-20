@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import logging
-import tomli
 
 import pytest
+import tomli
 from pydantic import ValidationError
+
 import zabbix_auto_config.models as models
 
 

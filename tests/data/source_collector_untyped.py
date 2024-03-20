@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import zabbix_auto_config.models
 
 HOSTS = [

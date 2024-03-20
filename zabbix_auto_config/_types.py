@@ -3,8 +3,16 @@
 Leading underscore in module name to avoid name collision with built-in module `types`.
 """
 
-from typing import Any, Protocol, TypedDict, runtime_checkable, List
-from .models import Host, SourceCollectorSettings
+from __future__ import annotations
+
+from typing import Any
+from typing import List
+from typing import Protocol
+from typing import TypedDict
+from typing import runtime_checkable
+
+from .models import Host
+from .models import SourceCollectorSettings
 
 
 @runtime_checkable

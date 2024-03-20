@@ -1,16 +1,20 @@
-from pathlib import Path
+from __future__ import annotations
+
 import time
+from pathlib import Path
 from unittest.mock import patch
+
 import pytest
 import requests
 
-from ..conftest import MockZabbixAPI, PicklableMock
 from zabbix_auto_config import exceptions
-
-from zabbix_auto_config.models import ZabbixSettings
 from zabbix_auto_config.models import Settings
+from zabbix_auto_config.models import ZabbixSettings
 from zabbix_auto_config.processing import ZabbixUpdater
 from zabbix_auto_config.state import get_manager
+
+from ..conftest import MockZabbixAPI
+from ..conftest import PicklableMock
 
 
 def raises_connect_timeout(*args, **kwargs):

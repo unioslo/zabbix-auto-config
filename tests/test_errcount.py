@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import operator
 import time
@@ -5,7 +7,9 @@ from typing import Callable
 
 import pytest
 
-from zabbix_auto_config.errcount import Error, RollingErrorCounter, get_td
+from zabbix_auto_config.errcount import Error
+from zabbix_auto_config.errcount import RollingErrorCounter
+from zabbix_auto_config.errcount import get_td
 
 
 def test_get_td():

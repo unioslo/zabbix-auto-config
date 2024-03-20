@@ -1,11 +1,15 @@
+from __future__ import annotations
+
 import datetime
 import time
 
 import pytest
+
 from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.processing import BaseProcess
-
-from zabbix_auto_config.state import State, get_manager, StateProxy
+from zabbix_auto_config.state import State
+from zabbix_auto_config.state import StateProxy
+from zabbix_auto_config.state import get_manager
 
 
 def test_manager_state():

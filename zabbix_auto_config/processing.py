@@ -1,33 +1,41 @@
-from collections import Counter, defaultdict
-from enum import Enum
-import multiprocessing
-import logging
+from __future__ import annotations
+
 import datetime
 import importlib
+import itertools
+import logging
+import multiprocessing
 import os
 import os.path
+import queue
 import random
 import re
-import time
-import sys
 import signal
-import itertools
-import queue
-from typing import Dict, List, TYPE_CHECKING, Optional, Set
+import sys
+import time
+from collections import Counter
+from collections import defaultdict
+from enum import Enum
+from typing import TYPE_CHECKING
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Set
 
-from packaging.version import Version
 import psycopg2
-from pydantic import ValidationError
 import pyzabbix
 import requests.exceptions
-
+from packaging.version import Version
+from pydantic import ValidationError
 
 from . import exceptions
 from . import models
 from . import utils
+from ._types import HostModifierDict
+from ._types import HostModifierModule
+from ._types import SourceCollectorModule
 from .errcount import RollingErrorCounter
 from .state import State
-from ._types import HostModifierDict, SourceCollectorModule, HostModifierModule
 
 if TYPE_CHECKING:
     from psycopg2.extensions import cursor as Cursor

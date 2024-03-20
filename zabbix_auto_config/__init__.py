@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import importlib
 import importlib.metadata
@@ -18,8 +20,9 @@ from zabbix_auto_config.state import get_manager
 from . import exceptions
 from . import models
 from . import processing
-from ._types import SourceCollectorDict, SourceCollectorModule
 from .__about__ import __version__
+from ._types import SourceCollectorDict
+from ._types import SourceCollectorModule
 
 
 def get_source_collectors(config: models.Settings) -> List[SourceCollectorDict]:

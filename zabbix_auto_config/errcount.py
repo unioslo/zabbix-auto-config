@@ -1,7 +1,12 @@
-from dataclasses import dataclass, field
+from __future__ import annotations
+
 import datetime
-from functools import lru_cache, wraps
-from typing import TYPE_CHECKING, Optional
+from dataclasses import dataclass
+from dataclasses import field
+from functools import lru_cache
+from functools import wraps
+from typing import TYPE_CHECKING
+from typing import Optional
 
 if TYPE_CHECKING:
     from typing import List  # noqa: F401
