@@ -307,3 +307,17 @@ If you just want to run tests without Hatch, you can do so by installing the dev
 # Set up venv or similar ...
 pip install .[test]
 ```
+
+### Pre-commit
+
+We use [pre-commit](https://pre-commit.com/) to manage pre-commit hooks. Install the hooks with:
+
+```bash
+pre-commit install
+```
+
+This will install the hooks in the `.git/hooks` directory. The hooks will run automatically when you commit changes. If you want to run the hooks manually, you can do so with:
+
+```bash
+pre-commit run --all-files
+```
