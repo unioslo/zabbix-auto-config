@@ -28,6 +28,7 @@ import requests.exceptions
 from packaging.version import Version
 from pydantic import ValidationError
 
+from . import compat
 from . import exceptions
 from . import models
 from . import utils
@@ -768,7 +769,11 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
     def clear_proxy(self, zabbix_host):
         if not self.config.dryrun:
-            self.api.host.update(hostid=zabbix_host["hostid"], proxy_hostid="0")
+            kwargs = {
+                "hostid": zabbix_host["hostid"],
+                compat.host_proxyid(self.zabbix_version): "0",
+            }
+            self.api.host.update(**kwargs)
             logging.info(
                 "Clearing proxy on host: '%s' (%s)",
                 zabbix_host["host"],
@@ -858,19 +863,21 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
     def set_proxy(self, zabbix_host, zabbix_proxy):
         if not self.config.dryrun:
-            self.api.host.update(
-                hostid=zabbix_host["hostid"], proxy_hostid=zabbix_proxy["proxyid"]
-            )
+            kwargs = {
+                "hostid": zabbix_host["hostid"],
+                compat.host_proxyid(self.zabbix_version): zabbix_proxy["proxyid"],
+            }
+            self.api.host.update(**kwargs)
             logging.info(
                 "Setting proxy (%s) on host: '%s' (%s)",
-                zabbix_proxy["host"],
+                zabbix_proxy[compat.proxy_name(self.zabbix_version)],
                 zabbix_host["host"],
                 zabbix_host["hostid"],
             )
         else:
             logging.info(
                 "DRYRUN: Setting proxy (%s) on host: '%s' (%s)",
-                zabbix_proxy["host"],
+                zabbix_proxy[compat.proxy_name(self.zabbix_version)],
                 zabbix_host["host"],
                 zabbix_host["hostid"],
             )
@@ -956,37 +963,41 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 t[0]["hostname"]: models.Host(**t[0]) for t in db_cursor.fetchall()
             }
         # status:0 = monitored, flags:0 = non-discovered host
-        zabbix_hosts = {
-            host["host"]: host
-            for host in self.api.host.get(
-                filter={"status": 0, "flags": 0},
-                output=[
-                    "hostid",
-                    "host",
-                    "status",
-                    "flags",
-                    "proxy_hostid",
-                    "inventory_mode",
-                ],
-                selectGroups=["groupid", "name"],
-                selectInterfaces=[
-                    "dns",
-                    "interfaceid",
-                    "ip",
-                    "main",
-                    "port",
-                    "type",
-                    "useip",
-                    "details",
-                ],
-                selectInventory=self.config.managed_inventory,
-                selectParentTemplates=["templateid", "host"],
-                selectTags=["tag", "value"],
-            )
+        kwargs = {
+            "filter": {"status": 0, "flags": 0},
+            "output": [
+                "hostid",
+                "host",
+                "status",
+                "flags",
+                compat.host_proxyid(self.zabbix_version),
+                "inventory_mode",
+            ],
+            "selectInterfaces": [
+                "dns",
+                "interfaceid",
+                "ip",
+                "main",
+                "port",
+                "type",
+                "useip",
+                "details",
+            ],
+            "selectInventory": self.config.managed_inventory,
+            "selectParentTemplates": ["templateid", "host"],
+            "selectTags": ["tag", "value"],
+            compat.param_host_get_groups(self.zabbix_version): ["groupid", "name"],
         }
+        zabbix_hosts = {host["host"]: host for host in self.api.host.get(**kwargs)}
         zabbix_proxies = {
-            proxy["host"]: proxy
-            for proxy in self.api.proxy.get(output=["proxyid", "host", "status"])
+            proxy[compat.proxy_name(self.zabbix_version)]: proxy
+            for proxy in self.api.proxy.get(
+                output=[
+                    "proxyid",
+                    compat.proxy_name(self.zabbix_version),
+                    compat.proxy_operating_mode(self.zabbix_version),
+                ]
+            )
         }
         zabbix_managed_hosts = []
         zabbix_manual_hosts = []
@@ -995,7 +1006,10 @@ class ZabbixHostUpdater(ZabbixUpdater):
             if self.stop_event.is_set():
                 logging.debug("Told to stop. Breaking")
                 break
-            hostgroup_names = [group["name"] for group in host["groups"]]
+            hostgroup_names = [
+                group["name"]
+                for group in host[compat.host_hostgroups(self.zabbix_version)]
+            ]
             if self.config.hostgroup_manual in hostgroup_names:
                 zabbix_manual_hosts.append(host)
             else:
@@ -1065,7 +1079,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             zabbix_host = zabbix_hosts[hostname]
 
             # Check proxy. A host with proxy_pattern should get a proxy that matches the pattern.
-            zabbix_proxy_id = zabbix_host["proxy_hostid"]
+            zabbix_proxy_id = zabbix_host[compat.host_proxyid(self.zabbix_version)]
             zabbix_proxy = [
                 proxy
                 for proxy in zabbix_proxies.values()
@@ -1076,7 +1090,10 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 possible_proxies = [
                     proxy
                     for proxy in zabbix_proxies.values()
-                    if re.match(db_host.proxy_pattern, proxy["host"])
+                    if re.match(
+                        db_host.proxy_pattern,
+                        proxy[compat.proxy_name(self.zabbix_version)],
+                    )
                 ]
                 if not possible_proxies:
                     logging.error(
@@ -1088,7 +1105,8 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 else:
                     new_proxy = random.choice(possible_proxies)
                     if current_zabbix_proxy and not re.match(
-                        db_host.proxy_pattern, current_zabbix_proxy["host"]
+                        db_host.proxy_pattern,
+                        current_zabbix_proxy[compat.proxy_name(self.zabbix_version)],
                     ):
                         # Wrong proxy, set new
                         self.set_proxy(zabbix_host, new_proxy)
@@ -1305,13 +1323,19 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
             db_hosts = {
                 t[0]["hostname"]: models.Host(**t[0]) for t in db_cursor.fetchall()
             }
+
         zabbix_hosts = {
             host["host"]: host
             for host in self.api.host.get(
-                filter={"status": 0, "flags": 0},
-                output=["hostid", "host"],
-                selectGroups=["groupid", "name"],
-                selectParentTemplates=["templateid", "host"],
+                **{
+                    "filter": {"status": 0, "flags": 0},
+                    "output": ["hostid", "host"],
+                    compat.param_host_get_groups(self.zabbix_version): [
+                        "groupid",
+                        "name",
+                    ],
+                    "selectParentTemplates": ["templateid", "host"],
+                }
             )
         }
 
@@ -1321,7 +1345,8 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                 break
 
             if self.config.hostgroup_manual in [
-                group["name"] for group in zabbix_host["groups"]
+                group["name"]
+                for group in zabbix_host[compat.host_hostgroups(self.zabbix_version)]
             ]:
                 logging.debug(
                     "Skipping manual host: '%s' (%s)",
@@ -1479,7 +1504,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 self.siteadmin_hostgroup_map.values()
             )
         )
-        if self.zabbix_version.release >= (6, 2, 0):
+        if compat.templategroups_supported(self.zabbix_version):
             logging.debug(
                 "Zabbix version is %s. Creating template groups.", self.zabbix_version
             )
@@ -1560,10 +1585,15 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         zabbix_hosts = {
             host["host"]: host
             for host in self.api.host.get(
-                filter={"status": 0, "flags": 0},
-                output=["hostid", "host"],
-                selectGroups=["groupid", "name"],
-                selectParentTemplates=["templateid", "host"],
+                **{
+                    "filter": {"status": 0, "flags": 0},
+                    "output": ["hostid", "host"],
+                    compat.param_host_get_groups(self.zabbix_version): [
+                        "groupid",
+                        "name",
+                    ],
+                    "selectParentTemplates": ["templateid", "host"],
+                }
             )
         }
 
@@ -1573,7 +1603,8 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 break
 
             if self.config.hostgroup_manual in [
-                group["name"] for group in zabbix_host["groups"]
+                group["name"]
+                for group in zabbix_host[compat.host_hostgroups(self.zabbix_version)]
             ]:
                 logging.debug(
                     "Skipping manual host: '%s' (%s)",
@@ -1617,7 +1648,9 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 )
 
             host_hostgroups = {}
-            for zabbix_hostgroup in zabbix_host["groups"]:
+            for zabbix_hostgroup in zabbix_host[
+                compat.host_hostgroups(self.zabbix_version)
+            ]:
                 host_hostgroups[zabbix_hostgroup["name"]] = zabbix_hostgroup["groupid"]
 
             old_host_hostgroups = host_hostgroups.copy()
