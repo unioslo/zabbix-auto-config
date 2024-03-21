@@ -2,7 +2,7 @@
 
 Zabbix-auto-config is an utility that aims to automatically configure hosts, host groups, host inventories, template groups and templates in the monitoring software [Zabbix](https://www.zabbix.com/).
 
-Note: Only tested with Zabbix 6.0 and 6.4.
+Note: Only tested with Zabbix 6.0, 6.4 and 7.0.
 
 ## Requirements
 
