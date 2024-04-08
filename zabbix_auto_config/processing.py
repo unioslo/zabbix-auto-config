@@ -906,7 +906,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         If a failsafe OK file exists, the method will attempt to remove it
         and proceed with the changes. Otherwise, it will write the list of
         hosts to add and remove to a failsafe file and raise a ZACException."""
-        if self._check_failsafe_ok_file():
+        if utils.check_failsafe_ok(self.settings.zac):
             return
         # Failsafe OK file does not exist or cannot be deleted.
         # We must write the hosts to add/remove and raise an exception
@@ -931,28 +931,6 @@ class ZabbixHostUpdater(ZabbixUpdater):
             "Wrote list of hosts to add and remove to %s",
             self.settings.zac.failsafe_file,
         )
-
-    def _check_failsafe_ok_file(self) -> bool:
-        """Checks the failsafe OK file and returns True if application should proceed."""
-        # Check for presence of file
-        if not self.settings.zac.failsafe_ok_file:
-            return False
-        if not self.settings.zac.failsafe_ok_file.exists():
-            logging.info(
-                "Failsafe OK file %s does not exist. Create it to approve changes.",
-                self.settings.zac.failsafe_ok_file,
-            )
-            return False
-        # File exists, attempt to delete it
-        try:
-            self.settings.zac.failsafe_ok_file.unlink()
-        except OSError as e:
-            logging.error("Unable to delete failsafe OK file: %s", e)
-            if self.settings.zac.failsafe_ok_file_strict:
-                return False
-            logging.warning("Continuing with changes despite failed deletion.")
-        logging.info("Failsafe OK file exists. Proceeding with changes.")
-        return True
 
     def do_update(self):
         with self.db_connection, self.db_connection.cursor() as db_cursor:

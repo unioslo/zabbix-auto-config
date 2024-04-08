@@ -8,6 +8,7 @@ import multiprocessing
 import queue
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import Dict
 from typing import Iterable
 from typing import List
@@ -15,6 +16,9 @@ from typing import MutableMapping
 from typing import Set
 from typing import Tuple
 from typing import Union
+
+if TYPE_CHECKING:
+    from zabbix_auto_config.models import ZacSettings
 
 
 def is_valid_regexp(pattern: str):
@@ -201,3 +205,26 @@ def make_parent_dirs(path: Union[str, Path]) -> Path:
     except OSError as e:
         raise ValueError(f"Failed to create parent directories for {path}: {e}") from e
     return path
+
+
+def check_failsafe_ok(config: ZacSettings) -> bool:
+    """Checks the failsafe OK file and returns True if application should proceed."""
+    # Check for presence of file
+    if not config.failsafe_ok_file:
+        return False
+    if not config.failsafe_ok_file.exists():
+        logging.info(
+            "Failsafe OK file %s does not exist. Create it to approve changes.",
+            config.failsafe_ok_file,
+        )
+        return False
+    # File exists, attempt to delete it
+    try:
+        config.failsafe_ok_file.unlink()
+    except OSError as e:
+        logging.error("Unable to delete failsafe OK file: %s", e)
+        if config.failsafe_ok_file_strict:
+            return False
+        logging.warning("Continuing with changes despite failed deletion.")
+    logging.info("Failsafe OK file exists. Proceeding with changes.")
+    return True
