@@ -10,12 +10,11 @@ import os
 import os.path
 import sys
 import time
+from pathlib import Path
 from typing import List
 
 import multiprocessing_logging
 import tomli
-
-from zabbix_auto_config.state import get_manager
 
 from . import exceptions
 from . import models
@@ -23,6 +22,7 @@ from . import processing
 from .__about__ import __version__
 from ._types import SourceCollectorDict
 from ._types import SourceCollectorModule
+from .state import get_manager
 
 
 def get_source_collectors(config: models.Settings) -> List[SourceCollectorDict]:
@@ -62,7 +62,7 @@ def get_source_collectors(config: models.Settings) -> List[SourceCollectorDict]:
     return source_collectors
 
 
-def get_config():
+def get_config() -> models.Settings:
     cwd = os.getcwd()
     config_file = os.path.join(cwd, "config.toml")
     with open(config_file) as f:
@@ -75,8 +75,11 @@ def get_config():
 
 
 def write_health(
-    health_file, processes: List[processing.BaseProcess], queues, failsafe
-):
+    health_file: Path,
+    processes: List[processing.BaseProcess],
+    queues: List[multiprocessing.Queue],
+    failsafe: int,
+) -> None:
     now = datetime.datetime.now()
     health = {
         "date": now.isoformat(timespec="seconds"),
@@ -115,7 +118,7 @@ def write_health(
         logging.error("Unable to write health file %s: %s", health_file, e)
 
 
-def log_process_status(processes):
+def log_process_status(processes: List[processing.BaseProcess]) -> None:
     process_statuses = []
 
     for process in processes:
@@ -126,7 +129,7 @@ def log_process_status(processes):
     logging.info("Process status: %s", ", ".join(process_statuses))
 
 
-def main():
+def main() -> None:
     multiprocessing_logging.install_mp_handler()
     logging.basicConfig(
         format="%(asctime)s %(levelname)s [%(processName)s %(process)d] [%(name)s] %(message)s",
@@ -142,9 +145,10 @@ def main():
     state_manager = get_manager()
     processes = []  # type: List[processing.BaseProcess]
 
-    source_hosts_queues = []
+    source_hosts_queues = []  # type: List[multiprocessing.Queue]
     source_collectors = get_source_collectors(config)
     for source_collector in source_collectors:
+        # Each source collector has its own queue
         source_hosts_queue = multiprocessing.Queue(maxsize=1)
         process = processing.SourceCollectorProcess(
             source_collector["name"],
