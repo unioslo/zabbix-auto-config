@@ -4,7 +4,7 @@ import time
 import types
 from dataclasses import asdict
 from multiprocessing.managers import BaseManager
-from multiprocessing.managers import NamespaceProxy
+from multiprocessing.managers import NamespaceProxy  # type: ignore[attr-defined]
 from typing import Any
 from typing import Dict
 from typing import Optional
@@ -72,10 +72,18 @@ class StateProxy(NamespaceProxy):
         return result
 
 
-Manager.register("State", State, proxytype=StateProxy)
+class StateManager(BaseManager):
+    """Custom subclass of BaseManager with type annotations for custom types."""
+
+    # We need to do this to make mypy happy with calling .State() on the manager class
+    # This stub will be overwritten by the actual method created by register()
+    def State(self) -> State: ...
 
 
-def get_manager() -> Manager:
-    m = Manager()
+StateManager.register("State", State, proxytype=StateProxy)
+
+
+def get_manager() -> StateManager:
+    m = StateManager()
     m.start()
     return m
