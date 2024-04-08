@@ -20,6 +20,7 @@ from . import exceptions
 from . import models
 from . import processing
 from .__about__ import __version__
+from ._types import HealthDict
 from ._types import SourceCollectorDict
 from ._types import SourceCollectorModule
 from .state import get_manager
@@ -67,10 +68,8 @@ def get_config() -> models.Settings:
     config_file = os.path.join(cwd, "config.toml")
     with open(config_file) as f:
         content = f.read()
-
-    config = tomli.loads(content)
-    config = models.Settings(**config)
-
+    config_dict = tomli.loads(content)
+    config = models.Settings(**config_dict)
     return config
 
 
@@ -81,7 +80,7 @@ def write_health(
     failsafe: int,
 ) -> None:
     now = datetime.datetime.now()
-    health = {
+    health: HealthDict = {
         "date": now.isoformat(timespec="seconds"),
         "date_unixtime": int(now.timestamp()),
         "pid": os.getpid(),
@@ -143,21 +142,22 @@ def main() -> None:
     logging.info("Main start (%d) version %s", os.getpid(), __version__)
     stop_event = multiprocessing.Event()
     state_manager = get_manager()
-    processes = []  # type: List[processing.BaseProcess]
 
-    source_hosts_queues = []  # type: List[multiprocessing.Queue]
+    source_hosts_queues = []  # type: List[multiprocessing.Queue[models.Host]]
     source_collectors = get_source_collectors(config)
+
+    processes = []  # type: List[processing.BaseProcess]
     for source_collector in source_collectors:
         # Each source collector has its own queue
-        source_hosts_queue = multiprocessing.Queue(maxsize=1)
-        process = processing.SourceCollectorProcess(
+        source_hosts_queue = multiprocessing.Queue(maxsize=1)  # type: multiprocessing.Queue[models.Host]
+        source_hosts_queues.append(source_hosts_queue)
+        process: processing.BaseProcess = processing.SourceCollectorProcess(
             source_collector["name"],
             state_manager.State(),
             source_collector["module"],
             source_collector["config"],
             source_hosts_queue,
         )
-        source_hosts_queues.append(source_hosts_queue)
         processes.append(process)
 
     try:
@@ -204,8 +204,8 @@ def main() -> None:
         logging.error("Failed to initialize child processes. Exiting: %s", str(e))
         sys.exit(1)
 
-    for process in processes:
-        process.start()
+    for pr in processes:
+        pr.start()
 
     with processing.SignalHandler(stop_event):
         status_interval = 60
@@ -241,9 +241,9 @@ def main() -> None:
             ", ".join([str(queue.qsize()) for queue in source_hosts_queues]),
         )
 
-        for process in processes:
+        for pr in processes:
             logging.info("Terminating: %s(%d)", process.name, process.pid)
-            process.terminate()
+            pr.terminate()
 
         alive_processes = [process for process in processes if process.is_alive()]
         while alive_processes:

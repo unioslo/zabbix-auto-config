@@ -49,3 +49,22 @@ class SourceCollectorDict(TypedDict):
     name: str
     module: SourceCollectorModule
     config: SourceCollectorSettings
+
+
+class QueueDict(TypedDict):
+    """Queue information for the health check dict."""
+
+    size: int
+
+
+class HealthDict(TypedDict):
+    """Application health dict used by `zabbix_auto_config.__init__.write_health`"""
+
+    date: str
+    date_unixtime: int
+    pid: int
+    cwd: str
+    all_ok: bool
+    processes: List[dict]
+    queues: List[QueueDict]
+    failsafe: int
