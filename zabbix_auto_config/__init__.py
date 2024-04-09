@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import List
 
-import multiprocessing_logging
+import multiprocessing_logging  # type: ignore[import]
 import tomli
 
 from . import models
