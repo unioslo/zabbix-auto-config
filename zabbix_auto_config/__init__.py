@@ -16,7 +16,6 @@ from typing import List
 import multiprocessing_logging
 import tomli
 
-from . import exceptions
 from . import models
 from . import processing
 from .__about__ import __version__
@@ -146,7 +145,7 @@ def main() -> None:
     source_hosts_queues = []  # type: List[multiprocessing.Queue[models.Host]]
     source_collectors = get_source_collectors(config)
 
-    processes = []  # type: List[processing.BaseProcess]
+    src_processes = []  # type: List[processing.BaseProcess]
     for source_collector in source_collectors:
         # Each source collector has its own queue
         source_hosts_queue = multiprocessing.Queue(maxsize=1)  # type: multiprocessing.Queue[models.Host]
@@ -158,54 +157,51 @@ def main() -> None:
             source_collector["config"],
             source_hosts_queue,
         )
-        processes.append(process)
+        src_processes.append(process)
 
-    try:
-        process = processing.SourceHandlerProcess(
+    processes: List[processing.BaseProcess] = [
+        processing.SourceHandlerProcess(
             "source-handler",
             state_manager.State(),
             config.zac.db_uri,
             source_hosts_queues,
-        )
-        processes.append(process)
-
-        process = processing.SourceMergerProcess(
+        ),
+        processing.SourceMergerProcess(
             "source-merger",
             state_manager.State(),
             config.zac.db_uri,
             config.zac.host_modifier_dir,
-        )
-        processes.append(process)
-
-        process = processing.ZabbixHostUpdater(
+        ),
+        processing.ZabbixHostUpdater(
             "zabbix-host-updater",
             state_manager.State(),
             config.zac.db_uri,
             config,
-        )
-        processes.append(process)
-
-        process = processing.ZabbixHostgroupUpdater(
+        ),
+        processing.ZabbixHostgroupUpdater(
             "zabbix-hostgroup-updater",
             state_manager.State(),
             config.zac.db_uri,
             config,
-        )
-        processes.append(process)
-
-        process = processing.ZabbixTemplateUpdater(
+        ),
+        processing.ZabbixTemplateUpdater(
             "zabbix-template-updater",
             state_manager.State(),
             config.zac.db_uri,
             config,
-        )
-        processes.append(process)
-    except exceptions.ZACException as e:
-        logging.error("Failed to initialize child processes. Exiting: %s", str(e))
-        sys.exit(1)
+        ),
+    ]
 
+    # Combine the source collector processes with the other processes
+    processes.extend(src_processes)
+
+    # All processes must be st
     for pr in processes:
-        pr.start()
+        try:
+            pr.start()
+        except Exception as e:
+            logging.error("Unable to start process %s: %s", pr.name, e)
+            stop_event.set()  # Signal for us to stop the other proceses immediately
 
     with processing.SignalHandler(stop_event):
         status_interval = 60
