@@ -77,7 +77,7 @@ class StateManager(BaseManager):
 
     # We need to do this to make mypy happy with calling .State() on the manager class
     # This stub will be overwritten by the actual method created by register()
-    def State(self) -> State: ...
+    def State(self) -> State: ...  # type: ignore[empty-body]
 
 
 StateManager.register("State", State, proxytype=StateProxy)
