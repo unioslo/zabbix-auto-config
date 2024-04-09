@@ -241,21 +241,22 @@ def main() -> None:
             logging.info("Terminating: %s(%d)", process.name, process.pid)
             pr.terminate()
 
-        alive_processes = [process for process in processes if process.is_alive()]
-        while alive_processes:
-            process = alive_processes[0]
-            logging.info("Waiting for: %s(%d)", process.name, process.pid)
-            log_process_status(processes)  # TODO: Too verbose?
-            process.join(10)
-            if process.exitcode is None:
-                logging.warning(
-                    "Process hanging. Signaling new terminate: %s(%d)",
-                    process.name,
-                    process.pid,
-                )
-                process.terminate()
+        def get_alive():
+            return [process for process in processes if process.is_alive()]
+
+        while alive := get_alive():
+            log_process_status(processes)
+            for process in alive:
+                logging.info("Waiting for: %s(%d)", process.name, process.pid)
+                process.join(10)
+                if process.exitcode is None:
+                    logging.warning(
+                        "Process hanging. Signaling new terminate: %s(%d)",
+                        process.name,
+                        process.pid,
+                    )
+                    process.terminate()
             time.sleep(1)
-            alive_processes = [process for process in processes if process.is_alive()]
 
     logging.info("Main exit")
 
