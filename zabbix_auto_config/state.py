@@ -14,27 +14,36 @@ from pydantic.dataclasses import dataclass
 
 @dataclass
 class State:
+    """Health state of a process."""
+
     ok: bool = True
-    """True if process has not encountered an error in its most recent run."""
+    """Status of the process. False if an error has occurred in the most recent run."""
+
+    # BELOW: Only applicable if ok is False
+
     error: Optional[str] = None
-    """The error message if `ok` is False."""
+    """Error message for most recent error."""
+
     error_type: Optional[str] = None
-    """The type of error if `ok` is False."""
-    error_count: int = 0
-    """The number of errors the process has encountered."""
+    """Error type name for most recent error"""
+
     error_time: Optional[float] = None
-    """The timestamp of the most recent error."""
+    """Timestamp of the most recent error."""
+
+    error_count: int = 0
+    """Number of errors the process has encountered since starting."""
 
     def asdict(self) -> Dict[str, Any]:
         """Return dict representation of the State object."""
+        # NOTE: just construct dict ourselves instead?
         return asdict(self)
 
     def set_ok(self) -> None:
-        """Set the current state to OK, clear error information.
+        """Set current state to OK, clear error information.
 
         NOTE
         ----
-        This does not reset the error count.
+        Does not reset the error count.
         """
         self.ok = True
         self.error = None
@@ -42,6 +51,7 @@ class State:
         self.error_time = None
 
     def set_error(self, exc: Exception) -> None:
+        """Set current state to error and record error information."""
         self.ok = False
         self.error = str(exc)
         self.error_type = type(exc).__name__
