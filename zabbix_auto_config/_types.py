@@ -8,11 +8,25 @@ from __future__ import annotations
 from typing import Any
 from typing import List
 from typing import Protocol
+from typing import Sequence
+from typing import Set
+from typing import Tuple
 from typing import TypedDict
 from typing import runtime_checkable
 
 from .models import Host
 from .models import SourceCollectorSettings
+
+
+class ZabbixTag(TypedDict):
+    tag: str
+    value: str
+
+
+ZabbixTags = Sequence[ZabbixTag]
+
+ZacTag = Tuple[str, str]
+ZacTags = Set[ZacTag]
 
 
 @runtime_checkable
