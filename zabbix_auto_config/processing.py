@@ -36,6 +36,8 @@ from ._types import HostModifierDict
 from ._types import HostModifierModule
 from ._types import SourceCollectorModule
 from .errcount import RollingErrorCounter
+from .failsafe import check_failsafe_ok
+from .failsafe import write_failsafe_hosts
 from .state import State
 
 if TYPE_CHECKING:
@@ -906,11 +908,11 @@ class ZabbixHostUpdater(ZabbixUpdater):
         If a failsafe OK file exists, the method will attempt to remove it
         and proceed with the changes. Otherwise, it will write the list of
         hosts to add and remove to a failsafe file and raise a ZACException."""
-        if utils.check_failsafe_ok(self.settings.zac):
+        if check_failsafe_ok(self.settings.zac):
             return
         # Failsafe OK file does not exist or cannot be deleted.
         # We must write the hosts to add/remove and raise an exception
-        self.write_failsafe_hosts(to_add, to_remove)
+        write_failsafe_hosts(self.settings.zac, to_add, to_remove)
         logging.warning(
             "Too many hosts to change (failsafe=%d). Remove: %d, Add: %d. Aborting",
             self.config.failsafe,
@@ -918,19 +920,6 @@ class ZabbixHostUpdater(ZabbixUpdater):
             len(to_add),
         )
         raise exceptions.ZACException("Failsafe triggered")
-
-    def write_failsafe_hosts(self, to_add: List[str], to_remove: List[str]) -> None:
-        if not self.settings.zac.failsafe_file:
-            logging.info(
-                "Unable to write failsafe hosts. No diagnostics directory configured."
-            )
-            return
-        h = models.HostActions(add=to_add, remove=to_remove)
-        h.write_json(self.settings.zac.failsafe_file)
-        logging.info(
-            "Wrote list of hosts to add and remove to %s",
-            self.settings.zac.failsafe_file,
-        )
 
     def do_update(self):
         with self.db_connection, self.db_connection.cursor() as db_cursor:

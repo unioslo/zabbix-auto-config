@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 import logging
-import os
 from ipaddress import IPv4Address
 from ipaddress import IPv6Address
 from pathlib import Path
 from typing import Dict
-from typing import Iterable
 from typing import List
 from typing import Set
 from typing import Tuple
 from typing import Union
-from unittest.mock import MagicMock
 
 import pytest
 from hypothesis import HealthCheck
@@ -21,7 +18,6 @@ from hypothesis import strategies as st
 from pytest import LogCaptureFixture
 
 from zabbix_auto_config import utils
-from zabbix_auto_config.models import Settings
 
 
 @pytest.mark.parametrize(
@@ -244,65 +240,3 @@ def test_mapping_values_with_prefix_no_prefix_separator(
     )
     assert res == {"user1@example.com": ["Foouser1-primary", "Foouser1-secondary"]}
     assert caplog.text.count("WARNING") == 2
-
-
-@pytest.fixture()
-def failsafe_ok_file(tmp_path: Path) -> Iterable[Path]:
-    failsafe_file = tmp_path / "failsafe"
-    try:
-        yield failsafe_file
-    finally:
-        if failsafe_file.exists():
-            os.chmod(failsafe_ok_file, 0o644)  # Ensure we can delete file
-            failsafe_file.unlink()
-
-
-def test_check_failsafe_ok_file_not_configured(config: Settings) -> None:
-    """Test that an unconfigured failsafe OK file always returns False"""
-    config.zac.failsafe_ok_file = None
-    assert utils.check_failsafe_ok(config.zac) is False
-
-
-@pytest.mark.parametrize("content", ["", "1"])
-def test_check_failsafe_ok_file_exists(
-    failsafe_ok_file: Path, config: Settings, content: str
-) -> None:
-    """Test that a failsafe ok file that exists is OK with and without content"""
-    config.zac.failsafe_ok_file = failsafe_ok_file
-    failsafe_ok_file.write_text(content)
-    assert utils.check_failsafe_ok(config.zac) is True
-    # Ensure that approving the file also deletes it
-    assert failsafe_ok_file.exists() is False
-
-
-def test_check_failsafe_ok_file_not_exists(
-    failsafe_ok_file: Path, config: Settings
-) -> None:
-    """Test that a missing failsafe OK file returns False"""
-    config.zac.failsafe_file = failsafe_ok_file
-    assert failsafe_ok_file.exists() is False
-    assert utils.check_failsafe_ok(config.zac) is False
-    assert failsafe_ok_file.exists() is False  # Should still not exist
-
-
-@pytest.mark.parametrize("strict", [True, False])
-def test_check_failsafe_ok_file_unable_to_delete(
-    config: Settings, strict: bool
-) -> None:
-    """Test a failsafe OK file we are unable to delete."""
-    # NOTE: it's quite hard to mock a Path file with a real path
-    # so we instead mock the Path object with a MagicMock.
-    # An alternative would be to add a function we can pass Path objects
-    # to for deletion, then mock that function.
-    mock_file = MagicMock(spec=Path)
-    mock_file.exists.return_value = True
-    mock_file.unlink.side_effect = OSError("Unable to delete file")
-
-    assert mock_file.exists() is True
-    config.zac.failsafe_ok_file = mock_file
-    config.zac.failsafe_ok_file_strict = strict
-    # Fails in strict mode - must be able to delete the file
-    if strict:
-        assert utils.check_failsafe_ok(config.zac) is False
-    else:
-        assert utils.check_failsafe_ok(config.zac) is True
