@@ -37,8 +37,7 @@ from ._types import HostModifier
 from ._types import SourceCollectorModule
 from ._types import ZacTags
 from .errcount import RollingErrorCounter
-from .failsafe import check_failsafe_ok
-from .failsafe import write_failsafe_hosts
+from .failsafe import check_failsafe
 from .state import State
 
 if TYPE_CHECKING:
@@ -887,25 +886,6 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 zabbix_host["hostid"],
             )
 
-    def handle_failsafe_limit(self, to_add: List[str], to_remove: List[str]) -> None:
-        """Handles situations where the number of hosts to add/remove exceeds the failsafe.
-
-        If a failsafe OK file exists, the method will attempt to remove it
-        and proceed with the changes. Otherwise, it will write the list of
-        hosts to add and remove to a failsafe file and raise a ZACException."""
-        if check_failsafe_ok(self.settings.zac):
-            return
-        # Failsafe OK file does not exist or cannot be deleted.
-        # We must write the hosts to add/remove and raise an exception
-        write_failsafe_hosts(self.settings.zac, to_add, to_remove)
-        logging.warning(
-            "Too many hosts to change (failsafe=%d). Remove: %d, Add: %d. Aborting",
-            self.config.failsafe,
-            len(to_remove),
-            len(to_add),
-        )
-        raise exceptions.ZACException("Failsafe triggered")
-
     def do_update(self) -> None:
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(
@@ -1000,11 +980,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         logging.debug("In both: %d", len(hostnames_in_both))
 
         # Check if we have too many hosts to add/remove
-        if (
-            len(hostnames_to_remove) > self.config.failsafe
-            or len(hostnames_to_add) > self.config.failsafe
-        ):
-            self.handle_failsafe_limit(hostnames_to_add, hostnames_to_remove)
+        check_failsafe(self.settings, hostnames_to_add, hostnames_to_remove)
 
         for hostname in hostnames_to_remove:
             if self.stop_event.is_set():
