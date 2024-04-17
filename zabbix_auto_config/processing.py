@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-import importlib
 import itertools
 import logging
 import multiprocessing
@@ -34,8 +33,7 @@ from . import compat
 from . import exceptions
 from . import models
 from . import utils
-from ._types import HostModifierDict
-from ._types import HostModifierModule
+from ._types import HostModifier
 from ._types import SourceCollectorModule
 from ._types import ZacTags
 from .errcount import RollingErrorCounter
@@ -402,21 +400,18 @@ class SourceHandlerProcess(BaseProcess):
 
 class SourceMergerProcess(BaseProcess):
     def __init__(
-        self, name: str, state: State, db_uri: str, host_modifier_dir: str
+        self,
+        name: str,
+        state: State,
+        db_uri: str,
+        host_modifiers: List[HostModifier],
     ) -> None:
         super().__init__(name, state)
 
         self.db_uri = db_uri
         self.db_source_table = "hosts_source"
         self.db_hosts_table = "hosts"
-        self.host_modifier_dir = host_modifier_dir
-
-        self.host_modifiers = self.get_host_modifiers()
-        logging.info(
-            "Loaded %d host modifiers: %s",
-            len(self.host_modifiers),
-            ", ".join([repr(modifier["name"]) for modifier in self.host_modifiers]),
-        )
+        self.host_modifiers = host_modifiers
 
         try:
             self.db_connection = psycopg2.connect(self.db_uri)
@@ -426,42 +421,6 @@ class SourceMergerProcess(BaseProcess):
             sys.exit(1)
 
         self.update_interval = 60
-
-    def get_host_modifiers(self) -> List[HostModifierDict]:
-        sys.path.append(self.host_modifier_dir)
-
-        try:
-            module_names = [
-                filename[:-3]
-                for filename in os.listdir(self.host_modifier_dir)
-                if filename.endswith(".py")
-            ]
-        except FileNotFoundError:
-            logging.error(
-                "Host modififier directory %s does not exist.", self.host_modifier_dir
-            )
-            sys.exit(1)
-
-        host_modifiers = []  # type: List[HostModifierDict]
-
-        for module_name in module_names:
-            module = importlib.import_module(module_name)
-
-            if not isinstance(module, HostModifierModule):
-                logging.warning(
-                    "Module '%s' is not a valid host modifier module. Skipping.",
-                    module_name,
-                )
-                continue
-
-            host_modifier = {
-                "name": module_name,
-                "module": module,
-            }  # type: HostModifierDict
-
-            host_modifiers.append(host_modifier)
-
-        return host_modifiers
 
     def work(self) -> None:
         self.merge_sources()
@@ -487,9 +446,7 @@ class SourceMergerProcess(BaseProcess):
 
         for host_modifier in self.host_modifiers:
             try:
-                modified_host = host_modifier["module"].modify(
-                    host.model_copy(deep=True)
-                )
+                modified_host = host_modifier.module.modify(host.model_copy(deep=True))
                 assert isinstance(
                     modified_host, models.Host
                 ), f"Modifier returned invalid type: {type(modified_host)}"
@@ -502,13 +459,13 @@ class SourceMergerProcess(BaseProcess):
                 logging.warning(
                     "Host, '%s', was modified to be invalid by modifier: '%s'. Error: %s",
                     host.hostname,
-                    host_modifier["name"],
+                    host_modifier.name,
                     str(e),
                 )
             except Exception as e:
                 logging.warning(
                     "Error when running modifier %s on host '%s': %s",
-                    host_modifier["name"],
+                    host_modifier.name,
                     host.hostname,
                     str(e),
                 )

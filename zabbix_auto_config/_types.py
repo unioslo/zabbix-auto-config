@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 from typing import List
+from typing import NamedTuple
 from typing import Protocol
 from typing import Sequence
 from typing import Set
@@ -47,16 +48,14 @@ class HostModifierModule(Protocol):
         ...
 
 
-class HostModifierDict(TypedDict):
-    """The dict created by
-    `zabbix_auto_config.processing.SourceMergerProcess.get_host_modifiers`
-    for each imported host modifier module."""
+class HostModifier(NamedTuple):
+    """An imported host modifier."""
 
     name: str
     module: HostModifierModule
 
 
-class SourceCollectorDict(TypedDict):
+class SourceCollector(NamedTuple):
     """The dict created by `zabbix_auto_config.get_source_collectors` for each
     imported source collector module."""
 
