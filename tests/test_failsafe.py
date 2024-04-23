@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from zabbix_auto_config.failsafe import check_failsafe_ok
+from zabbix_auto_config.failsafe import check_failsafe_ok_file
 from zabbix_auto_config.failsafe import write_failsafe_hosts
 from zabbix_auto_config.models import HostActions
 from zabbix_auto_config.models import Settings
@@ -36,7 +36,7 @@ def failsafe_file(tmp_path: Path) -> Iterable[Path]:
 def test_check_failsafe_ok_file_not_configured(config: Settings) -> None:
     """Test that an unconfigured failsafe OK file always returns False"""
     config.zac.failsafe_ok_file = None
-    assert check_failsafe_ok(config.zac) is False
+    assert check_failsafe_ok_file(config.zac) is False
 
 
 @pytest.mark.parametrize("content", ["", "1"])
@@ -46,7 +46,7 @@ def test_check_failsafe_ok_file_exists(
     """Test that a failsafe ok file that exists is OK with and without content"""
     config.zac.failsafe_ok_file = failsafe_ok_file
     failsafe_ok_file.write_text(content)
-    assert check_failsafe_ok(config.zac) is True
+    assert check_failsafe_ok_file(config.zac) is True
     # Ensure that approving the file also deletes it
     assert failsafe_ok_file.exists() is False
 
@@ -57,7 +57,7 @@ def test_check_failsafe_ok_file_not_exists(
     """Test that a missing failsafe OK file returns False"""
     config.zac.failsafe_file = failsafe_ok_file
     assert failsafe_ok_file.exists() is False
-    assert check_failsafe_ok(config.zac) is False
+    assert check_failsafe_ok_file(config.zac) is False
     assert failsafe_ok_file.exists() is False  # Should still not exist
 
 
@@ -79,9 +79,9 @@ def test_check_failsafe_ok_file_unable_to_delete(
     config.zac.failsafe_ok_file_strict = strict
     # Fails in strict mode - must be able to delete the file
     if strict:
-        assert check_failsafe_ok(config.zac) is False
+        assert check_failsafe_ok_file(config.zac) is False
     else:
-        assert check_failsafe_ok(config.zac) is True
+        assert check_failsafe_ok_file(config.zac) is True
 
 
 @pytest.mark.parametrize(
@@ -136,6 +136,6 @@ def test_write_failsafe_hosts_no_file(
         ["baz.example.com", "qux.example.com"],
     )
     assert (
-        "Unable to write failsafe hosts. No failsafe file configured."
+        "No failsafe file configured, cannot write hosts to add/remove."
         in caplog.messages
     )
