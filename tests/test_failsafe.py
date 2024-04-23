@@ -3,10 +3,13 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Iterable
+from typing import List
 from unittest.mock import MagicMock
 
 import pytest
 
+from zabbix_auto_config.exceptions import ZACException
+from zabbix_auto_config.failsafe import check_failsafe
 from zabbix_auto_config.failsafe import check_failsafe_ok_file
 from zabbix_auto_config.failsafe import write_failsafe_hosts
 from zabbix_auto_config.models import HostActions
@@ -31,6 +34,72 @@ def failsafe_file(tmp_path: Path) -> Iterable[Path]:
     finally:
         if failsafe_file.exists():
             failsafe_file.unlink()
+
+
+FAIL_ZAC = pytest.mark.xfail(strict=True, raises=ZACException)
+
+
+@pytest.mark.parametrize(
+    "failsafe, to_add, to_remove",
+    [
+        pytest.param(1, ["foo.example.com"], [], id="OK (add)"),
+        pytest.param(1, [], ["foo.example.com"], id="OK (remove)"),
+        pytest.param(1, ["foo.example.com"], ["bar.example.com"], id="OK (add/remove)"),
+        pytest.param(
+            3,
+            ["foo.example.com", "bar.example.com"],
+            ["baz.example.com", "qux.example.com"],
+            id="OK (add/remove>1)",
+        ),
+        pytest.param(
+            1,
+            ["foo.example.com", "bar.example.com"],
+            [],
+            id="Fail (add)",
+            marks=FAIL_ZAC,
+        ),
+        pytest.param(
+            1,
+            [],
+            ["foo.example.com", "bar.example.com"],
+            id="Fail (remove)",
+            marks=FAIL_ZAC,
+        ),
+        pytest.param(
+            1,
+            ["foo.example.com"],
+            ["bar.example.com", "baz.example.com"],
+            id="Fail (add/remove)",
+            marks=FAIL_ZAC,
+        ),
+        pytest.param(
+            1,
+            ["foo.example.com", "bar.example.com"],
+            [],
+            id="Fail (add>1)",
+            marks=FAIL_ZAC,
+        ),
+        pytest.param(
+            1,
+            [],
+            ["baz.example.com", "qux.example.com"],
+            id="Fail (remove>1)",
+            marks=FAIL_ZAC,
+        ),
+        pytest.param(
+            1,
+            ["foo.example.com", "bar.example.com"],
+            ["baz.example.com", "qux.example.com"],
+            id="Fail (add/remove>1)",
+            marks=FAIL_ZAC,
+        ),
+    ],
+)
+def test_check_failsafe(
+    config: Settings, failsafe: int, to_add: List[str], to_remove: List[str]
+) -> None:
+    config.zabbix.failsafe = failsafe
+    check_failsafe(config, to_add, to_remove)
 
 
 def test_check_failsafe_ok_file_not_configured(config: Settings) -> None:
