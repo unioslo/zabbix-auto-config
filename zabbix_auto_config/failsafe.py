@@ -12,14 +12,14 @@ from zabbix_auto_config.models import ZacSettings
 def check_failsafe(config: Settings, to_add: List[str], to_remove: List[str]) -> None:
     """Check if number of hosts to add/remove exceeds the failsafe and handle appropriately."""
     failsafe = config.zabbix.failsafe
-    if len(to_remove) <= failsafe and len(to_add) <= config.failsafe:
+    if len(to_remove) <= failsafe and len(to_add) <= failsafe:
         return
 
     # Failsafe exceeded - check for failsafe OK file
     if check_failsafe_ok_file(config.zac):
         return
 
-    # Failsafe OK file does not exist or cannot be deleted.
+    # Failsafe OK file validation failed
     # We must write the hosts to add/remove and raise an exception
     write_failsafe_hosts(config.zac, to_add, to_remove)
     logging.warning(
