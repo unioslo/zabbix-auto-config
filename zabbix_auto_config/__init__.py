@@ -274,7 +274,7 @@ def main() -> None:
         )
 
         for pr in processes:
-            logging.info("Terminating: %s(%d)", process.name, process.pid)
+            logging.info("Terminating: %s(%d)", pr.name, pr.pid)
             pr.terminate()
 
         def get_alive():
