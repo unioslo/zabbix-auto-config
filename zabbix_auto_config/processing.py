@@ -22,6 +22,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Set
+from typing import Union
 
 import psycopg2
 import pyzabbix
@@ -667,97 +668,194 @@ class ZabbixUpdater(BaseProcess):
                     db_hosts[host.hostname] = host
             return db_hosts
 
+    def get_hostgroups(
+        self, name: Optional[str] = None, output: Union[str, List[str]] = "extend"
+    ) -> List[Dict[str, Any]]:
+        params: Dict[str, Any] = {"output": output}
+
+        if name:
+            params["filter"] = {"name": name}
+
+        try:
+            hostgroups = self.api.hostgroup.get(**params)
+        except pyzabbix.ZabbixAPIException as e:
+            raise exceptions.ZACException("Error when fetching hostgroups: %s", e.args)
+        return hostgroups
+
+    def get_hostgroup(
+        self, name: Optional[str] = None, output: Union[str, List[str]] = "extend"
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {"output": output}
+
+        if name:
+            params["filter"] = {"name": name}
+
+        try:
+            hostgroup = self.api.hostgroup.get(**params)[0]
+        except IndexError:
+            logging.error("Hostgroup '%s' not found in Zabbix", name)
+            self.stop_event.set()
+        return hostgroup
+
 
 class ZabbixHostUpdater(ZabbixUpdater):
-    def disable_host(self, zabbix_host: Dict[str, Any]) -> None:
-        if not self.config.dryrun:
-            try:
-                disabled_hostgroup_id = self.api.hostgroup.get(
-                    filter={"name": self.config.hostgroup_disabled}
-                )[0]["groupid"]
-                self.api.host.update(
-                    hostid=zabbix_host["hostid"],
-                    status=1,
-                    templates=[],
-                    groups=[{"groupid": disabled_hostgroup_id}],
-                )
-                logging.info(
-                    "Disabling host: '%s' (%s)",
-                    zabbix_host["host"],
-                    zabbix_host["hostid"],
-                )
-            except pyzabbix.ZabbixAPIException as e:
-                logging.error(
-                    "Error when disabling host '%s' (%s): %s",
-                    zabbix_host["host"],
-                    zabbix_host["hostid"],
-                    e.args,
-                )
-            except IndexError:
-                logging.critical(
-                    "Disabled host group '%s' does not exist in Zabbix. Cannot disable host '%s'",
-                    self.config.hostgroup_disabled,
-                    zabbix_host.get("host"),
-                )
-                self.stop_event.set()
+    def __init__(
+        self, name: str, state: State, db_uri: str, settings: models.Settings
+    ) -> None:
+        super().__init__(name, state, db_uri, settings)
+        # Fetch required host groups on startup
+        self.disabled_hostgroup_id = self.get_hostgroup_id(
+            self.config.hostgroup_disabled
+        )
+        self.enabled_hostgroup_id = self.get_hostgroup_id(self.config.hostgroup_all)
+
+    def get_hostgroup_id(self, name: str) -> int:
+        hostgroup = self.get_hostgroup(name)
+        return hostgroup["groupid"]
+
+    def get_maintenances(self, zabbix_host: Dict[str, Any]) -> List[Dict[str, Any]]:
+        params = {
+            "hostids": zabbix_host["hostid"],
+            "selectHosts": "extend",
+        }
+
+        try:
+            maintenances = self.api.maintenance.get(**params)
+        except pyzabbix.ZabbixAPIException as e:
+            logging.error(
+                "Error when fetching maintenances for host '%s' (%s): %s",
+                zabbix_host["host"],
+                zabbix_host["hostid"],
+                e.args,
+            )
+            maintenances = []
+        return maintenances
+
+    def do_remove_host_from_maintenance(
+        self, zabbix_host: Dict[str, Any], maintenance: Dict[str, Any]
+    ) -> None:
+        if self.config.dryrun:
+            logging.info(
+                "DRYRUN: Removing host %s from maintenance %s",
+                zabbix_host["host"],
+                maintenance["name"],
+            )
+            return
+
+        params = {"maintenanceid": maintenance["maintenanceid"]}
+
+        # Determine new hosts list for maintenance
+        new_hosts = [
+            host
+            for host in maintenance["hosts"]
+            if host["hostid"] != zabbix_host["hostid"]
+        ]
+        if self.zabbix_version.release >= (6, 0, 0):
+            params["hosts"] = [{"hostid": host["hostid"]} for host in new_hosts]
         else:
+            params["hostids"] = [host["hostid"] for host in new_hosts]
+
+        try:
+            self.api.maintenance.update(**params)
+        except pyzabbix.ZabbixAPIException as e:
+            logging.error(
+                "Error when removing host '%s' from maintenance '%s': %s",
+                zabbix_host["host"],
+                maintenance["name"],
+                e.args,
+            )
+        else:
+            logging.info(
+                "Removed host %s from maintenance %s",
+                zabbix_host["host"],
+                maintenance["name"],
+            )
+
+    def remove_host_from_maintenances(self, zabbix_host: Dict[str, Any]) -> None:
+        maintenances = self.get_maintenances(zabbix_host)
+        for maintenance in maintenances:
+            self.do_remove_host_from_maintenance(zabbix_host, maintenance)
+
+    def disable_host(self, zabbix_host: Dict[str, Any]) -> None:
+        # Host needs to be removed from all maintenances before it is disabled
+        self.remove_host_from_maintenances(zabbix_host)
+        if self.config.dryrun:
             logging.info(
                 "DRYRUN: Disabling host: '%s' (%s)",
                 zabbix_host["host"],
                 zabbix_host["hostid"],
             )
+            return
+
+        try:
+            self.api.host.update(
+                hostid=zabbix_host["hostid"],
+                status=1,
+                templates=[],
+                groups=[{"groupid": self.disabled_hostgroup_id}],
+            )
+            logging.info(
+                "Disabling host: '%s' (%s)",
+                zabbix_host["host"],
+                zabbix_host["hostid"],
+            )
+        except pyzabbix.ZabbixAPIException as e:
+            logging.error(
+                "Error when disabling host '%s' (%s): %s",
+                zabbix_host["host"],
+                zabbix_host["hostid"],
+                e.args,
+            )
 
     def enable_host(self, db_host: models.Host) -> None:
         # TODO: Set correct proxy when enabling
         hostname = db_host.hostname
-        if not self.config.dryrun:
-            try:
-                hostgroup_id = self.api.hostgroup.get(
-                    filter={"name": self.config.hostgroup_all}
-                )[0]["groupid"]
-
-                hosts = self.api.host.get(filter={"name": hostname})
-                if hosts:
-                    host = hosts[0]
-                    self.api.host.update(
-                        hostid=host["hostid"],
-                        status=0,
-                        groups=[{"groupid": hostgroup_id}],
-                    )
-                    logging.info(
-                        "Enabling old host: '%s' (%s)", host["host"], host["hostid"]
-                    )
-                else:
-                    interface = {
-                        "dns": hostname,
-                        "ip": "",
-                        "useip": 0,
-                        "type": 1,
-                        "port": 10050,
-                        "main": 1,
-                    }
-                    result = self.api.host.create(
-                        host=hostname,
-                        status=0,
-                        groups=[{"groupid": hostgroup_id}],
-                        interfaces=[interface],
-                    )
-                    logging.info(
-                        "Enabling new host: '%s' (%s)", hostname, result["hostids"][0]
-                    )
-            except pyzabbix.ZabbixAPIException as e:
-                logging.error(
-                    "Error when enabling/creating host '%s': %s", hostname, e.args
-                )
-            except IndexError:
-                logging.critical(
-                    "Enabled host group '%s' does not exist in Zabbix. Cannot enable host '%s'",
-                    self.config.hostgroup_all,
-                    hostname,
-                )
-                self.stop_event.set()
-        else:
+        if self.config.dryrun:
             logging.info("DRYRUN: Enabling host: '%s'", hostname)
+            return
+
+        try:
+            hosts = self.api.host.get(filter={"name": hostname})
+
+            # Determine host group param name based on version
+            params = {
+                compat.host_hostgroups(self.zabbix_version): [
+                    {"groupid": self.enabled_hostgroup_id}
+                ]
+            }
+
+            if hosts:
+                host = hosts[0]
+                self.api.host.update(
+                    hostid=host["hostid"],
+                    status=0,
+                    **params,
+                )
+                logging.info(
+                    "Enabling old host: '%s' (%s)", host["host"], host["hostid"]
+                )
+            else:
+                interface = {
+                    "dns": hostname,
+                    "ip": "",
+                    "useip": 0,
+                    "type": 1,
+                    "port": 10050,
+                    "main": 1,
+                }
+                result = self.api.host.create(
+                    host=hostname,
+                    status=0,
+                    interfaces=[interface],
+                    **params,
+                )
+                logging.info(
+                    "Enabling new host: '%s' (%s)", hostname, result["hostids"][0]
+                )
+        except pyzabbix.ZabbixAPIException as e:
+            logging.error(
+                "Error when enabling/creating host '%s': %s", hostname, e.args
+            )
 
     def clear_proxy(self, zabbix_host: Dict[str, Any]) -> None:
         if not self.config.dryrun:
@@ -1499,7 +1597,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values())
         )
 
-        existing_hostgroups = self.api.hostgroup.get(output=["name", "groupid"])
+        existing_hostgroups = self.get_hostgroups(output=["name", "groupid"])
 
         # Create extra host groups if necessary
         if self.config.extra_siteadmin_hostgroup_prefixes:
