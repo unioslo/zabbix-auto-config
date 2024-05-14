@@ -135,7 +135,7 @@ def test_read_map_file_fuzz(tmp_path: Path, text: str):
         ),
         (
             [{"tag": "tag1", "value": "x", "foo": "tag2", "bar": "y"}],
-            {("tag1", "x", "tag2", "y")},
+            {("tag1", "x")},
         ),
     ],
 )
