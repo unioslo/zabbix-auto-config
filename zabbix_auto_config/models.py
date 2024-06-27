@@ -209,18 +209,20 @@ class Interface(BaseModel):
 
 
 class Host(BaseModel):
+    # Required fields
     enabled: bool
     hostname: str
-
+    # Optional fields
     importance: Optional[Annotated[int, Field(ge=0)]] = None
     interfaces: List[Interface] = []
     inventory: Dict[str, str] = {}
-    macros: Optional[None] = None  # TODO: What should macros look like?
+    macros: Optional[Any] = None
     properties: Set[str] = set()
-    proxy_pattern: Optional[str] = None  # NOTE: replace with Optional[typing.Pattern]?
+    proxy_pattern: Optional[str] = None
     siteadmins: Set[str] = set()
     sources: Set[str] = set()
     tags: Set[Tuple[str, str]] = set()
+
     model_config = ConfigDict(validate_assignment=True, revalidate_instances="always")
 
     @model_validator(mode="before")
