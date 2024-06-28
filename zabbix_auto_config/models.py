@@ -19,6 +19,7 @@ from pydantic import field_serializer
 from pydantic import field_validator
 from pydantic import model_validator
 from typing_extensions import Annotated
+from typing_extensions import Self
 
 from . import utils
 
@@ -36,7 +37,7 @@ class ConfigBaseModel(PydanticBaseModel, extra="ignore"):
         """Checks for unknown fields and logs a warning if any are found.
         Does not log warnings if extra is set to `Extra.allow`.
         """
-        if cls.model_config["extra"] == "allow":
+        if cls.model_config.get("extra") == "allow":
             return values
         for key in values:
             if key not in cls.model_fields:
@@ -90,6 +91,13 @@ class ZabbixSettings(ConfigBaseModel):
         return v
 
 
+class MaintenanceCleanupSettings(ConfigBaseModel):
+    enabled: bool = True
+    """Remove hosts that are disabled in Zabbix from maintenance periods."""
+    delete_empty: bool = True
+    """Delete maintenance periods if they are empty after removing disabled hosts."""
+
+
 class ZacSettings(ConfigBaseModel):
     source_collector_dir: str
     host_modifier_dir: str
@@ -99,6 +107,7 @@ class ZacSettings(ConfigBaseModel):
     failsafe_file: Optional[Path] = None
     failsafe_ok_file: Optional[Path] = None
     failsafe_ok_file_strict: bool = True
+    maintenance_cleanup: MaintenanceCleanupSettings = MaintenanceCleanupSettings()
 
     @field_validator("health_file", "failsafe_file", "failsafe_ok_file", mode="after")
     @classmethod
@@ -171,7 +180,7 @@ class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
     )
 
     @model_validator(mode="after")
-    def _validate_error_duration_is_greater(self) -> "SourceCollectorSettings":
+    def _validate_error_duration_is_greater(self) -> Self:
         # If no tolerance, we don't need to be concerned with how long errors
         # are kept on record, because a single error will disable the collector.
         if self.error_tolerance <= 0:
@@ -202,7 +211,7 @@ class Interface(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
 
     @model_validator(mode="after")
-    def type_2_must_have_details(self) -> "Interface":
+    def type_2_must_have_details(self) -> Self:
         if self.type == 2 and not self.details:
             raise ValueError("Interface of type 2 must have details set")
         return self

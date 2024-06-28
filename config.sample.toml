@@ -27,6 +27,12 @@ failsafe_ok_file = "/tmp/zac_failsafe_ok"
 # It is then up to the administrator to manually delete the file afterwards.
 failsafe_ok_file_strict = true
 
+[zac.maintenance_cleanup]
+# Enable or disable the automatic removal of disabled hosts from maintenances.
+enabled = true
+# Delete the maintenance window altogether if all hosts within it are disabled.
+delete_empty = true
+
 [zabbix]
 # Directory containing mapping files.
 map_dir = "path/to/map_dir/"
