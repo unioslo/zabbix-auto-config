@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import List
 
-import multiprocessing_logging  # type: ignore[import]
+import multiprocessing_logging
 import tomli
 
 from . import models
@@ -206,6 +206,12 @@ def main() -> None:
             state_manager.State(),
             config.zac.db_uri,
             host_modifiers,
+        ),
+        processing.ZabbixMaintenanceUpdater(
+            "zabbix-maintenance-updater",
+            state_manager.State(),
+            config.zac.db_uri,
+            config,
         ),
         processing.ZabbixHostUpdater(
             "zabbix-host-updater",

@@ -25,10 +25,11 @@ from typing import Set
 from typing import Union
 
 import psycopg2
-import pyzabbix
 import requests.exceptions
 from packaging.version import Version
 from pydantic import ValidationError
+from pyzabbix import ZabbixAPI  # pyright: ignore[reportPrivateImportUsage]
+from pyzabbix import ZabbixAPIException  # pyright: ignore[reportPrivateImportUsage]
 
 from . import compat
 from . import exceptions
@@ -606,7 +607,7 @@ class ZabbixUpdater(BaseProcess):
         pyzabbix_logger = logging.getLogger("pyzabbix")
         pyzabbix_logger.setLevel(logging.ERROR)
 
-        self.api = pyzabbix.ZabbixAPI(
+        self.api = ZabbixAPI(
             self.config.url,
             timeout=self.config.timeout,  # timeout for connect AND read
         )
@@ -615,7 +616,7 @@ class ZabbixUpdater(BaseProcess):
         except requests.exceptions.ConnectionError as e:
             logging.error("Error while connecting to Zabbix: %s", self.config.url)
             raise exceptions.ZACException(*e.args)
-        except (pyzabbix.ZabbixAPIException, requests.exceptions.HTTPError) as e:
+        except (ZabbixAPIException, requests.exceptions.HTTPError) as e:
             logging.error("Unable to login to Zabbix API: %s", str(e))
             raise exceptions.ZACException(*e.args)
         except requests.exceptions.Timeout as e:
@@ -678,24 +679,146 @@ class ZabbixUpdater(BaseProcess):
 
         try:
             hostgroups = self.api.hostgroup.get(**params)
-        except pyzabbix.ZabbixAPIException as e:
+        except ZabbixAPIException as e:
             raise exceptions.ZACException("Error when fetching hostgroups: %s", e.args)
         return hostgroups
 
     def get_hostgroup(
-        self, name: Optional[str] = None, output: Union[str, List[str]] = "extend"
+        self, name: str, output: Union[str, List[str]] = "extend"
     ) -> Dict[str, Any]:
-        params: Dict[str, Any] = {"output": output}
+        hostgroups = self.get_hostgroups(name, output=output)
+        if not hostgroups:
+            raise exceptions.ZACException(f"Hostgroup '{name}' not found in Zabbix")
+        return hostgroups[0]
 
-        if name:
-            params["filter"] = {"name": name}
+    def get_hostgroup_id(self, name: str) -> int:
+        hostgroup = self.get_hostgroup(name)
+        return hostgroup["groupid"]
+
+
+class ZabbixMaintenanceUpdater(ZabbixUpdater):
+    """Cleans up maintenances in Zabbix containing disabled hosts.
+
+    Depending on the active configuration, maintenances are also deleted
+    if they only contain disabled hosts."""
+
+    def __init__(
+        self, name: str, state: State, db_uri: str, settings: models.Settings
+    ) -> None:
+        super().__init__(name, state, db_uri, settings)
+        # Fetch required host groups on startup
+        self.disabled_hostgroup_id = self.get_hostgroup_id(
+            self.config.hostgroup_disabled
+        )
+
+    def get_disabled_hosts(
+        self, output: Union[str, List[str]] = "extend"
+    ) -> List[Dict[str, Any]]:
+        """Fetch all disabled hosts from Zabbix."""
+        params = {"filter": {"status": 1}}  # 1 = Disabled
 
         try:
-            hostgroup = self.api.hostgroup.get(**params)[0]
-        except IndexError:
-            logging.error("Hostgroup '%s' not found in Zabbix", name)
-            self.stop_event.set()
-        return hostgroup
+            hosts = self.api.host.get(**params, output=output)
+        except ZabbixAPIException as e:
+            raise exceptions.ZACException(
+                "Error when fetching disabled hosts: %s", e.args
+            )
+        return hosts
+
+    def get_maintenances(self) -> List[Dict[str, Any]]:
+        """Fetch all maintenances with disabled hosts in Zabbix."""
+        hosts = self.get_disabled_hosts(output=["hostid"])
+        host_ids = [host["hostid"] for host in hosts]
+        try:
+            maintenances = self.api.maintenance.get(
+                hostids=host_ids, output="extend", selectHosts="extend"
+            )
+        except ZabbixAPIException as e:
+            raise exceptions.ZACException(
+                "Error when fetching maintenances with disabled hosts: %s", e.args
+            )
+        return maintenances
+
+    def delete_maintenance(self, maintenance: Dict[str, Any]) -> None:
+        """Delete a maintenance in Zabbix."""
+        if self.config.dryrun:
+            logging.info("DRYRUN: Deleting maintenance '%s'", maintenance["name"])
+            return
+
+        try:
+            # Docs state that an array of IDs is expected, but it doesn't work!
+            self.api.maintenance.delete(maintenance["maintenanceid"])
+        except ZabbixAPIException as e:
+            logging.error(
+                "Error when deleting maintenance '%s': %s", maintenance["name"], e.args
+            )
+        else:
+            logging.info("Deleted maintenance '%s'", maintenance["name"])
+
+    def remove_disabled_hosts_from_maintenance(
+        self, maintenance: Dict[str, Any]
+    ) -> None:
+        """Remove all disabled hosts from a maintenance."""
+        new_hosts = [
+            host
+            for host in maintenance["hosts"]
+            if str(host["status"]) != "1"  # 1 = Disabled
+        ]
+        # No disabled hosts in maintenance (Should never happen)
+        if len(new_hosts) == len(maintenance["hosts"]):
+            logging.debug("No disabled hosts in maintenance '%s'", maintenance["name"])
+            return
+        # No hosts left in maintenance
+        elif not new_hosts:
+            if self.settings.zac.maintenance_cleanup.delete_empty:
+                self.delete_maintenance(maintenance)
+                return  # No need to update maintenance
+            else:
+                logging.error(
+                    "Unable to remove disabled hosts from maintenance '%s': no hosts left. Delete maintenance manually.",
+                    maintenance["name"],
+                )
+
+        # Determine hosts to remove for logging purposes
+        to_remove = [host for host in maintenance["hosts"] if host not in new_hosts]
+
+        if self.config.dryrun:
+            logging.info(
+                "DRYRUN: Removing disabled hosts from maintenance '%s': %s",
+                maintenance["name"],
+                ", ".join([host["host"] for host in to_remove]),
+            )
+            return
+
+        params = {"maintenanceid": maintenance["maintenanceid"]}
+
+        if self.zabbix_version.release >= (6, 0, 0):
+            params["hosts"] = [{"hostid": host["hostid"]} for host in new_hosts]
+        else:
+            params["hostids"] = [host["hostid"] for host in new_hosts]
+
+        try:
+            self.api.maintenance.update(**params)
+        except ZabbixAPIException as e:
+            logging.error(
+                "Error when removing disabled hosts from maintenance '%s': %s",
+                maintenance["name"],
+                e.args,
+            )
+        else:
+            logging.info(
+                "Removed disabled hosts from maintenance '%s': %s",
+                maintenance["name"],
+                ", ".join([host["host"] for host in to_remove]),
+            )
+
+    def do_update(self) -> None:
+        if not self.settings.zac.maintenance_cleanup.enabled:
+            return
+        # Fetch all maintenances containing disabled hosts
+        maintenances = self.get_maintenances()
+        for maintenance in maintenances:
+            self.remove_disabled_hosts_from_maintenance(maintenance)
 
 
 class ZabbixHostUpdater(ZabbixUpdater):
@@ -709,19 +832,16 @@ class ZabbixHostUpdater(ZabbixUpdater):
         )
         self.enabled_hostgroup_id = self.get_hostgroup_id(self.config.hostgroup_all)
 
-    def get_hostgroup_id(self, name: str) -> int:
-        hostgroup = self.get_hostgroup(name)
-        return hostgroup["groupid"]
-
     def get_maintenances(self, zabbix_host: Dict[str, Any]) -> List[Dict[str, Any]]:
         params = {
             "hostids": zabbix_host["hostid"],
             "selectHosts": "extend",
+            "output": "extend",
         }
 
         try:
             maintenances = self.api.maintenance.get(**params)
-        except pyzabbix.ZabbixAPIException as e:
+        except ZabbixAPIException as e:
             logging.error(
                 "Error when fetching maintenances for host '%s' (%s): %s",
                 zabbix_host["host"],
@@ -750,6 +870,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
             for host in maintenance["hosts"]
             if host["hostid"] != zabbix_host["hostid"]
         ]
+
+        # TODO: Delete maintenance if empty!
+
         if self.zabbix_version.release >= (6, 0, 0):
             params["hosts"] = [{"hostid": host["hostid"]} for host in new_hosts]
         else:
@@ -757,7 +880,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
         try:
             self.api.maintenance.update(**params)
-        except pyzabbix.ZabbixAPIException as e:
+        except ZabbixAPIException as e:
             logging.error(
                 "Error when removing host '%s' from maintenance '%s': %s",
                 zabbix_host["host"],
@@ -799,7 +922,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 zabbix_host["host"],
                 zabbix_host["hostid"],
             )
-        except pyzabbix.ZabbixAPIException as e:
+        except ZabbixAPIException as e:
             logging.error(
                 "Error when disabling host '%s' (%s): %s",
                 zabbix_host["host"],
@@ -817,12 +940,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
         try:
             hosts = self.api.host.get(filter={"name": hostname})
 
-            # Determine host group param name based on version
-            params = {
-                compat.host_hostgroups(self.zabbix_version): [
-                    {"groupid": self.enabled_hostgroup_id}
-                ]
-            }
+            # NOTE: we use the "groups" parameter here regardless of version!
+            # It is still called "groups" in >=6.2
+            params = {"groups": [{"groupid": self.enabled_hostgroup_id}]}
 
             if hosts:
                 host = hosts[0]
@@ -852,7 +972,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 logging.info(
                     "Enabling new host: '%s' (%s)", hostname, result["hostids"][0]
                 )
-        except pyzabbix.ZabbixAPIException as e:
+        except ZabbixAPIException as e:
             logging.error(
                 "Error when enabling/creating host '%s': %s", hostname, e.args
             )
@@ -1320,7 +1440,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                 self.api.host.update(
                     hostid=host["hostid"], templates_clear=template_ids
                 )
-            except pyzabbix.ZabbixAPIException as e:
+            except ZabbixAPIException as e:
                 logging.error(
                     "Error when clearing templates on host '%s': %s",
                     host["host"],
@@ -1337,7 +1457,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                     {"templateid": template_id} for _, template_id in templates.items()
                 ]
                 self.api.host.update(hostid=host["hostid"], templates=template_ids)
-            except pyzabbix.ZabbixAPIException as e:
+            except ZabbixAPIException as e:
                 logging.error(
                     "Error when setting templates on host '%s': %s",
                     host["host"],
@@ -1468,7 +1588,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                     {"groupid": hostgroup_id} for _, hostgroup_id in hostgroups.items()
                 ]
                 self.api.host.update(hostid=host["hostid"], groups=groups)
-            except pyzabbix.ZabbixAPIException as e:
+            except ZabbixAPIException as e:
                 logging.error(
                     "Error when setting hostgroups on host '%s': %s",
                     host["host"],
@@ -1488,7 +1608,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             groupid = result["groupids"][0]
             logging.info("Created host group '%s' (%s)", hostgroup_name, groupid)
             return groupid
-        except pyzabbix.ZabbixAPIException as e:
+        except ZabbixAPIException as e:
             logging.error(
                 "Error when creating hostgroups '%s': %s", hostgroup_name, e.args
             )
@@ -1525,7 +1645,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 "Created template group '%s' (%s)", templategroup_name, groupid
             )
             return groupid
-        except pyzabbix.ZabbixAPIException as e:
+        except ZabbixAPIException as e:
             logging.error(
                 "Error when creating template group '%s': %s",
                 templategroup_name,
