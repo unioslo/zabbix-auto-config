@@ -31,10 +31,14 @@ class TimeoutAPI(MockZabbixAPI):
 
 
 @pytest.mark.timeout(10)
-@patch("pyzabbix.ZabbixAPI", TimeoutAPI())  # mock with timeout on login
-def test_zabbixupdater_connect_timeout(mock_psycopg2_connect, config: Settings):
+@patch(
+    "zabbix_auto_config.processing.ZabbixAPI", TimeoutAPI()
+)  # mock with timeout on login
+def test_zabbixupdater_connect_timeout(
+    mock_psycopg2_connect, config: Settings, map_dir_with_files: Path
+):
     config.zabbix = ZabbixSettings(
-        map_dir="",
+        map_dir=str(map_dir_with_files),
         url="",
         username="",
         password="",
@@ -58,17 +62,10 @@ class TimeoutUpdater(ZabbixUpdater):
 
 @pytest.mark.timeout(5)
 def test_zabbixupdater_read_timeout(
-    tmp_path: Path, mock_psycopg2_connect, config: Settings
+    mock_psycopg2_connect, config: Settings, map_dir_with_files: Path
 ):
-    # TODO: use mapping file fixtures from #67
-    map_dir = tmp_path / "maps"
-    map_dir.mkdir()
-    (map_dir / "property_template_map.txt").touch()
-    (map_dir / "property_hostgroup_map.txt").touch()
-    (map_dir / "siteadmin_hostgroup_map.txt").touch()
-
     config.zabbix = ZabbixSettings(
-        map_dir=str(map_dir),
+        map_dir=str(map_dir_with_files.absolute()),
         url="",
         username="",
         password="",
