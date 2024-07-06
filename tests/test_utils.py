@@ -18,6 +18,7 @@ from hypothesis import strategies as st
 from pytest import LogCaptureFixture
 
 from zabbix_auto_config import utils
+from zabbix_auto_config.pyzabbix.types import HostTag
 
 
 @pytest.mark.parametrize(
@@ -126,22 +127,16 @@ def test_read_map_file_fuzz(tmp_path: Path, text: str):
     "tags,expected",
     [
         (
-            [{"tag": "tag1", "value": "x"}],
+            [HostTag(tag="tag1", value="x")],
             {("tag1", "x")},
         ),
         (
-            [{"tag": "tag1", "value": "x"}, {"tag": "tag2", "value": "y"}],
+            [HostTag(tag="tag1", value="x"), HostTag(tag="tag2", value="y")],
             {("tag1", "x"), ("tag2", "y")},
-        ),
-        (
-            [{"tag": "tag1", "value": "x", "foo": "tag2", "bar": "y"}],
-            {("tag1", "x")},
         ),
     ],
 )
-def test_zabbix_tags2zac_tags(
-    tags: List[Dict[str, str]], expected: Set[Tuple[str, str]]
-):
+def test_zabbix_tags2zac_tags(tags: List[HostTag], expected: Set[Tuple[str, str]]):
     assert utils.zabbix_tags2zac_tags(tags) == expected
 
 
@@ -150,15 +145,15 @@ def test_zabbix_tags2zac_tags(
     [
         (
             {("tag1", "x")},
-            [{"tag": "tag1", "value": "x"}],
+            [HostTag(tag="tag1", value="x")],
         ),
         (
             {("tag1", "x"), ("tag2", "y")},
-            [{"tag": "tag1", "value": "x"}, {"tag": "tag2", "value": "y"}],
+            [HostTag(tag="tag1", value="x"), HostTag(tag="tag2", value="y")],
         ),
         (
             {("tag1", "x", "tag2", "y")},
-            [{"tag": "tag1", "value": "x"}],
+            [HostTag(tag="tag1", value="x")],
         ),
     ],
 )

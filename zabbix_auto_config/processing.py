@@ -26,11 +26,10 @@ from typing import Tuple
 
 import httpx
 import psycopg2
-import requests.exceptions
 from packaging.version import Version
 from pydantic import ValidationError
 
-from zabbix_auto_config.pyzabbix.client import ZabbixAPI as NewZabbixClient
+from zabbix_auto_config.pyzabbix.client import ZabbixAPI
 from zabbix_auto_config.pyzabbix.enums import InterfaceType
 from zabbix_auto_config.pyzabbix.enums import InventoryMode
 from zabbix_auto_config.pyzabbix.enums import MonitoringStatus
@@ -100,7 +99,7 @@ class BaseProcess(multiprocessing.Process):
                     self.state.set_ok()
                 except Exception as e:
                     # These are the error types we handle ourselves then continue
-                    if isinstance(e, requests.exceptions.Timeout):
+                    if isinstance(e, httpx.TimeoutException):
                         logging.error("Timeout exception: %s", str(e))
                     elif isinstance(e, ZACException):
                         logging.error("Work exception: %s", str(e))
@@ -626,7 +625,7 @@ class ZabbixUpdater(BaseProcess):
         pyzabbix_logger = logging.getLogger("pyzabbix")
         pyzabbix_logger.setLevel(logging.ERROR)
 
-        self.api = NewZabbixClient(
+        self.api = ZabbixAPI(
             self.config.url,
             timeout=self.config.timeout,  # timeout for connect AND read
         )

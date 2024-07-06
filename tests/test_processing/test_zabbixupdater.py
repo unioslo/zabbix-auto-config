@@ -5,7 +5,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import requests
+from httpx import ConnectTimeout
+from httpx import ReadTimeout
 
 from zabbix_auto_config import exceptions
 from zabbix_auto_config.models import Settings
@@ -18,16 +19,14 @@ from ..conftest import PicklableMock
 
 
 def raises_connect_timeout(*args, **kwargs):
-    raise requests.exceptions.ConnectTimeout("connect timeout")
+    raise ConnectTimeout("connect timeout")
 
 
 # We have to set the side effect in the constructor
 class TimeoutAPI(MockZabbixAPI):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.login = PicklableMock(
-            side_effect=requests.exceptions.ConnectTimeout("connect timeout")
-        )
+        self.login = PicklableMock(side_effect=ConnectTimeout("connect timeout"))
 
 
 @pytest.mark.timeout(10)
@@ -57,7 +56,7 @@ def test_zabbixupdater_connect_timeout(
 
 class TimeoutUpdater(ZabbixUpdater):
     def do_update(self):
-        raise requests.exceptions.ReadTimeout("read timeout")
+        raise ReadTimeout("read timeout")
 
 
 @pytest.mark.timeout(5)

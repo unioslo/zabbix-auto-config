@@ -97,7 +97,6 @@ class ZabbixAPI:
     ):
         """Parameters:
         server: Base URI for zabbix web interface (omitting /api_jsonrpc.php)
-        session: optional pre-configured requests.Session instance
         timeout: optional connect and read timeout in seconds.
         """
         self.timeout = timeout if timeout else None
