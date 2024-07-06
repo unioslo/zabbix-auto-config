@@ -168,6 +168,8 @@ def main() -> None:
     config = get_config()
     logging.getLogger().setLevel(config.zac.log_level)
     logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
+    logging.getLogger("httpcore.http11").setLevel(logging.ERROR)
+    logging.getLogger("httpx").setLevel(logging.ERROR)
 
     logging.info("Main start (%d) version %s", os.getpid(), __version__)
     stop_event = multiprocessing.Event()
@@ -193,7 +195,7 @@ def main() -> None:
         )
         src_processes.append(process)
 
-    # Initialize the other processes
+    # Initialize the default processes
     processes: List[processing.BaseProcess] = [
         processing.SourceHandlerProcess(
             "source-handler",
@@ -206,12 +208,6 @@ def main() -> None:
             state_manager.State(),
             config.zac.db_uri,
             host_modifiers,
-        ),
-        processing.ZabbixMaintenanceUpdater(
-            "zabbix-maintenance-updater",
-            state_manager.State(),
-            config.zac.db_uri,
-            config,
         ),
         processing.ZabbixHostUpdater(
             "zabbix-host-updater",
@@ -232,6 +228,17 @@ def main() -> None:
             config,
         ),
     ]
+
+    # Garbage collection process
+    if config.zac.process.garbage_collector.enabled:
+        processes.append(
+            processing.ZabbixGarbageCollector(
+                "zabbix-garbage-collector",
+                state_manager.State(),
+                config.zac.db_uri,
+                config,
+            )
+        )
 
     # Combine the source collector processes with the other processes
     processes.extend(src_processes)

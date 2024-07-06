@@ -4,7 +4,7 @@ import time
 import types
 from dataclasses import asdict
 from multiprocessing.managers import BaseManager
-from multiprocessing.managers import NamespaceProxy  # type: ignore[attr-defined]
+from multiprocessing.managers import NamespaceProxy  # type: ignore # why unexported?
 from typing import Any
 from typing import Dict
 from typing import Optional
@@ -87,7 +87,7 @@ class StateManager(BaseManager):
 
     # We need to do this to make mypy happy with calling .State() on the manager class
     # This stub will be overwritten by the actual method created by register()
-    def State(self) -> State: ...  # type: ignore[empty-body]
+    def State(self) -> State: ...
 
 
 StateManager.register("State", State, proxytype=StateProxy)

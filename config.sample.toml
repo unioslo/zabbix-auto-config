@@ -27,11 +27,25 @@ failsafe_ok_file = "/tmp/zac_failsafe_ok"
 # It is then up to the administrator to manually delete the file afterwards.
 failsafe_ok_file_strict = true
 
-[zac.maintenance_cleanup]
-# Enable or disable the automatic removal of disabled hosts from maintenances.
+[zac.process.source_merger]
+update_interval = 60
+
+[zac.process.host_updater]
+update_interval = 60
+
+[zac.process.hostgroup_updater]
+update_interval = 60
+
+[zac.process.template_updater]
+update_interval = 60
+
+[zac.process.garbage_collector]
+# Enable or disable the automatic removal of disabled hosts from maintenances and triggers
 enabled = true
-# Delete the maintenance window altogether if all hosts within it are disabled.
-delete_empty = true
+# Delete maintenance windows altogether if all hosts within them are disabled
+delete_empty_maintenance = true
+update_interval = 300
+
 
 [zabbix]
 # Directory containing mapping files.

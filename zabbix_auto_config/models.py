@@ -91,11 +91,49 @@ class ZabbixSettings(ConfigBaseModel):
         return v
 
 
-class MaintenanceCleanupSettings(ConfigBaseModel):
-    enabled: bool = True
-    """Remove hosts that are disabled in Zabbix from maintenance periods."""
-    delete_empty: bool = True
+class ZabbixHostSettings(ConfigBaseModel):
+    remove_from_maintenance: bool = False
+    """Remove a host from all its maintenances when disabling it"""
+
+
+class ProcessSettings(ConfigBaseModel):
+    update_interval: int = Field(default=60, ge=0)
+
+
+# TODO: Future expansion of individual process settings
+class SourceMergerSettings(ProcessSettings):
+    pass
+
+
+class HostUpdaterSettings(ProcessSettings):
+    pass
+
+
+class HostGroupUpdaterSettings(ProcessSettings):
+    pass
+
+
+class TemplateUpdaterSettings(ProcessSettings):
+    pass
+
+
+class GarbageCollectorSettings(ProcessSettings):
+    enabled: bool = False
+    """Remove disabled hosts from maintenances and triggers."""
+    delete_empty_maintenance: bool = False
     """Delete maintenance periods if they are empty after removing disabled hosts."""
+
+
+class ProcessesSettings(ConfigBaseModel):
+    """Settings for the various ZAC processes"""
+
+    source_merger: SourceMergerSettings = SourceMergerSettings()
+    host_updater: HostUpdaterSettings = HostUpdaterSettings()
+    hostgroup_updater: HostGroupUpdaterSettings = HostGroupUpdaterSettings()
+    template_updater: TemplateUpdaterSettings = TemplateUpdaterSettings()
+    garbage_collector: GarbageCollectorSettings = GarbageCollectorSettings(
+        update_interval=300
+    )
 
 
 class ZacSettings(ConfigBaseModel):
@@ -107,7 +145,7 @@ class ZacSettings(ConfigBaseModel):
     failsafe_file: Optional[Path] = None
     failsafe_ok_file: Optional[Path] = None
     failsafe_ok_file_strict: bool = True
-    maintenance_cleanup: MaintenanceCleanupSettings = MaintenanceCleanupSettings()
+    process: ProcessesSettings = ProcessesSettings()
 
     @field_validator("health_file", "failsafe_file", "failsafe_ok_file", mode="after")
     @classmethod
@@ -218,6 +256,13 @@ class Interface(BaseModel):
 
 
 class Host(BaseModel):
+    """A host collected by ZAC.
+
+    Not to be confused with `zabbix_auto_config.pyzabbix.types.Host`,
+    which is a Zabbix host fetched from the Zabbix API.
+    This model represents a host collected from various sources
+    before it is turned into a Zabbix host."""
+
     # Required fields
     enabled: bool
     hostname: str

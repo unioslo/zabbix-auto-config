@@ -43,7 +43,7 @@ def check_failsafe_ok_file(config: ZacSettings) -> bool:
         return False
     if not config.failsafe_ok_file.exists():
         logging.info(
-            "Failsafe OK file %s does not exist. Create it to approve changes.",
+            "Failsafe OK file %s does not exist. Create it to approve changes. The ZAC process must have permission to delete the file.",
             config.failsafe_ok_file,
         )
         return False
