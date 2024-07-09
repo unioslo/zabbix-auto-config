@@ -26,6 +26,7 @@ from typing import Union
 from typing import cast
 
 import httpx
+from pydantic import RootModel
 from pydantic import ValidationError
 
 from zabbix_auto_config.exceptions import ZabbixAPICallError
@@ -57,6 +58,7 @@ from zabbix_auto_config.pyzabbix.types import Macro
 from zabbix_auto_config.pyzabbix.types import Maintenance
 from zabbix_auto_config.pyzabbix.types import Map
 from zabbix_auto_config.pyzabbix.types import MediaType
+from zabbix_auto_config.pyzabbix.types import ParamsType
 from zabbix_auto_config.pyzabbix.types import Proxy
 from zabbix_auto_config.pyzabbix.types import Role
 from zabbix_auto_config.pyzabbix.types import Template
@@ -77,7 +79,6 @@ if TYPE_CHECKING:
     from zabbix_auto_config.pyzabbix.types import ModifyGroupParams  # noqa: F401
     from zabbix_auto_config.pyzabbix.types import ModifyHostParams  # noqa: F401
     from zabbix_auto_config.pyzabbix.types import ModifyTemplateParams  # noqa: F401
-    from zabbix_auto_config.pyzabbix.types import ParamsType  # noqa: F401
     from zabbix_auto_config.pyzabbix.types import SortOrder  # noqa: F401
 
     class HTTPXClientKwargs(TypedDict, total=False):
@@ -87,6 +88,57 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 RPC_ENDPOINT = "/api_jsonrpc.php"
+
+
+def strip_none(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively strip None values from a dictionary."""
+    new: Dict[str, Any] = {}
+    for key, value in data.items():
+        if value is not None:
+            if isinstance(value, dict):
+                v = strip_none(value)  # pyright: ignore[reportUnknownArgumentType]
+                if v:
+                    new[key] = v
+            elif isinstance(value, list):
+                new[key] = [i for i in value if i is not None]
+            else:
+                new[key] = value
+    return new
+
+
+class ParamsTypeSerializer(RootModel[ParamsType]):
+    """Root model that takes in a ParamsType dict.
+
+    Used to recursively serialize a dict that can contain JSON "primitives"
+    as well as BaseModel instances.
+
+
+    Given the following dict:
+
+    {
+        "model": BaseModel(...),
+        "primitive": "string",
+        "nested_dict": {
+            "model": BaseModel(...)
+        },
+        "list_of_models": [
+            BaseModel(...),
+            BaseModel(...)
+        ]
+    }
+
+
+    This model can produce a JSON-serializable dict from such a dict through the classmethod
+    `to_json_dict`.
+    """
+
+    root: ParamsType
+
+    @classmethod
+    def to_json_dict(cls, params: ParamsType) -> Dict[str, Any]:
+        """Validate a ParamsType dict and return it as JSON serializable dict."""
+        dumped = cls.model_validate(params).model_dump(mode="json", exclude_none=True)
+        return strip_none(dumped)
 
 
 class ZabbixAPI:
@@ -194,10 +246,20 @@ class ZabbixAPI:
     def do_request(
         self, method: str, params: Optional[ParamsType] = None
     ) -> ZabbixAPIResponse:
+        params = params or {}
+
+        try:
+            params_json = ParamsTypeSerializer.to_json_dict(params)
+        except ValidationError:
+            raise ZabbixAPIRequestError(
+                f"Failed to serialize request parameters for {method!r}",
+                params=params,
+            )
+
         request_json = {
             "jsonrpc": "2.0",
             "method": method,
-            "params": params or {},
+            "params": params_json,
             "id": self.id,
         }
 
@@ -2008,6 +2070,9 @@ class ZabbixAPI:
         if templates:
             params["templateids"] = [t.templateid for t in templates]
         if priority:
+            if not params.get("filter"):
+                params["filter"] = {}
+            assert isinstance(params["filter"], dict)
             params["filter"]["priority"] = priority
         if unacknowledged:
             params["withLastEventUnacknowledged"] = True
