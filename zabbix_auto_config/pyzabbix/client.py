@@ -21,6 +21,7 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Literal
+from typing import MutableMapping
 from typing import Optional
 from typing import Union
 from typing import cast
@@ -29,6 +30,7 @@ import httpx
 from pydantic import RootModel
 from pydantic import ValidationError
 
+from zabbix_auto_config.__about__ import __version__
 from zabbix_auto_config.exceptions import ZabbixAPICallError
 from zabbix_auto_config.exceptions import ZabbixAPIException
 from zabbix_auto_config.exceptions import ZabbixAPIRequestError
@@ -100,14 +102,47 @@ def strip_none(data: Dict[str, Any]) -> Dict[str, Any]:
                 if v:
                     new[key] = v
             elif isinstance(value, list):
-                new[key] = [i for i in value if i is not None]
+                new[key] = [i for i in value if i is not None]  # pyright: ignore[reportUnknownVariableType]
             else:
                 new[key] = value
     return new
 
 
+def append_param(
+    data: MutableMapping[str, Any], key: str, value: Any
+) -> MutableMapping[str, Any]:
+    """Append a value to a list in a dictionary.
+
+    If the key does not exist in the dictionary, it is created with a list
+    containing the value. If the key already exists and the value is not a list,
+    the value is converted to a list and appended to the existing list.
+    """
+    if key in data:
+        if not isinstance(data[key], list):
+            logger.debug("Converting param %s to list", key, stacklevel=2)
+            data[key] = [data[key]]
+    else:
+        data[key] = []
+    data[key].append(value)
+    return data
+
+
+def add_param(
+    data: MutableMapping[str, Any], key: str, subkey: str, value: Any
+) -> MutableMapping[str, Any]:
+    """Add a value to a nested dict in dict."""
+    if key in data:
+        if not isinstance(data[key], dict):
+            logger.debug("Converting param %s to dict", key, stacklevel=2)
+            data[key] = {key: data[key]}
+    else:
+        data[key] = {}
+    data[key][subkey] = value
+    return data
+
+
 class ParamsTypeSerializer(RootModel[ParamsType]):
-    """Root model that takes in a ParamsType dict.
+    """Root model that takes in a Params dict.
 
     Used to recursively serialize a dict that can contain JSON "primitives"
     as well as BaseModel instances.
@@ -137,7 +172,10 @@ class ParamsTypeSerializer(RootModel[ParamsType]):
     @classmethod
     def to_json_dict(cls, params: ParamsType) -> Dict[str, Any]:
         """Validate a ParamsType dict and return it as JSON serializable dict."""
-        dumped = cls.model_validate(params).model_dump(mode="json", exclude_none=True)
+        dumped = cls.model_validate(params).model_dump(
+            mode="json",
+            exclude_none=True,
+        )
         return strip_none(dumped)
 
 
@@ -152,20 +190,8 @@ class ZabbixAPI:
         timeout: optional connect and read timeout in seconds.
         """
         self.timeout = timeout if timeout else None
+        self.session = self._get_client(verify_ssl=True, timeout=timeout)
 
-        kwargs: HTTPXClientKwargs = {}
-        if timeout is not None:
-            kwargs["timeout"] = timeout
-        self.session = httpx.Client(
-            verify=True,
-            # Default headers for all requests
-            headers={
-                "Content-Type": "application/json-rpc",
-                "User-Agent": "python/pyzabbix",
-                "Cache-Control": "no-cache",
-            },
-            **kwargs,
-        )
         self.auth = ""
         self.id = 0
 
@@ -175,6 +201,24 @@ class ZabbixAPI:
 
         # Attributes for properties
         self._version: Optional[Version] = None
+
+    def _get_client(
+        self, verify_ssl: bool, timeout: Union[float, int, None] = None
+    ) -> httpx.Client:
+        kwargs: HTTPXClientKwargs = {}
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        client = httpx.Client(
+            verify=verify_ssl,
+            # Default headers for all requests
+            headers={
+                "Content-Type": "application/json-rpc",
+                "User-Agent": f"python/zabbix-auto-config/{__version__}",
+                "Cache-Control": "no-cache",
+            },
+            **kwargs,
+        )
+        return client
 
     def login(
         self,
@@ -386,6 +430,7 @@ class ZabbixAPI:
         """
         # TODO: refactor this along with other methods that take names or ids (or wildcards)
         params: ParamsType = {"output": "extend"}
+        search_params: ParamsType = {}
 
         if "*" in names_or_ids:
             names_or_ids = tuple()
@@ -398,11 +443,12 @@ class ZabbixAPI:
                 if search and not is_id:
                     params["searchWildcardsEnabled"] = True
                     params["searchByAny"] = search_union
-                    params.setdefault("search", {}).setdefault("name", []).append(
-                        name_or_id
-                    )
+                    append_param(search_params, "name", name_or_id)
                 else:
                     params["filter"] = {norid_key: name_or_id}
+
+        if search_params:
+            params["search"] = search_params
         if select_hosts:
             params["selectHosts"] = "extend"
         if self.version.release < (6, 2, 0) and select_templates:
@@ -526,6 +572,7 @@ class ZabbixAPI:
         # FIXME: ensure we use searching correctly here
         # TODO: refactor this along with other methods that take names or ids (or wildcards)
         params: ParamsType = {"output": "extend"}
+        search_params: ParamsType = {}
 
         if "*" in names_or_ids:
             names_or_ids = tuple()
@@ -538,12 +585,11 @@ class ZabbixAPI:
                 if search and not is_id:
                     params["searchWildcardsEnabled"] = True
                     params["searchByAny"] = search_union
-                    params.setdefault("search", {}).setdefault("name", []).append(
-                        name_or_id
-                    )
+                    append_param(search_params, "name", name_or_id)
                 else:
                     params["filter"] = {norid_key: name_or_id}
-
+        if search_params:
+            params["search"] = search_params
         if select_templates:
             params["selectTemplates"] = "extend"
         if sort_order:
@@ -674,6 +720,7 @@ class ZabbixAPI:
         """
         params: ParamsType = {"output": "extend"}
         filter_params: ParamsType = {}
+        search_params: ParamsType = {}
 
         # Filter by the given host name or ID if we have one
         if names_or_ids:
@@ -697,13 +744,11 @@ class ZabbixAPI:
                 if search and not is_id:
                     params["searchWildcardsEnabled"] = True
                     params["searchByAny"] = True
-                    params.setdefault("search", {}).setdefault("host", []).append(
-                        name_or_id
-                    )
+                    append_param(search_params, "host", name_or_id)
                 elif is_id:
-                    params.setdefault("hostids", []).append(name_or_id)
+                    append_param(params, "hostids", name_or_id)
                 else:
-                    filter_params.setdefault("host", []).append(name_or_id)
+                    append_param(filter_params, "host", name_or_id)
 
         # Filters are applied with a logical AND (narrows down)
         if proxyid:
@@ -719,6 +764,8 @@ class ZabbixAPI:
 
         if filter_params:  # Only add filter if we actually have filter params
             params["filter"] = filter_params
+        if search_params:  # ditto for search params
+            params["search"] = search_params
 
         if select_groups:
             # still returns the result under the "groups" property
@@ -815,9 +862,9 @@ class ZabbixAPI:
         if status is not None:
             params["status"] = status
         if templates is not None:
-            params["templates"] = templates
+            params["templates"] = [t.model_dump_api() for t in templates]
         if tags is not None:
-            params["tags"] = tags
+            params["tags"] = [t.model_dump_api() for t in tags]
         if inventory_mode is not None:
             params["inventory_mode"] = inventory_mode
         try:
@@ -1019,6 +1066,8 @@ class ZabbixAPI:
         params: ParamsType = {
             "output": "extend",
         }
+        search_params: ParamsType = {}
+
         if "*" in names:
             names = tuple()
         if search:
@@ -1029,9 +1078,12 @@ class ZabbixAPI:
             for name in names:
                 name = name.strip()
                 if search:
-                    params.setdefault("search", {}).setdefault("name", []).append(name)
+                    append_param(search_params, "name", name)
                 else:
                     params["filter"] = {"name": name}
+
+        if search_params:
+            params["search"] = search_params
 
         # Rights were split into host and template group rights in 6.2.0
         if select_rights:
@@ -1191,11 +1243,9 @@ class ZabbixAPI:
         for name_or_id in names_or_ids:
             if name_or_id:
                 if name_or_id.isnumeric():
-                    params.setdefault("proxyids", []).append(name_or_id)
+                    append_param(params, "proxyids", name_or_id)
                 else:
-                    search_params.setdefault(
-                        compat.proxy_name(self.version), []
-                    ).append(name_or_id)
+                    append_param(params, compat.proxy_name(self.version), name_or_id)
 
         if select_hosts:
             params["selectHosts"] = "extend"
@@ -1256,10 +1306,10 @@ class ZabbixAPI:
         params: ParamsType = {"output": "extend"}
 
         if host:
-            params.setdefault("search", {})["hostids"] = host.hostid
+            add_param(params, "search", "hostids", host.hostid)
 
         if macro_name:
-            params.setdefault("search", {})["macro"] = macro_name
+            add_param(params, "search", "macro", macro_name)
 
         # Enable wildcard searching if we have one or more search terms
         if params.get("search"):
@@ -1309,7 +1359,7 @@ class ZabbixAPI:
         params: ParamsType = {"output": "extend", "globalmacro": True}
 
         if macro_name:
-            params.setdefault("search", {})["macro"] = macro_name
+            add_param(params, "search", "macro", macro_name)
 
         # Enable wildcard searching if we have one or more search terms
         if params.get("search"):
@@ -1468,6 +1518,7 @@ class ZabbixAPI:
     ) -> List[Template]:
         """Fetches one or more templates given a name or ID."""
         params: ParamsType = {"output": "extend"}
+        search_params: ParamsType = {}
 
         # TODO: refactor this along with other methods that take names or ids (or wildcards)
         if "*" in template_names_or_ids:
@@ -1477,19 +1528,21 @@ class ZabbixAPI:
             name_or_id = name_or_id.strip()
             is_id = name_or_id.isnumeric()
             if is_id:
-                params.setdefault("templateids", []).append(name_or_id)
+                append_param(params, "templateids", name_or_id)
             else:
-                params.setdefault("search", {}).setdefault("host", []).append(
-                    name_or_id
-                )
+                append_param(search_params, "host", name_or_id)
                 params.setdefault("searchWildcardsEnabled", True)
                 params.setdefault("searchByAny", True)
+
+        if search_params:
+            params["search"] = search_params
         if select_hosts:
             params["selectHosts"] = "extend"
         if select_templates:
             params["selectTemplates"] = "extend"
         if select_parent_templates:
             params["selectParentTemplates"] = "extend"
+
         try:
             templates = self.template.get(**params)
         except ZabbixAPIException as e:
