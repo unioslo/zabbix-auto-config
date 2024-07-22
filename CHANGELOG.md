@@ -12,12 +12,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Zabbix 7 compatibility
-- Config options
-  - `[zac.process.garbage_collector]` table
-  - `[zac.process.host_updater]` table
-  - `[zac.process.hostgroup_updater]` table
-  - `[zac.process.template_updater]` table
-  - `[zac.process.source_merger]` table
+- Config options for each process
+  - `[zac.process.garbage_collector]`
+    - `enabled`: Enable automatic garbage collection.
+    - `delete_empty_maintenance`: Delete maintenances that only contain disabled hosts.
+    - `update_interval`: Update interval in seconds.
+  - `[zac.process.host_updater]`
+    - `update_interval`: Update interval in seconds.
+  - `[zac.process.hostgroup_updater]`
+    - `update_interval`: Update interval in seconds.
+  - `[zac.process.template_updater]`
+    - `update_interval`: Update interval in seconds.
+  - `[zac.process.source_merger]`
+    - `update_interval`: Update interval in seconds.
 - Automatic garbage collection of maintenances and triggers
   - Can be enabled under `zac.process.garbage_collector.enabled`
   - Optionally also delete maintenances that only contain disabled hosts with `zac.process.garbage_collector.delete_empty_maintenance`.

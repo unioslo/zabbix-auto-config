@@ -27,6 +27,7 @@ failsafe_ok_file = "/tmp/zac_failsafe_ok"
 # It is then up to the administrator to manually delete the file afterwards.
 failsafe_ok_file_strict = true
 
+# Configuration for ZAC processes.
 [zac.process.source_merger]
 update_interval = 60
 
@@ -40,11 +41,11 @@ update_interval = 60
 update_interval = 60
 
 [zac.process.garbage_collector]
+update_interval = 300
 # Enable or disable the automatic removal of disabled hosts from maintenances and triggers
 enabled = true
 # Delete maintenance windows altogether if all hosts within them are disabled
 delete_empty_maintenance = true
-update_interval = 300
 
 
 [zabbix]
