@@ -482,6 +482,20 @@ class ZabbixAPI:
                 f"Failed to delete host group(s) with ID {hostgroup_id}"
             ) from e
 
+    def set_host_hostgroups(self, host: Host, hostgroups: List[HostGroup]) -> None:
+        """Sets a host's groups.
+
+        Removes host from any groups not present in the `hostgroups` argument."""
+        try:
+            self.host.update(
+                hostid=host.hostid,
+                groups=[{"groupid": hg.groupid} for hg in hostgroups],
+            )
+        except ZabbixAPIException as e:
+            raise ZabbixAPICallError(
+                f"Failed to set host groups for host {host.hostid}"
+            ) from e
+
     def add_hosts_to_hostgroups(
         self, hosts: List[Host], hostgroups: List[HostGroup]
     ) -> None:

@@ -1573,14 +1573,14 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             self.settings.zac.process.hostgroup_updater.update_interval
         )
 
-    def set_hostgroups(self, hostgroups: List[HostGroup], host: Host) -> None:
+    def set_hostgroups(self, host: Host, hostgroups: List[HostGroup]) -> None:
         """Set host groups on a host given a list of host groups."""
         to_add = ", ".join(f"{hg.name!r}" for hg in hostgroups)
         if self.config.dryrun:
             logging.debug("DRYRUN: Setting hostgroups %s on host: %s", to_add, host)
             return
         try:
-            self.api.add_hosts_to_hostgroups([host], hostgroups)
+            self.api.set_host_hostgroups(host, hostgroups)
         except ZabbixAPIException as e:
             logging.error("Error when setting hostgroups on host %s: %s", host, e)
         else:
@@ -1820,9 +1820,9 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             # Compare names of host groups to see if they are changed
             if sorted(host_hostgroups) != sorted(old_host_hostgroups):
                 logging.info(
-                    "Updating hostgroups on host '%s'. Old: %s. New: %s",
+                    "Updating host groups on host '%s'. Old: %s. New: %s",
                     zabbix_hostname,
                     ", ".join(old_host_hostgroups.keys()),
                     ", ".join(host_hostgroups.keys()),
                 )
-                self.set_hostgroups(list(host_hostgroups.values()), zabbix_host)
+                self.set_hostgroups(zabbix_host, list(host_hostgroups.values()))
