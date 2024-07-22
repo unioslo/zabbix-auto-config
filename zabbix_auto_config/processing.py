@@ -628,6 +628,7 @@ class ZabbixUpdater(BaseProcess):
         self.api = ZabbixAPI(
             self.config.url,
             timeout=self.config.timeout,  # timeout for connect AND read
+            read_only=self.config.dryrun,  # prevent accidental changes
         )
         try:
             self.api.login(self.config.username, self.config.password)

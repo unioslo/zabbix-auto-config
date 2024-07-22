@@ -24,7 +24,6 @@ from typing import Literal
 from typing import MutableMapping
 from typing import Optional
 from typing import Union
-from typing import cast
 
 import httpx
 from pydantic import RootModel
@@ -184,6 +183,7 @@ class ZabbixAPI:
         self,
         server: str = "http://localhost/zabbix",
         timeout: Optional[int] = None,
+        read_only: bool = False,
     ):
         """Parameters:
         server: Base URI for zabbix web interface (omitting /api_jsonrpc.php)
@@ -191,6 +191,7 @@ class ZabbixAPI:
         """
         self.timeout = timeout if timeout else None
         self.session = self._get_client(verify_ssl=True, timeout=timeout)
+        self.read_only = read_only
 
         self.auth = ""
         self.id = 0
@@ -2137,10 +2138,7 @@ class ZabbixAPI:
         if templates:
             params["templateids"] = [t.templateid for t in templates]
         if priority:
-            if not params.get("filter"):
-                params["filter"] = {}
-            assert isinstance(params["filter"], dict)
-            params["filter"]["priority"] = priority
+            add_param(params, "filter", "priority", priority)
         if unacknowledged:
             params["withLastEventUnacknowledged"] = True
         if select_hosts:
@@ -2220,6 +2218,31 @@ class ZabbixAPI:
         return ZabbixAPIObjectClass(attr, self)
 
 
+WRITE_OPERATIONS = set(
+    [
+        "create",
+        "delete",
+        "update",
+        "massadd",
+        "massupdate",
+        "massremove",
+        "push",  # history
+        "clear",  # history
+        "acknowledge",  # event
+        "import",  # configuration
+        "propagate",  # hostgroup, templategroup
+        "replacehostinterfaces",  # hostinterface
+        "copy",  # discoveryrule
+        "execute",  # script
+        "resettotp",  # user
+        "unblock",  # user
+        "createglobal",  # macro
+        "deleteglobal",  # macro
+        "updateglobal",  # macro
+    ]
+)
+
+
 class ZabbixAPIObjectClass:
     def __init__(self, name: str, parent: ZabbixAPI):
         self.name = name
@@ -2236,23 +2259,15 @@ class ZabbixAPIObjectClass:
 
         return fn
 
-    def get(self, *args: Any, **kwargs: Any) -> Any:
-        """Provides per-endpoint overrides for the 'get' method"""
-        if self.name == "proxy":
-            # The proxy.get method changed from "host" to "name" in Zabbix 7.0
-            # https://www.zabbix.com/documentation/6.0/en/manual/api/reference/proxy/get
-            # https://www.zabbix.com/documentation/7.0/en/manual/api/reference/proxy/get
-            output_kwargs = kwargs.get("output", None)
-            params = ["name", "host"]
-            if isinstance(output_kwargs, list) and any(
-                p in output_kwargs for p in params
-            ):
-                output_kwargs = cast(List[str], output_kwargs)
-                for param in params:
-                    try:
-                        output_kwargs.remove(param)
-                    except ValueError:
-                        pass
-                output_kwargs.append(compat.proxy_name(self.parent.version))
-                kwargs["output"] = output_kwargs
-        return self.__getattr__("get")(*args, **kwargs)
+    def __getattribute__(self, attr: str) -> Any:
+        """Intercept attribute calls to customize behavior for specific methods.
+
+        When running in read-only mode, we want to prevent all write operations.
+        """
+
+        if attr in WRITE_OPERATIONS:
+            if object.__getattribute__(self, "parent").readonly:
+                raise ZabbixAPIException(
+                    "Cannot perform API write operations in read-only mode"
+                )
+        return object.__getattribute__(self, attr)
