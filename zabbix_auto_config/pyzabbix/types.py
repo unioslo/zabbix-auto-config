@@ -81,7 +81,7 @@ Json = TypeAliasType(
 
 ParamsType = MutableMapping[str, Json]
 """Type used to construct parameters for API requests.
-Can contain native JSON-serializable types or BaseModels.
+Can only contain native JSON-serializable types.
 """
 
 
