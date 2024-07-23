@@ -25,10 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `update_interval`: Update interval in seconds.
   - `[zac.process.source_merger]`
     - `update_interval`: Update interval in seconds.
-- Automatic garbage collection of maintenances and triggers.
-  - Removes disabled hosts from maintenances and triggers.
-  - Can be enabled under `zac.process.garbage_collector.enabled`
+- Automatic garbage collection of maintenances (and more in the future.)
+  - Removes disabled hosts from maintenances.
+  - This feature is disabled by default, and must be opted into with `zac.process.garbage_collector.enabled`
   - Optionally also delete maintenances that only contain disabled hosts with `zac.process.garbage_collector.delete_empty_maintenance`.
+  - If you have a large number of disabled hosts, it's recommended to set a long `update_interval` to avoid unnecessary load on the Zabbix server. The default is 300 seconds.
 - Automatic creation of required host groups.
   - Creates the groups configured by the following options:
     - `zabbix.hostgroup_all`

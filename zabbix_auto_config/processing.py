@@ -54,7 +54,6 @@ from zabbix_auto_config.pyzabbix.types import Maintenance
 from zabbix_auto_config.pyzabbix.types import ModelWithHosts
 from zabbix_auto_config.pyzabbix.types import Proxy
 from zabbix_auto_config.pyzabbix.types import Template
-from zabbix_auto_config.pyzabbix.types import Trigger
 from zabbix_auto_config.pyzabbix.types import UpdateHostInterfaceDetails
 from zabbix_auto_config.state import State
 
@@ -703,7 +702,7 @@ class ZabbixUpdater(BaseProcess):
 
 
 class ZabbixGarbageCollector(ZabbixUpdater):
-    """Cleans up disabled hosts from maintenances and triggers in Zabbix."""
+    """Cleans up disabled hosts from maintenances in Zabbix."""
 
     def __init__(
         self, name: str, state: State, db_uri: str, settings: models.Settings
@@ -721,7 +720,7 @@ class ZabbixGarbageCollector(ZabbixUpdater):
         keep: List[Host] = []
         remove: List[Host] = []
         for host in model.hosts:
-            if str(host.status) == str(MonitoringStatus.OFF.value):
+            if host.status == MonitoringStatus.OFF:
                 remove.append(host)
             else:
                 keep.append(host)
@@ -771,47 +770,12 @@ class ZabbixGarbageCollector(ZabbixUpdater):
         self.api.delete_maintenance(maintenance)
         logging.info("Deleted maintenance '%s'", maintenance.name)
 
-    def remove_disabled_hosts_from_trigger(self, trigger: Trigger) -> None:
-        """Remove all disabled hosts from a trigger."""
-        hosts_keep, hosts_remove = self.filter_disabled_hosts(trigger)
-        # No disabled hosts in trigger (Should never happen)
-        if len(hosts_keep) == len(trigger.hosts):
-            logging.debug("No disabled hosts in trigger '%s'", trigger.description)
-            return
-        # No hosts left in trigger
-        elif not hosts_keep:
-            logging.error(
-                "Unable to remove disabled hosts from trigger '%s': no hosts left. Delete trigger manually.",
-                trigger.description,
-            )
-            return
-
-        if self.config.dryrun:
-            logging.info(
-                "DRYRUN: Removing disabled hosts from trigger '%s': %s",
-                trigger.description,
-                ", ".join([host.host for host in hosts_remove]),
-            )
-            return
-
-        self.api.update_trigger(trigger, hosts_keep)
-        logging.info(
-            "Removed disabled hosts from trigger '%s': %s",
-            trigger.description,
-            ", ".join([host.host for host in hosts_remove]),
-        )
-
     def cleanup_maintenances(self, disabled_hosts: List[Host]) -> None:
         maintenances = self.api.get_maintenances(
             hosts=disabled_hosts, select_hosts=True
         )
         for maintenance in maintenances:
             self.remove_disabled_hosts_from_maintenance(maintenance)
-
-    def cleanup_triggers(self, disabled_hosts: List[Host]) -> None:
-        triggers = self.api.get_triggers(hosts=disabled_hosts)
-        for trigger in triggers:
-            self.remove_disabled_hosts_from_trigger(trigger)
 
     def do_update(self) -> None:
         if not self.settings.zac.process.garbage_collector.enabled:
@@ -820,7 +784,6 @@ class ZabbixGarbageCollector(ZabbixUpdater):
         # Get all disabled hosts
         disabled_hosts = self.api.get_hosts(status=MonitoringStatus.OFF)
         self.cleanup_maintenances(disabled_hosts)
-        self.cleanup_triggers(disabled_hosts)
 
 
 class ZabbixHostUpdater(ZabbixUpdater):
@@ -847,18 +810,11 @@ class ZabbixHostUpdater(ZabbixUpdater):
             return self.api.get_hostgroup(hostgroup)
 
     def get_maintenances(self, zabbix_host: Host) -> List[Maintenance]:
-        params = {
-            "hostids": zabbix_host.hostid,
-            "selectHosts": "extend",
-            "output": "extend",
-        }
-
         try:
             maintenances = self.api.get_maintenances(
                 hosts=[zabbix_host],
                 select_hosts=True,
             )
-            maintenances = self.api.maintenance.get(**params)
         except ZabbixAPIException as e:
             logging.error(
                 "Error when fetching maintenances for host '%s' (%s): %s",
