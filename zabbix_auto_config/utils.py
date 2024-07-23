@@ -17,7 +17,7 @@ from typing import Union
 from zabbix_auto_config.pyzabbix.types import HostTag
 
 if TYPE_CHECKING:
-    from ._types import ZacTags
+    from zabbix_auto_config._types import ZacTags
 
 
 def is_valid_regexp(pattern: str):
