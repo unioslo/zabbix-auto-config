@@ -22,7 +22,7 @@ from pydantic import model_validator
 from typing_extensions import Annotated
 from typing_extensions import Self
 
-from . import utils
+from zabbix_auto_config import utils
 
 # TODO: Models aren't validated when making changes to a set/list. Why? How to handle?
 

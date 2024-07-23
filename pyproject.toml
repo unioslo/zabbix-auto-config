@@ -66,6 +66,7 @@ extend-select = [
     "LOG", # flake8-logging
     "PLE1205", # pylint (too many logging args)
     "PLE1206", # pylint (too few logging args)
+    "TID252", # flake8-tidy-imports (prefer absolute imports)
 ]
 
 [tool.ruff.lint.isort]

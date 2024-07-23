@@ -29,6 +29,19 @@ import psycopg2
 from packaging.version import Version
 from pydantic import ValidationError
 
+from zabbix_auto_config import compat
+from zabbix_auto_config import models
+from zabbix_auto_config import utils
+from zabbix_auto_config._types import HostModifier
+from zabbix_auto_config._types import SourceCollectorModule
+from zabbix_auto_config._types import ZacTags
+from zabbix_auto_config.errcount import RollingErrorCounter
+from zabbix_auto_config.exceptions import SourceCollectorError
+from zabbix_auto_config.exceptions import SourceCollectorTypeError
+from zabbix_auto_config.exceptions import ZabbixAPIException
+from zabbix_auto_config.exceptions import ZabbixNotFoundError
+from zabbix_auto_config.exceptions import ZACException
+from zabbix_auto_config.failsafe import check_failsafe
 from zabbix_auto_config.pyzabbix.client import ZabbixAPI
 from zabbix_auto_config.pyzabbix.enums import InterfaceType
 from zabbix_auto_config.pyzabbix.enums import InventoryMode
@@ -43,21 +56,7 @@ from zabbix_auto_config.pyzabbix.types import Proxy
 from zabbix_auto_config.pyzabbix.types import Template
 from zabbix_auto_config.pyzabbix.types import Trigger
 from zabbix_auto_config.pyzabbix.types import UpdateHostInterfaceDetails
-
-from . import compat
-from . import models
-from . import utils
-from ._types import HostModifier
-from ._types import SourceCollectorModule
-from ._types import ZacTags
-from .errcount import RollingErrorCounter
-from .exceptions import SourceCollectorError
-from .exceptions import SourceCollectorTypeError
-from .exceptions import ZabbixAPIException
-from .exceptions import ZabbixNotFoundError
-from .exceptions import ZACException
-from .failsafe import check_failsafe
-from .state import State
+from zabbix_auto_config.state import State
 
 if TYPE_CHECKING:
     from psycopg2.extensions import cursor as Cursor

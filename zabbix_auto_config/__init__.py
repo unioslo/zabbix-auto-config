@@ -16,15 +16,15 @@ from typing import List
 import multiprocessing_logging
 import tomli
 
-from . import models
-from . import processing
-from .__about__ import __version__
-from ._types import HealthDict
-from ._types import HostModifier
-from ._types import HostModifierModule
-from ._types import SourceCollector
-from ._types import SourceCollectorModule
-from .state import get_manager
+from zabbix_auto_config import models
+from zabbix_auto_config import processing
+from zabbix_auto_config.__about__ import __version__
+from zabbix_auto_config._types import HealthDict
+from zabbix_auto_config._types import HostModifier
+from zabbix_auto_config._types import HostModifierModule
+from zabbix_auto_config._types import SourceCollector
+from zabbix_auto_config._types import SourceCollectorModule
+from zabbix_auto_config.state import get_manager
 
 
 def get_source_collectors(config: models.Settings) -> List[SourceCollector]:
