@@ -1265,7 +1265,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                         if useip and (
                             zabbix_interface.ip != interface.endpoint
                             or zabbix_interface.port != interface.port
-                            or bool(zabbix_interface.useip) != useip
+                            or zabbix_interface.useip != useip
                         ):
                             # This IP interface is configured wrong, set it
                             self.set_interface(
@@ -1277,7 +1277,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                         elif not useip and (
                             zabbix_interface.dns != interface.endpoint
                             or zabbix_interface.port != interface.port
-                            or bool(zabbix_interface.useip) != useip
+                            or zabbix_interface.useip != useip
                         ):
                             # This DNS interface is configured wrong, set it
                             self.set_interface(
