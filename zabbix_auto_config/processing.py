@@ -1138,6 +1138,8 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
         zproxies = self.api.get_proxies()
         zabbix_proxies = {proxy.name: proxy for proxy in zproxies}
+        if not zabbix_proxies:
+            logging.warning("No Zabbix proxies found.")
 
         zabbix_managed_hosts: List[Host] = []
         zabbix_manual_hosts: List[Host] = []
