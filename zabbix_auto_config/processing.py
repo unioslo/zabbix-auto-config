@@ -295,6 +295,11 @@ class SourceHandlerProcess(BaseProcess):
         self.db_uri = db_uri
         self.db_source_table = "hosts_source"
 
+        # NOTE: This interval should not be changed!
+        # A low value here makes it possible to constantly poll the
+        # source host queues for new hosts.
+        self.update_interval = 1
+
         try:
             self.db_connection = psycopg2.connect(self.db_uri)
             # TODO: Test connection? Cursor?
