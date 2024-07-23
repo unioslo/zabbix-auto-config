@@ -1836,7 +1836,8 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 logging.info(
                     "Updating host groups on host '%s'. Old: %s. New: %s",
                     zabbix_hostname,
-                    ", ".join(old_host_hostgroups.keys()),
-                    ", ".join(host_hostgroups.keys()),
+                    # Just re-compute here (it's cheap enough)
+                    ", ".join(sorted(old_host_hostgroups)),
+                    ", ".join(sorted(host_hostgroups)),
                 )
                 self.set_hostgroups(zabbix_host, list(host_hostgroups.values()))
