@@ -255,7 +255,8 @@ from zabbix_auto_config.models import Host
 SITEADMIN = "admin@example.com"
 
 def modify(host: Host) -> Host:
-    host.siteadmins.add(SITEADMIN)
+    if host.hostname.endswith(".example.com"):
+        host.siteadmins.add(SITEADMIN)
     return host
 ```
 
