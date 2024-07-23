@@ -24,10 +24,20 @@ TAG=7.0-alpine-latest ZABBIX_PASSWORD=secret podman-compose up -d
 
 ## Zabbix prerequisites
 
-It is currently assumed that you have the following hostgroups in Zabbix. You should logon to Zabbix and create them:
+The following host groups are created in Zabbix if they do not exist:
 
 * All-auto-disabled-hosts
 * All-hosts
+
+The name of these groups can be configured in `config.toml`:
+
+```toml
+[zabbix]
+hostgroup_all = "All-hosts"
+hostgroup_disabled = "All-auto-disabled-hosts"
+```
+
+These groups contain enabled and disabled hosts respectively.
 
 For automatic linking in templates you could create the templates:
 

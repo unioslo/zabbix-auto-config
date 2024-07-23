@@ -54,6 +54,7 @@ from .errcount import RollingErrorCounter
 from .exceptions import SourceCollectorError
 from .exceptions import SourceCollectorTypeError
 from .exceptions import ZabbixAPIException
+from .exceptions import ZabbixNotFoundError
 from .exceptions import ZACException
 from .failsafe import check_failsafe
 from .state import State
@@ -827,8 +828,19 @@ class ZabbixHostUpdater(ZabbixUpdater):
         self.update_interval = self.settings.zac.process.host_updater.update_interval
 
         # Fetch required host groups on startup
-        self.disabled_hostgroup = self.api.get_hostgroup(self.config.hostgroup_disabled)
-        self.enabled_hostgroup = self.api.get_hostgroup(self.config.hostgroup_all)
+        self.disabled_hostgroup = self.get_or_create_hostgroup(
+            self.config.hostgroup_disabled
+        )
+        self.enabled_hostgroup = self.get_or_create_hostgroup(self.config.hostgroup_all)
+
+    def get_or_create_hostgroup(self, hostgroup: str) -> HostGroup:
+        """Fetch a host group, creating it if it doesn't exist."""
+        try:
+            return self.api.get_hostgroup(hostgroup)
+        except ZabbixNotFoundError:
+            logging.info("Hostgroup '%s' not found. Creating it.", hostgroup)
+            self.api.create_hostgroup(hostgroup)
+            return self.api.get_hostgroup(hostgroup)
 
     def get_maintenances(self, zabbix_host: Host) -> List[Maintenance]:
         params = {
