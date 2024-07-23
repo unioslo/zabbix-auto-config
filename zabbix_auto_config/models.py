@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import RootModel
 from pydantic import ValidationInfo
 from pydantic import field_serializer
 from pydantic import field_validator
@@ -375,3 +376,17 @@ class HostActions(BaseModel):
     def write_json(self, path: Path) -> None:
         """Writes a JSON serialized representation of self to a file."""
         utils.write_file(path, self.model_dump_json(indent=2))
+
+
+class HostsSerializer(RootModel[List[Host]]):
+    root: List[Host]
+
+
+def hosts_to_json(hosts: List[Host], indent=2) -> str:
+    """Convert a list of Host objects to a JSON string."""
+    return HostsSerializer(root=hosts).model_dump_json(indent=indent)
+
+
+def print_hosts(hosts: List[Host], indent=2) -> None:
+    """Print a list of Host objects to stdout as JSON."""
+    print(hosts_to_json(hosts, indent=indent))

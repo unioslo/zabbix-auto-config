@@ -33,6 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Creates the groups configured by the following options:
     - `zabbix.hostgroup_all`
     - `zabbix.hostgroup_disabled`
+- Utility functions for serializing source collector outputs:
+  - `zabbix_auto_config.models.hosts_to_json`
+  - `zabbix_auto_config.models.print_hosts`
 
 ### Changed
 

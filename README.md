@@ -110,8 +110,9 @@ def collect(*args: Any, **kwargs: Any) -> List[Host]:
 
 
 if __name__ == "__main__":
-    for host in collect():
-        print(host.model_dump_json())
+    # Print hosts as a JSON array when running standalone
+    from zabbix_auto_config.models import print_hosts
+    print_hosts(collect())
 EOF
 cat > path/to/host_modifier_dir/mod.py << EOF
 from zabbix_auto_config.models import Host
@@ -187,6 +188,25 @@ def collect(*args: Any, **kwargs: Any) -> List[Host]:
 ```
 
 A module is recognized as a source collector if it contains a `collect` function that accepts an arbitrary number of arguments and keyword arguments and returns a list of `Host` objects. Type annotations are optional but recommended.
+
+We can also provide a `if __name__ == "__main__"` block to run the collector standalone. This is useful for testing the collector module without running the entire application.
+
+```py
+if __name__ == "__main__":
+    # Print hosts as a JSON array when running standalone
+    from zabbix_auto_config.models import print_hosts
+    print_hosts(collect())
+```
+
+If you wish to collect just the JSON output and write it to a file or otherwise manipulate it, you can import the `hosts_to_json` function from `zabbix_auto_config.models` and use it like this:
+
+```py
+if __name__ == "__main__":
+    from zabbix_auto_config.models import hosts_to_json
+    with open("output.json", "w") as f:
+        f.write(hosts_to_json(collect()))
+```
+
 
 The configuration entry for loading a source collector module, like the `load_from_json.py` module above, includes both mandatory and optional fields. Here's how it can be configured:
 
