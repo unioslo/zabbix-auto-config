@@ -26,7 +26,6 @@ from typing import Optional
 from typing import Union
 
 import httpx
-from pydantic import RootModel
 from pydantic import ValidationError
 
 from zabbix_auto_config.__about__ import __version__
@@ -55,6 +54,7 @@ from zabbix_auto_config.pyzabbix.types import HostTag
 from zabbix_auto_config.pyzabbix.types import Image
 from zabbix_auto_config.pyzabbix.types import ImportRules
 from zabbix_auto_config.pyzabbix.types import Item
+from zabbix_auto_config.pyzabbix.types import Json
 from zabbix_auto_config.pyzabbix.types import Macro
 from zabbix_auto_config.pyzabbix.types import Maintenance
 from zabbix_auto_config.pyzabbix.types import Map
@@ -91,22 +91,6 @@ logger = logging.getLogger(__name__)
 RPC_ENDPOINT = "/api_jsonrpc.php"
 
 
-def strip_none(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Recursively strip None values from a dictionary."""
-    new: Dict[str, Any] = {}
-    for key, value in data.items():
-        if value is not None:
-            if isinstance(value, dict):
-                v = strip_none(value)  # pyright: ignore[reportUnknownArgumentType]
-                if v:
-                    new[key] = v
-            elif isinstance(value, list):
-                new[key] = [i for i in value if i is not None]  # pyright: ignore[reportUnknownVariableType]
-            else:
-                new[key] = value
-    return new
-
-
 def append_param(
     data: MutableMapping[str, Any], key: str, value: Any
 ) -> MutableMapping[str, Any]:
@@ -138,44 +122,6 @@ def add_param(
         data[key] = {}
     data[key][subkey] = value
     return data
-
-
-class ParamsTypeSerializer(RootModel[ParamsType]):
-    """Root model that takes in a Params dict.
-
-    Used to recursively serialize a dict that can contain JSON "primitives"
-    as well as BaseModel instances.
-
-
-    Given the following dict:
-
-    {
-        "model": BaseModel(...),
-        "primitive": "string",
-        "nested_dict": {
-            "model": BaseModel(...)
-        },
-        "list_of_models": [
-            BaseModel(...),
-            BaseModel(...)
-        ]
-    }
-
-
-    This model can produce a JSON-serializable dict from such a dict through the classmethod
-    `to_json_dict`.
-    """
-
-    root: ParamsType
-
-    @classmethod
-    def to_json_dict(cls, params: ParamsType) -> Dict[str, Any]:
-        """Validate a ParamsType dict and return it as JSON serializable dict."""
-        dumped = cls.model_validate(params).model_dump(
-            mode="json",
-            exclude_none=True,
-        )
-        return strip_none(dumped)
 
 
 class ZabbixAPI:
@@ -293,18 +239,10 @@ class ZabbixAPI:
     ) -> ZabbixAPIResponse:
         params = params or {}
 
-        try:
-            params_json = ParamsTypeSerializer.to_json_dict(params)
-        except ValidationError:
-            raise ZabbixAPIRequestError(
-                f"Failed to serialize request parameters for {method!r}",
-                params=params,
-            )
-
-        request_json = {
+        request_json: Dict[str, Json] = {
             "jsonrpc": "2.0",
             "method": method,
-            "params": params_json,
+            "params": params,
             "id": self.id,
         }
 
