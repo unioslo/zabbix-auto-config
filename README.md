@@ -173,7 +173,9 @@ Here's an example of a source collector module that reads hosts from a file:
 ```python
 # path/to/source_collector_dir/load_from_json.py
 
+import json
 from typing import Any, Dict, List
+
 from zabbix_auto_config.models import Host
 
 DEFAULT_FILE = "hosts.json"
@@ -181,7 +183,7 @@ DEFAULT_FILE = "hosts.json"
 def collect(*args: Any, **kwargs: Any) -> List[Host]:
     filename = kwargs.get("filename", DEFAULT_FILE)
     with open(filename, "r") as f:
-        return [Host(**host) for host in f.read()]
+        return [Host(**host) for host in json.load(f)]
 ```
 
 A module is recognized as a source collector if it contains a `collect` function that accepts an arbitrary number of arguments and keyword arguments and returns a list of `Host` objects. Type annotations are optional but recommended.
