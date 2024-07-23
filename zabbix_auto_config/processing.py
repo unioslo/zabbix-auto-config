@@ -411,7 +411,7 @@ class SourceHandlerProcess(BaseProcess):
                 actions[action] += 1
 
         logging.info(
-            "Done handling hosts from source, '%s', in %.2f seconds. Equal hosts: %d, replaced hosts: %d, inserted hosts: %d, removed hosts: %d. Next update: %s",
+            "Done handling hosts from source, '%s', in %.2f seconds. Equal hosts: %d, updated hosts: %d, inserted hosts: %d, removed hosts: %d. Next update: %s",
             source,
             time.time() - start_time,
             actions[HostAction.NO_CHANGE],
