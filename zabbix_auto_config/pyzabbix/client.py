@@ -366,7 +366,7 @@ class ZabbixAPI:
         sort_order: Optional[SortOrder] = None,
         sort_field: Optional[str] = None,
     ) -> HostGroup:
-        """Fetches a host group given its name or ID.
+        """Fetch a host group given its name or ID.
 
         Name or ID argument is interpeted as an ID if the argument is numeric.
 
@@ -407,7 +407,7 @@ class ZabbixAPI:
         sort_order: Optional[SortOrder] = None,
         sort_field: Optional[str] = None,
     ) -> List[HostGroup]:
-        """Fetches a list of host groups given its name or ID.
+        """Fetch a list of host groups given its name or ID.
 
         Name or ID argument is interpeted as an ID if the argument is numeric.
 
@@ -463,11 +463,13 @@ class ZabbixAPI:
         return [HostGroup(**hostgroup) for hostgroup in resp]
 
     def create_hostgroup(self, name: str) -> str:
-        """Creates a host group with the given name."""
+        """Create a host group with the given name."""
         try:
             resp = self.hostgroup.create(name=name)
         except ZabbixAPIException as e:
-            raise ZabbixAPICallError(f"Failed to create host group {name!r}") from e
+            raise ZabbixAPICallError(
+                f"Failed to create host group {name!r}: {e}"
+            ) from e
         if not resp or not resp.get("groupids"):
             raise ZabbixAPICallError(
                 "Host group creation returned no data. Unable to determine if group was created."
@@ -529,7 +531,7 @@ class ZabbixAPI:
         search: bool = False,
         select_templates: bool = False,
     ) -> TemplateGroup:
-        """Fetches a template group given its name or ID.
+        """Fetch a template group given its name or ID.
 
         Name or ID argument is interpeted as an ID if the argument is numeric.
 
@@ -563,7 +565,7 @@ class ZabbixAPI:
         sort_field: Optional[str] = None,
         sort_order: Optional[SortOrder] = None,
     ) -> List[TemplateGroup]:
-        """Fetches a list of template groups, optionally filtered by name(s).
+        """Fetch a list of template groups, optionally filtered by name(s).
 
         Name or ID argument is interpeted as an ID if the argument is numeric.
 
@@ -619,7 +621,7 @@ class ZabbixAPI:
         return [TemplateGroup(**tgroup) for tgroup in resp]
 
     def create_templategroup(self, name: str) -> str:
-        """Creates a template group with the given name."""
+        """Create a template group with the given name."""
         try:
             resp = self.templategroup.create(name=name)
         except ZabbixAPIException as e:
@@ -655,7 +657,7 @@ class ZabbixAPI:
         sort_order: Optional[SortOrder] = None,
         search: bool = False,
     ) -> Host:
-        """Fetches a host given a name or id."""
+        """Fetch a host given a name or id."""
         hosts = self.get_hosts(
             name_or_id,
             select_groups=select_groups,
@@ -700,7 +702,7 @@ class ZabbixAPI:
         ] = True,  # we generally always want to search when multiple hosts are requested
         # **filter_kwargs,
     ) -> List[Host]:
-        """Fetches all hosts matching the given criteria(s).
+        """Fetch all hosts matching the given criteria(s).
 
         Hosts can be filtered by name or ID. Names and IDs cannot be mixed.
         If no criteria are given, all hosts are returned.
@@ -927,7 +929,7 @@ class ZabbixAPI:
         self,
         interfaceid: Optional[str] = None,
     ) -> HostInterface:
-        """Fetches a host interface given its ID"""
+        """Fetch a host interface given its ID"""
         interfaces = self.get_host_interfaces(interfaceids=interfaceid)
         if not interfaces:
             raise ZabbixNotFoundError(f"Host interface with ID {interfaceid} not found")
@@ -941,7 +943,7 @@ class ZabbixAPI:
         triggerids: Union[str, List[str], None] = None,
         # Can expand with the rest of the parameters if needed
     ) -> List[HostInterface]:
-        """Fetches a list of host interfaces, optionally filtered by host ID,
+        """Fetch a list of host interfaces, optionally filtered by host ID,
         interface ID, item ID or trigger ID.
         """
         params: ParamsType = {"output": "extend"}
@@ -1058,7 +1060,7 @@ class ZabbixAPI:
         select_rights: bool = False,
         search: bool = False,
     ) -> Usergroup:
-        """Fetches a user group by name. Always fetches the full contents of the group."""
+        """Fetch a user group by name. Always fetches the full contents of the group."""
         groups = self.get_usergroups(
             name,
             select_users=select_users,
@@ -1077,7 +1079,7 @@ class ZabbixAPI:
         select_rights: bool = True,
         search: bool = False,
     ) -> List[Usergroup]:
-        """Fetches all user groups. Optionally includes users and rights."""
+        """Fetch all user groups. Optionally includes users and rights."""
         params: ParamsType = {
             "output": "extend",
         }
@@ -1123,7 +1125,7 @@ class ZabbixAPI:
         disabled: bool = False,
         gui_access: GUIAccess = GUIAccess.DEFAULT,
     ) -> str:
-        """Creates a user group with the given name."""
+        """Create a user group with the given name."""
         try:
             resp = self.usergroup.create(
                 name=usergroup_name,
@@ -1235,7 +1237,7 @@ class ZabbixAPI:
     def get_proxy(
         self, name_or_id: str, select_hosts: bool = False, search: bool = True
     ) -> Proxy:
-        """Fetches a single proxy matching the given name."""
+        """Fetch a single proxy matching the given name."""
         proxies = self.get_proxies(name_or_id, select_hosts=select_hosts, search=search)
         if not proxies:
             raise ZabbixNotFoundError(f"Proxy {name_or_id!r} not found")
@@ -1248,7 +1250,7 @@ class ZabbixAPI:
         search: bool = True,
         **kwargs: Any,
     ) -> List[Proxy]:
-        """Fetches all proxies.
+        """Fetch all proxies.
 
         NOTE: IDs and names cannot be mixed
         """
@@ -1287,7 +1289,7 @@ class ZabbixAPI:
         sort_field: Optional[str] = "macro",
         sort_order: Optional[SortOrder] = None,
     ) -> Macro:
-        """Fetches a macro given a host ID and macro name."""
+        """Fetch a macro given a host ID and macro name."""
         macros = self.get_macros(
             macro_name=macro_name,
             host=host,
@@ -1302,7 +1304,7 @@ class ZabbixAPI:
         return macros[0]
 
     def get_hosts_with_macro(self, macro: str) -> List[Host]:
-        """Fetches a macro given a host ID and macro name."""
+        """Fetch a macro given a host ID and macro name."""
         macros = self.get_macros(macro_name=macro)
         if not macros:
             raise ZabbixNotFoundError(f"Macro {macro!r} not found.")
@@ -1353,7 +1355,7 @@ class ZabbixAPI:
         sort_field: Optional[str] = "macro",
         sort_order: Optional[SortOrder] = None,
     ) -> Macro:
-        """Fetches a global macro given a macro name."""
+        """Fetch a global macro given a macro name."""
         macros = self.get_macros(
             macro_name=macro_name,
             search=search,
@@ -1392,7 +1394,7 @@ class ZabbixAPI:
         return [GlobalMacro(**macro) for macro in result]
 
     def create_macro(self, host: Host, macro: str, value: str) -> str:
-        """Creates a macro given a host ID, macro name and value."""
+        """Create a macro given a host ID, macro name and value."""
         try:
             resp = self.usermacro.create(hostid=host.hostid, macro=macro, value=value)
         except ZabbixAPIException as e:
@@ -1406,7 +1408,7 @@ class ZabbixAPI:
         return resp["hostmacroids"][0]
 
     def create_global_macro(self, macro: str, value: str) -> str:
-        """Creates a global macro given a macro name and value."""
+        """Create a global macro given a macro name and value."""
         try:
             resp = self.usermacro.createglobal(macro=macro, value=value)
         except ZabbixAPIException as e:
@@ -1418,7 +1420,7 @@ class ZabbixAPI:
         return resp["globalmacroids"][0]
 
     def update_macro(self, macroid: str, value: str) -> str:
-        """Updates a macro given a macro ID and value."""
+        """Update a macro given a macro ID and value."""
         try:
             resp = self.usermacro.update(hostmacroid=macroid, value=value)
         except ZabbixAPIException as e:
@@ -1430,7 +1432,7 @@ class ZabbixAPI:
         return resp["hostmacroids"][0]
 
     def update_host_inventory(self, host: Host, inventory: Dict[str, str]) -> str:
-        """Updates a host inventory given a host and inventory."""
+        """Update a host inventory given a host and inventory."""
         try:
             resp = self.host.update(hostid=host.hostid, inventory=inventory)
         except ZabbixAPIException as e:
@@ -1444,7 +1446,7 @@ class ZabbixAPI:
         return resp["hostids"][0]
 
     def update_host_proxy(self, host: Host, proxy: Proxy) -> str:
-        """Updates a host's proxy."""
+        """Update a host's proxy."""
         params: ParamsType = {
             "hostid": host.hostid,
             compat.host_proxyid(self.version): proxy.proxyid,
@@ -1462,7 +1464,7 @@ class ZabbixAPI:
         return resp["hostids"][0]
 
     def clear_host_proxy(self, host: Host) -> str:
-        """Clears a host's proxy."""
+        """Clear a host's proxy."""
         params: ParamsType = {
             "hostid": host.hostid,
             compat.host_proxyid(self.version): None,
@@ -1478,7 +1480,7 @@ class ZabbixAPI:
         return resp["hostids"][0]
 
     def update_host_status(self, host: Host, status: MonitoringStatus) -> str:
-        """Updates a host status given a host ID and status."""
+        """Update a host status given a host ID and status."""
         try:
             resp = self.host.update(hostid=host.hostid, status=status)
         except ZabbixAPIException as e:
@@ -1494,7 +1496,7 @@ class ZabbixAPI:
     # NOTE: maybe passing in a list of hosts to this is overkill?
     # Just pass in a list of host IDs instead?
     def move_hosts_to_proxy(self, hosts: List[Host], proxy: Proxy) -> None:
-        """Moves a list of hosts to a proxy."""
+        """Move a list of hosts to a proxy."""
         params: ParamsType = {
             "hosts": [{"hostid": host.hostid} for host in hosts],
             compat.host_proxyid(self.version): proxy.proxyid,
@@ -1531,7 +1533,7 @@ class ZabbixAPI:
         select_templates: bool = False,
         select_parent_templates: bool = False,
     ) -> List[Template]:
-        """Fetches one or more templates given a name or ID."""
+        """Fetch one or more templates given a name or ID."""
         params: ParamsType = {"output": "extend"}
         search_params: ParamsType = {}
 
@@ -1582,7 +1584,7 @@ class ZabbixAPI:
     def link_templates_to_hosts(
         self, templates: List[Template], hosts: List[Host]
     ) -> None:
-        """Links one or more templates to one or more hosts.
+        """Link one or more templates to one or more hosts.
 
         Args:
             templates (List[str]): A list of template names or IDs
@@ -1608,7 +1610,7 @@ class ZabbixAPI:
     def unlink_templates_from_hosts(
         self, templates: List[Template], hosts: List[Host], clear: bool = True
     ) -> None:
-        """Unlinks and clears one or more templates from one or more hosts.
+        """Unlink and clears one or more templates from one or more hosts.
 
         Args:
             templates (List[Template]): A list of templates to unlink
@@ -1637,7 +1639,7 @@ class ZabbixAPI:
     def link_templates(
         self, source: List[Template], destination: List[Template]
     ) -> None:
-        """Links one or more templates to one or more templates
+        """Link one or more templates to one or more templates
 
         Destination templates are the templates that ultimately inherit the
         items and triggers from the source templates.
@@ -1665,7 +1667,7 @@ class ZabbixAPI:
     def unlink_templates(
         self, source: List[Template], destination: List[Template], clear: bool = True
     ) -> None:
-        """Unlinks template(s) from template(s) and optionally clears them.
+        """Unlink template(s) from template(s) and optionally clears them.
 
         Destination templates are the templates that ultimately inherit the
         items and triggers from the source templates.
@@ -1699,7 +1701,7 @@ class ZabbixAPI:
         templates: List[Template],
         groups: Union[List[HostGroup], List[TemplateGroup]],
     ) -> None:
-        """Links one or more templates to one or more host/template groups.
+        """Link one or more templates to one or more host/template groups.
 
         Callers must ensure that the right type of group is passed in depending
         on the Zabbix version:
@@ -1728,7 +1730,7 @@ class ZabbixAPI:
         templates: List[Template],
         groups: Union[List[HostGroup], List[TemplateGroup]],
     ) -> None:
-        """Removes template(s) from host/template group(s).
+        """Remove template(s) from host/template group(s).
 
         Callers must ensure that the right type of group is passed in depending
         on the Zabbix version:
@@ -1831,7 +1833,7 @@ class ZabbixAPI:
         return resp["userids"][0]
 
     def get_role(self, name_or_id: str) -> Role:
-        """Fetches a role given its ID or name."""
+        """Fetch a role given its ID or name."""
         roles = self.get_roles(name_or_id)
         if not roles:
             raise ZabbixNotFoundError(f"Role {name_or_id!r} not found")
@@ -1848,7 +1850,7 @@ class ZabbixAPI:
         return [Role(**role) for role in roles]
 
     def get_user(self, username: str) -> User:
-        """Fetches a user given its username."""
+        """Fetch a user given its username."""
         users = self.get_users(username)
         if not users:
             raise ZabbixNotFoundError(f"User with username {username!r} not found")
@@ -1961,7 +1963,7 @@ class ZabbixAPI:
 
     ## Maintenance
     def get_maintenance(self, maintenance_id: str) -> Maintenance:
-        """Fetches a maintenance given its ID."""
+        """Fetch a maintenance given its ID."""
         maintenances = self.get_maintenances(maintenance_ids=[maintenance_id])
         if not maintenances:
             raise ZabbixNotFoundError(f"Maintenance {maintenance_id!r} not found")
@@ -2173,7 +2175,7 @@ class ZabbixAPI:
         return resp["triggerids"][0]
 
     def get_images(self, *image_names: str, select_image: bool = True) -> List[Image]:
-        """Fetches images, optionally filtered by name(s)."""
+        """Fetch images, optionally filtered by name(s)."""
         params: ParamsType = {"output": "extend"}
         if image_names:
             params["searchByAny"] = True
@@ -2188,7 +2190,7 @@ class ZabbixAPI:
         return [Image(**image) for image in resp]
 
     def get_maps(self, *map_names: str) -> List[Map]:
-        """Fetches maps, optionally filtered by name(s)."""
+        """Fetch maps, optionally filtered by name(s)."""
         params: ParamsType = {"output": "extend"}
         if map_names:
             params["searchByAny"] = True
@@ -2201,7 +2203,7 @@ class ZabbixAPI:
         return [Map(**m) for m in resp]
 
     def get_media_types(self, *names: str) -> List[MediaType]:
-        """Fetches media types, optionally filtered by name(s)."""
+        """Fetch media types, optionally filtered by name(s)."""
         params: ParamsType = {"output": "extend"}
         if names:
             params["searchByAny"] = True
@@ -2266,7 +2268,7 @@ class ZabbixAPIObjectClass:
         """
 
         if attr in WRITE_OPERATIONS:
-            if object.__getattribute__(self, "parent").readonly:
+            if object.__getattribute__(self, "parent").read_only:
                 raise ZabbixAPIException(
                     "Cannot perform API write operations in read-only mode"
                 )

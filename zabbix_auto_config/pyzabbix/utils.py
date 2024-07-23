@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 def get_random_proxy(client: ZabbixAPI, pattern: Optional[str] = None) -> Proxy:
-    """Fetches a random proxy, optionally matching a regex pattern."""
+    """Fetch a random proxy, optionally matching a regex pattern."""
     proxies = client.get_proxies()
     if not proxies:
         raise ZabbixNotFoundError("No proxies found")
