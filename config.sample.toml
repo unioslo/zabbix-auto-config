@@ -29,6 +29,7 @@ failsafe_ok_file_strict = true
 
 # Configuration for ZAC processes.
 [zac.process.source_merger]
+# How often to run the source merger in seconds
 update_interval = 60
 
 [zac.process.host_updater]
@@ -41,11 +42,11 @@ update_interval = 60
 update_interval = 60
 
 [zac.process.garbage_collector]
-update_interval = 300
 # Enable or disable the automatic removal of disabled hosts from maintenances and triggers
 enabled = true
 # Delete maintenance windows altogether if all hosts within them are disabled
 delete_empty_maintenance = true
+update_interval = 300
 
 
 [zabbix]
@@ -57,6 +58,7 @@ username = "Admin"
 password = "zabbix"
 
 # Preview changes without making them.
+# Disables all write operations to Zabbix.
 dryrun = true
 
 # Maximum number of hosts to add/remove in one go.
