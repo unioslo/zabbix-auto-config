@@ -25,7 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `update_interval`: Update interval in seconds.
   - `[zac.process.source_merger]`
     - `update_interval`: Update interval in seconds.
-- Automatic garbage collection of maintenances and triggers
+- Automatic garbage collection of maintenances and triggers.
+  - Removes disabled hosts from maintenances and triggers.
   - Can be enabled under `zac.process.garbage_collector.enabled`
   - Optionally also delete maintenances that only contain disabled hosts with `zac.process.garbage_collector.delete_empty_maintenance`.
 - Automatic creation of required host groups.
