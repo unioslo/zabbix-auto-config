@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Zabbix 7 compatibility
-- Config options for each process
+- Configuration options for each process.
   - `[zac.process.garbage_collector]`
     - `enabled`: Enable automatic garbage collection.
     - `delete_empty_maintenance`: Delete maintenances that only contain disabled hosts.
@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - API internals rewritten to use Pydantic models.
   - Borrows API code from Zabbix-cli v3.
+- Dry run mode now guarantees no changes are made to Zabbix by preventing all write operations via the API.
 
 ### Removed
 
