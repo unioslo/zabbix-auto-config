@@ -2,13 +2,13 @@
 
 Zabbix-auto-config is an utility that aims to automatically configure hosts, host groups, host inventories, template groups and templates in the monitoring software [Zabbix](https://www.zabbix.com/).
 
-Note: Only tested with Zabbix 6.0, 6.4 and 7.0.
+Note: Primarily tested with Zabbix 7.0 and 6.4, but should work with 6.0 and 5.2.
 
 ## Requirements
 
 * Python >=3.8
 * pip >=21.3
-* Zabbix >=5.0
+* Zabbix >=6.4
 
 # Quick start
 
@@ -19,7 +19,7 @@ This is a crash course in how to quickly get this application up and running in 
 Setup a Zabbix test instance with [podman](https://podman.io/) and [podman-compose](https://github.com/containers/podman-compose/).
 
 ```bash
-TAG=alpine-5.0-latest ZABBIX_PASSWORD=secret podman-compose up -d
+TAG=7.0-alpine-latest ZABBIX_PASSWORD=secret podman-compose up -d
 ```
 
 ## Zabbix prerequisites
