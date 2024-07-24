@@ -382,11 +382,11 @@ class HostsSerializer(RootModel[List[Host]]):
     root: List[Host]
 
 
-def hosts_to_json(hosts: List[Host], indent=2) -> str:
+def hosts_to_json(hosts: List[Host], indent: int = 2) -> str:
     """Convert a list of Host objects to a JSON string."""
     return HostsSerializer(root=hosts).model_dump_json(indent=indent)
 
 
-def print_hosts(hosts: List[Host], indent=2) -> None:
+def print_hosts(hosts: List[Host], indent: int = 2) -> None:
     """Print a list of Host objects to stdout as JSON."""
     print(hosts_to_json(hosts, indent=indent))
