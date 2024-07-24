@@ -588,13 +588,13 @@ class SourceMergerProcess(BaseProcess):
                     break
 
                 source_hosts = source_hosts_map.get(hostname)
-                host = hosts.get(hostname)
                 if not source_hosts:
                     logging.warning(
                         "Host '%s' not found in source hosts table", hostname
                     )
                     continue
 
+                host = hosts.get(hostname)
                 host_action = self.handle_host(db_cursor, host, source_hosts)
                 actions[host_action] += 1
 
