@@ -74,7 +74,7 @@ class BaseProcess(multiprocessing.Process):
         self.stop_event = multiprocessing.Event()
 
     def run(self) -> None:
-        logging.info("Process starting")
+        logging.debug("Process starting")
 
         with SignalHandler(self.stop_event):
             while not self.stop_event.is_set():
@@ -127,8 +127,12 @@ class BaseProcess(multiprocessing.Process):
 class SignalHandler:
     def __init__(self, event: multiprocessing.synchronize.Event) -> None:
         self.event = event
+        self.old_sigint_handler = signal.getsignal(signal.SIGINT)
+        self.old_sigterm_handler = signal.getsignal(signal.SIGTERM)
 
     def __enter__(self) -> None:
+        # Set new signal handlers when entering the context
+        # Calling signal.signal() assigns new handler and returns the old one
         self.old_sigint_handler = signal.signal(signal.SIGINT, self._handler)
         self.old_sigterm_handler = signal.signal(signal.SIGTERM, self._handler)
 
