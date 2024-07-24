@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Utility functions for serializing source collector outputs:
   - `zabbix_auto_config.models.hosts_to_json`
   - `zabbix_auto_config.models.print_hosts`
+- `py.typed` marker file.
 
 ### Changed
 
