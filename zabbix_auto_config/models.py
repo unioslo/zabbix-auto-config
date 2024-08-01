@@ -133,7 +133,7 @@ class ProcessesSettings(ConfigBaseModel):
     hostgroup_updater: HostGroupUpdaterSettings = HostGroupUpdaterSettings()
     template_updater: TemplateUpdaterSettings = TemplateUpdaterSettings()
     garbage_collector: GarbageCollectorSettings = GarbageCollectorSettings(
-        update_interval=300
+        update_interval=86400  # every 24 hours
     )
 
 

@@ -42,11 +42,12 @@ update_interval = 60
 update_interval = 60
 
 [zac.process.garbage_collector]
-# Enable or disable the automatic removal of disabled hosts from maintenances and triggers
-enabled = true
-# Delete maintenance windows altogether if all hosts within them are disabled
-delete_empty_maintenance = true
-update_interval = 300
+# Enable garbage collection, including:
+#   - Remove disabled hosts from maintenances
+enabled = false
+# Delete maintenances if all its hosts are disabled
+delete_empty_maintenance = false
+update_interval = 86400 # every 24 hours
 
 
 [zabbix]

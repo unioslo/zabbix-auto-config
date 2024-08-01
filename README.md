@@ -19,7 +19,7 @@ This is a crash course in how to quickly get this application up and running in 
 Setup a Zabbix test instance with [podman](https://podman.io/) and [podman-compose](https://github.com/containers/podman-compose/).
 
 ```bash
-TAG=7.0-alpine-latest ZABBIX_PASSWORD=secret podman-compose up -d
+TAG=7.0-ubuntu-latest ZABBIX_PASSWORD=secret podman-compose up -d
 ```
 
 ## Zabbix prerequisites
@@ -46,6 +46,8 @@ For automatic linking in templates you could create the templates:
 
 ## Database
 
+The application requires a PostgreSQL database to store the state of the collected hosts. The database can be created with the following command:
+
 ```bash
 PGPASSWORD=secret psql -h localhost -U postgres -p 5432 -U zabbix << EOF
 CREATE DATABASE zac;
@@ -59,11 +61,13 @@ CREATE TABLE hosts_source (
 EOF
 ```
 
+Replace login credentials with your own when running against a different database. This is a one-time procedure per environment.
+
 ## Application
 
-### Installation (production)
+### Installation
 
-For production, installing the project in a virtual environment directly with pip is the recommended way to go:
+Installing the project in a virtual environment directly with pip is the recommended way to go:
 
 ```bash
 python -m venv venv
@@ -144,7 +148,7 @@ zac
 
 ## Systemd unit
 
-You could run this as a systemd service:
+To add automatic startup of the application with systemd, create a unit file in `/etc/systemd/system/zabbix-auto-config.service`:
 
 ```ini
 [Unit]
@@ -158,6 +162,8 @@ WorkingDirectory=/home/zabbix/zabbix-auto-config
 Environment=PATH=/home/zabbix/zabbix-auto-config/venv/bin
 ExecStart=/home/zabbix/zabbix-auto-config/venv/bin/zac
 TimeoutSec=300
+Restart=always
+RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
@@ -165,9 +171,15 @@ WantedBy=multi-user.target
 
 ## Source collectors
 
+ZAC relies on "Source Collectors" to fetch host data from various sources.
+A source can be anything; an API, a file, a database, etc. What matters is that
+the source is able to return a list of `zabbix_auto_config.models.Host` objects. ZAC uses these objects to create or update hosts in Zabbix. If a host with the same hostname is collected from multiple different sources, its information is combined into a single logical host object before being used to create/update the host in Zabbix.
+
+### Writing a source collector
+
 Source collectors are Python modules placed in a directory specified by the `source_collector_dir` option in the `[zac]` table of the configuration file. Zabbix-auto-config attempts to load all modules referenced by name in the configuration file from this directory. If any referenced modules cannot be found in the directory, they will be ignored.
 
-A source collector module contains a function named `collect` that returns a list of `Host` objects. These host objects are used by Zabbix-auto-config to create or update hosts in Zabbix.
+A source collector module contains a function named `collect()` that returns a list of `Host` objects. These host objects are used by Zabbix-auto-config to create or update hosts in Zabbix.
 
 Here's an example of a source collector module that reads hosts from a file:
 
@@ -187,7 +199,7 @@ def collect(*args: Any, **kwargs: Any) -> List[Host]:
         return [Host(**host) for host in json.load(f)]
 ```
 
-A module is recognized as a source collector if it contains a `collect` function that accepts an arbitrary number of arguments and keyword arguments and returns a list of `Host` objects. Type annotations are optional but recommended.
+A module is recognized as a source collector if it contains a `collect()` function that accepts an arbitrary number of arguments and keyword arguments and returns a list of `Host` objects. Type annotations are optional but recommended.
 
 We can also provide a `if __name__ == "__main__"` block to run the collector standalone. This is useful for testing the collector module without running the entire application.
 
@@ -207,6 +219,7 @@ if __name__ == "__main__":
         f.write(hosts_to_json(collect()))
 ```
 
+### Configuration
 
 The configuration entry for loading a source collector module, like the `load_from_json.py` module above, includes both mandatory and optional fields. Here's how it can be configured:
 
@@ -218,8 +231,11 @@ error_tolerance = 5
 error_duration = 360
 exit_on_error = false
 disable_duration = 3600
+# Extra keyword arguments to pass to the collect function:
 filename = "hosts.json"
 ```
+
+Only the extra `filename` option is passed in as a kwarg to the `collect()` function.
 
 The following configurations options are available:
 
@@ -229,12 +245,11 @@ The following configurations options are available:
 `module_name` is the name of the module to load. This is the name that will be used in the configuration file to reference the module. It must correspond with the name of the module file, without the `.py` extension.
 
 #### update_interval
-`update_interval` is the number of seconds between updates. This is the interval at which the `collect` function will be called.
+`update_interval` is the number of seconds between updates. This is the interval at which the `collect()` function will be called.
 
 ### Optional configuration (error handling)
 
 If `error_tolerance` number of errors occur within `error_duration` seconds, the collector is disabled. Source collectors do not tolerate errors by default and must opt-in to this behavior by setting `error_tolerance` and `error_duration` to non-zero values. If `exit_on_error` is set to `true`, the application will exit. Otherwise, the collector will be disabled for `disable_duration` seconds.
-
 
 #### error_tolerance
 
@@ -258,12 +273,15 @@ A useful guide is to set `error_duration` as `(error_tolerance + 1) * update_int
 
 ### Keyword arguments
 
-Any extra config options specified in the configuration file will be passed to the `collect` function as keyword arguments. In the example above, the `filename` option is passed to the `collect` function, and then accessed via `kwargs["filename"]`.
+Any extra config options specified in the configuration file will be passed to the `collect()` function as keyword arguments. In the example above, the `filename` option is passed to the `collect()` function, and then accessed via `kwargs["filename"]`.
 
 
 ## Host modifiers
 
 Host modifiers are Python modules (files) that are placed in a directory defined by the option `host_modifier_dir` in the `[zac]` table of the config file. A host modifier is a module that contains a function named `modify` that takes a `Host` object as its only argument, modifies it, and returns it. Zabbix-auto-config will attempt to load all modules in the given directory.
+
+
+### Writing a host modifier
 
 A host modifier module that adds a given siteadmin to all hosts could look like this:
 
@@ -291,6 +309,34 @@ Zac manages only inventory properties configured as `managed_inventory` in `conf
 1. Add "location=x" to a host in a source and wait for sync
 2. Remove the "location" property from the host in the source
 3. "location=x" will remain in Zabbix
+
+## Garbage Collection
+
+ZAC provides an optional Zabbix garbage collection module that cleans up stale data from Zabbix that is not otherwise managed by ZAC, such as maintenances.
+
+The garbage collector currently does the following:
+
+- Removes disabled hosts from maintenances.
+- Deletes maintenances that only contain disabled hosts.
+
+Under normal usage, hosts are removed from maintenances when being disabled by ZAC, but if hosts are disabled outside of ZAC, they will not be removed from maintenances. The GC module will remove these hosts, and optionally delete the maintenance altogether if it only contains disabled hosts.
+
+To enable garbage collection, add the following to your config:
+
+```toml
+[zac.process.garbage_collector]
+enabled = true
+delete_empty_maintenance = true
+```
+
+By default, the garbage collector runs every 24 hours. This can be adjusted with the `update_interval` option:
+
+```toml
+[zac.process.garbage_collector]
+update_interval = 3600 # Run every hour
+```
+
+----
 
 ## Development
 
