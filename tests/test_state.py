@@ -166,9 +166,9 @@ def test_state_asdict_error(use_manager: bool) -> None:
 
     # Mocking datetime in subprocesses is a bit of a chore, so we just
     # check that the error_time is a timestamp value within a given range
-    pre = datetime.datetime.now().timestamp()
+    pre = time.time()
     state.set_error(CustomException("Test error"))
-    post = datetime.datetime.now().timestamp()
+    post = time.time()
     d = state.asdict()
 
     assert post >= d["error_time"] >= pre

@@ -27,6 +27,29 @@ failsafe_ok_file = "/tmp/zac_failsafe_ok"
 # It is then up to the administrator to manually delete the file afterwards.
 failsafe_ok_file_strict = true
 
+# Configuration for ZAC processes.
+[zac.process.source_merger]
+# How often to run the source merger in seconds
+update_interval = 60
+
+[zac.process.host_updater]
+update_interval = 60
+
+[zac.process.hostgroup_updater]
+update_interval = 60
+
+[zac.process.template_updater]
+update_interval = 60
+
+[zac.process.garbage_collector]
+# Enable garbage collection, including:
+#   - Remove disabled hosts from maintenances
+enabled = false
+# Delete maintenances if all its hosts are disabled
+delete_empty_maintenance = false
+update_interval = 86400 # every 24 hours
+
+
 [zabbix]
 # Directory containing mapping files.
 map_dir = "path/to/map_dir/"
@@ -36,6 +59,7 @@ username = "Admin"
 password = "zabbix"
 
 # Preview changes without making them.
+# Disables all write operations to Zabbix.
 dryrun = true
 
 # Maximum number of hosts to add/remove in one go.

@@ -13,18 +13,18 @@ import time
 from pathlib import Path
 from typing import List
 
-import multiprocessing_logging  # type: ignore[import]
+import multiprocessing_logging
 import tomli
 
-from . import models
-from . import processing
-from .__about__ import __version__
-from ._types import HealthDict
-from ._types import HostModifier
-from ._types import HostModifierModule
-from ._types import SourceCollector
-from ._types import SourceCollectorModule
-from .state import get_manager
+from zabbix_auto_config import models
+from zabbix_auto_config import processing
+from zabbix_auto_config.__about__ import __version__
+from zabbix_auto_config._types import HealthDict
+from zabbix_auto_config._types import HostModifier
+from zabbix_auto_config._types import HostModifierModule
+from zabbix_auto_config._types import SourceCollector
+from zabbix_auto_config._types import SourceCollectorModule
+from zabbix_auto_config.state import get_manager
 
 
 def get_source_collectors(config: models.Settings) -> List[SourceCollector]:
@@ -168,6 +168,8 @@ def main() -> None:
     config = get_config()
     logging.getLogger().setLevel(config.zac.log_level)
     logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
+    logging.getLogger("httpcore.http11").setLevel(logging.ERROR)
+    logging.getLogger("httpx").setLevel(logging.ERROR)
 
     logging.info("Main start (%d) version %s", os.getpid(), __version__)
     stop_event = multiprocessing.Event()
@@ -193,7 +195,7 @@ def main() -> None:
         )
         src_processes.append(process)
 
-    # Initialize the other processes
+    # Initialize the default processes
     processes: List[processing.BaseProcess] = [
         processing.SourceHandlerProcess(
             "source-handler",
@@ -226,6 +228,17 @@ def main() -> None:
             config,
         ),
     ]
+
+    # Garbage collection process
+    if config.zac.process.garbage_collector.enabled:
+        processes.append(
+            processing.ZabbixGarbageCollector(
+                "zabbix-garbage-collector",
+                state_manager.State(),
+                config.zac.db_uri,
+                config,
+            )
+        )
 
     # Combine the source collector processes with the other processes
     processes.extend(src_processes)

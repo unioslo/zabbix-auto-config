@@ -15,8 +15,8 @@ from typing import Tuple
 from typing import TypedDict
 from typing import runtime_checkable
 
-from .models import Host
-from .models import SourceCollectorSettings
+from zabbix_auto_config.models import Host
+from zabbix_auto_config.models import SourceCollectorSettings
 
 
 class ZabbixTag(TypedDict):

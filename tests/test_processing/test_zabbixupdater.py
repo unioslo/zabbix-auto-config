@@ -5,7 +5,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import requests
+from httpx import ConnectTimeout
+from httpx import ReadTimeout
 
 from zabbix_auto_config import exceptions
 from zabbix_auto_config.models import Settings
@@ -18,23 +19,25 @@ from ..conftest import PicklableMock
 
 
 def raises_connect_timeout(*args, **kwargs):
-    raise requests.exceptions.ConnectTimeout("connect timeout")
+    raise ConnectTimeout("connect timeout")
 
 
 # We have to set the side effect in the constructor
 class TimeoutAPI(MockZabbixAPI):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.login = PicklableMock(
-            side_effect=requests.exceptions.ConnectTimeout("connect timeout")
-        )
+        self.login = PicklableMock(side_effect=ConnectTimeout("connect timeout"))
 
 
 @pytest.mark.timeout(10)
-@patch("pyzabbix.ZabbixAPI", TimeoutAPI())  # mock with timeout on login
-def test_zabbixupdater_connect_timeout(mock_psycopg2_connect, config: Settings):
+@patch(
+    "zabbix_auto_config.processing.ZabbixAPI", TimeoutAPI()
+)  # mock with timeout on login
+def test_zabbixupdater_connect_timeout(
+    mock_psycopg2_connect, config: Settings, map_dir_with_files: Path
+):
     config.zabbix = ZabbixSettings(
-        map_dir="",
+        map_dir=str(map_dir_with_files),
         url="",
         username="",
         password="",
@@ -53,22 +56,15 @@ def test_zabbixupdater_connect_timeout(mock_psycopg2_connect, config: Settings):
 
 class TimeoutUpdater(ZabbixUpdater):
     def do_update(self):
-        raise requests.exceptions.ReadTimeout("read timeout")
+        raise ReadTimeout("read timeout")
 
 
 @pytest.mark.timeout(5)
 def test_zabbixupdater_read_timeout(
-    tmp_path: Path, mock_psycopg2_connect, config: Settings
+    mock_psycopg2_connect, config: Settings, map_dir_with_files: Path
 ):
-    # TODO: use mapping file fixtures from #67
-    map_dir = tmp_path / "maps"
-    map_dir.mkdir()
-    (map_dir / "property_template_map.txt").touch()
-    (map_dir / "property_hostgroup_map.txt").touch()
-    (map_dir / "siteadmin_hostgroup_map.txt").touch()
-
     config.zabbix = ZabbixSettings(
-        map_dir=str(map_dir),
+        map_dir=str(map_dir_with_files.absolute()),
         url="",
         username="",
         password="",
