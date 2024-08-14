@@ -998,7 +998,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 details=details,
             )
             logging.info(
-                "Updating old interface (type: %s) on host: %s",
+                "Updated old interface (type: %s) on host: %s",
                 interface.type,
                 zabbix_host,
             )
@@ -1019,7 +1019,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 details=details,
             )
             logging.info(
-                "Creating new interface (type: %s) on host: %s",
+                "Created new interface (type: %s) on host: %s",
                 interface.type,
                 zabbix_host,
             )
@@ -1244,6 +1244,11 @@ class ZabbixHostUpdater(ZabbixUpdater):
                             or zabbix_interface.port != interface.port
                             or zabbix_interface.useip != useip
                         ):
+                            logging.debug(
+                                "DNS interface of type %s for host '%s' is configured wrong",
+                                interface.type,
+                                db_host.hostname,
+                            )
                             # This DNS interface is configured wrong, set it
                             self.set_interface(
                                 zabbix_host,
@@ -1252,59 +1257,18 @@ class ZabbixHostUpdater(ZabbixUpdater):
                                 zabbix_interface,
                             )
                         if interface.type == 2 and interface.details:
-                            details_dict = zabbix_interface.model_dump()
+                            details_dict = zabbix_interface.details
                             # Check that the interface details are correct.
                             # Note that the Zabbix API response may include more
                             # information than our back-end; ignore such keys.
                             if not all(
-                                str(details_dict.get(k, None)) == str(v)
+                                str(details_dict.get(k)) == str(v)
                                 for k, v in interface.details.items()
                             ):
-                                # This SNMP interface is configured wrong, set it.
-                                self.set_interface(
-                                    zabbix_host,
-                                    interface,
-                                    useip,
-                                    zabbix_interface,
+                                logging.debug(
+                                    "SNMP interface for host '%s' differs from source data. Fixing.",
+                                    db_host.hostname,
                                 )
-
-                    if interface.type in zabbix_interfaces:
-                        # This interface type exists on the current zabbix host
-                        # TODO: This logic could probably be simplified and should be refactored
-                        zabbix_interface = zabbix_interfaces[interface.type]
-                        if useip and (
-                            zabbix_interface.ip != interface.endpoint
-                            or zabbix_interface.port != interface.port
-                            or zabbix_interface.useip != useip
-                        ):
-                            # This IP interface is configured wrong, set it
-                            self.set_interface(
-                                zabbix_host,
-                                interface,
-                                useip,
-                                zabbix_interface,
-                            )
-                        elif not useip and (
-                            zabbix_interface.dns != interface.endpoint
-                            or zabbix_interface.port != interface.port
-                            or zabbix_interface.useip != useip
-                        ):
-                            # This DNS interface is configured wrong, set it
-                            self.set_interface(
-                                zabbix_host,
-                                interface,
-                                useip,
-                                zabbix_interface,
-                            )
-                        if interface.type == 2 and interface.details:
-                            details_dict = zabbix_interface.model_dump()
-                            # Check that the interface details are correct.
-                            # Note that the Zabbix API response may include more
-                            # information than our back-end; ignore such keys.
-                            if not all(
-                                str(details_dict.get(k, None)) == str(v)
-                                for k, v in interface.details.items()
-                            ):
                                 # This SNMP interface is configured wrong, set it.
                                 self.set_interface(
                                     zabbix_host,
