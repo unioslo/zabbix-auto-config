@@ -167,8 +167,7 @@ def main() -> None:
     )
     config = get_config()
     logging.getLogger().setLevel(config.zac.log_level)
-    logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
-    logging.getLogger("httpcore.http11").setLevel(logging.ERROR)
+    logging.getLogger("httpcore").setLevel(logging.ERROR)
     logging.getLogger("httpx").setLevel(logging.ERROR)
 
     logging.info("Main start (%d) version %s", os.getpid(), __version__)
