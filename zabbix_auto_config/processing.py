@@ -23,6 +23,8 @@ from typing import List
 from typing import Optional
 from typing import Set
 from typing import Tuple
+from typing import Type
+from typing import TypeVar
 
 import httpx
 import psycopg2
@@ -423,6 +425,11 @@ class SourceHandlerProcess(BaseProcess):
             actions[HostAction.DELETE],
             self.next_update.isoformat(timespec="seconds"),
         )
+
+
+HostInterfaceDetailsT = TypeVar(
+    "HostInterfaceDetailsT", CreateHostInterfaceDetails, UpdateHostInterfaceDetails
+)
 
 
 class SourceMergerProcess(BaseProcess):
@@ -977,52 +984,116 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             dns = interface.endpoint
             ip = None
-        ifacetype = InterfaceType(interface.type)
+
+        try:
+            ifacetype = InterfaceType(interface.type)
+        except ValueError:
+            logging.error(
+                "Invalid/unknown interface type (%d) for host '%s'",
+                interface.type,
+                zabbix_host.host,
+            )
+            return
 
         # Update existing interface
         if old_interface:
-            if interface.details:
-                details = UpdateHostInterfaceDetails.model_validate(interface.details)
-            else:
-                details = None
-
-            self.api.update_host_interface(
-                old_interface,
-                hostid=zabbix_host.hostid,
-                main=True,
-                port=interface.port,
-                type=ifacetype,
-                use_ip=useip,
-                dns=dns,
-                ip=ip,
-                details=details,
-            )
-            logging.info(
-                "Updated old interface (type: %s) on host: %s",
-                interface.type,
+            self.update_host_interface(
                 zabbix_host,
+                interface,
+                old_interface,
+                ifacetype,
+                useip,
+                dns,
+                ip,
             )
         # Create new interface
         else:
-            if interface.details:
-                details = CreateHostInterfaceDetails.model_validate(interface.details)
-            else:
-                details = None
-            self.api.create_host_interface(
+            self.create_host_interface(
                 zabbix_host,
-                main=True,
-                port=interface.port,
-                type=ifacetype,
-                use_ip=useip,
-                dns=dns,
-                ip=ip,
-                details=details,
+                interface,
+                ifacetype,
+                useip,
+                dns,
+                ip,
             )
-            logging.info(
-                "Created new interface (type: %s) on host: %s",
-                interface.type,
-                zabbix_host,
+
+    def create_host_interface(
+        self,
+        zabbix_host: Host,
+        interface: models.Interface,
+        ifacetype: InterfaceType,
+        useip: bool,
+        dns: Optional[str],
+        ip: Optional[str],
+    ) -> None:
+        details = self.validate_interface_details(
+            CreateHostInterfaceDetails, interface, zabbix_host
+        )
+        self.api.create_host_interface(
+            zabbix_host,
+            main=True,
+            port=interface.port,
+            type=ifacetype,
+            use_ip=useip,
+            dns=dns,
+            ip=ip,
+            details=details,
+        )
+        logging.info(
+            "Created new interface (type: %s) on host: %s",
+            ifacetype.name,
+            zabbix_host,
+        )
+
+    def update_host_interface(
+        self,
+        zabbix_host: Host,
+        interface: models.Interface,
+        old_interface: HostInterface,
+        ifacetype: InterfaceType,
+        useip: bool,
+        dns: Optional[str],
+        ip: Optional[str],
+    ) -> None:
+        details = self.validate_interface_details(
+            UpdateHostInterfaceDetails, interface, zabbix_host
+        )
+
+        self.api.update_host_interface(
+            old_interface,
+            hostid=zabbix_host.hostid,
+            main=True,
+            port=interface.port,
+            type=ifacetype,
+            use_ip=useip,
+            dns=dns,
+            ip=ip,
+            details=details,
+        )
+        logging.info(
+            "Updated old interface (type: %s) on host: %s",
+            interface.type,
+            zabbix_host,
+        )
+
+    def validate_interface_details(
+        self, cls: Type[HostInterfaceDetailsT], interface: models.Interface, host: Host
+    ) -> Optional[HostInterfaceDetailsT]:
+        """Validate interface details from a source host.
+
+        Attempts to construct a model used to create or update a host interface
+        from host interface details of a source host."""
+        if not interface.details:
+            return None  # nothing to validate
+        try:
+            return cls.model_validate(interface.details)
+        except ValidationError:
+            logging.error(
+                "Invalid interface details (%s) for host '%s'",
+                interface.details,
+                host.host,
             )
+        return None
 
     def set_inventory_mode(
         self, zabbix_host: Host, inventory_mode: InventoryMode
