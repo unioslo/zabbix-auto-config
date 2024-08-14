@@ -1097,6 +1097,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             select_inventory=True,
             select_templates=True,
             select_tags=True,
+            select_groups=True,
         )
         zabbix_hosts = {host.host: host for host in zhosts}
 
