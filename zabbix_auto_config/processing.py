@@ -1448,9 +1448,10 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         managed_template_names = set(
             itertools.chain.from_iterable(self.property_template_map.values())
         )
-        zabbix_templates = {}
-        for zabbix_template in self.api.template.get(output=["host", "templateid"]):
-            zabbix_templates[zabbix_template["host"]] = zabbix_template["templateid"]
+        zabbix_templates: Dict[str, Template] = {}
+        for zabbix_template in self.api.get_templates():
+            zabbix_templates[zabbix_template.host] = zabbix_template
+
         managed_template_names = managed_template_names.intersection(
             set(zabbix_templates.keys())
         )  # If the template isn't in zabbix we can't manage it
@@ -1489,7 +1490,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
             db_host = db_hosts[zabbix_hostname]
 
             # Determine managed templates
-            synced_template_names = set()
+            synced_template_names: Set[str] = set()
             for prop in db_host.properties:
                 if template_names := self.property_template_map.get(prop):
                     synced_template_names.update(template_names)
