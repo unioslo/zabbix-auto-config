@@ -289,7 +289,7 @@ class ZabbixAPI:
             if not resp.error.data:
                 resp.error.data = "No data"
             raise ZabbixAPIRequestError(
-                f"Error: {resp.error.message}",
+                f"Error: {resp.error.message} {resp.error.data}",
                 api_response=resp,
                 response=response,
             )
