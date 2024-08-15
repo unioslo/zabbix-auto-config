@@ -172,7 +172,7 @@ WantedBy=multi-user.target
 ## Source collectors
 
 ZAC relies on "Source Collectors" to fetch host data from various sources.
-A source can be anything; an API, a file, a database, etc. What matters is that
+A source can be anything: an API, a file, a database, etc. What matters is that
 the source is able to return a list of `zabbix_auto_config.models.Host` objects. ZAC uses these objects to create or update hosts in Zabbix. If a host with the same hostname is collected from multiple different sources, its information is combined into a single logical host object before being used to create/update the host in Zabbix.
 
 ### Writing a source collector
