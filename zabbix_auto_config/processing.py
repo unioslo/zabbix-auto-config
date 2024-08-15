@@ -1769,13 +1769,12 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
             db_host = db_hosts[zabbix_hostname]
 
-            # Determine synced host groups for host
+            # Determine host groups to sync for host
+            # Sync host groups derived from its properties, siteadmins, sources, etc.
             synced_hostgroup_names = set([self.config.hostgroup_all])
-            for _property in db_host.properties:
-                if _property in self.property_hostgroup_map:
-                    synced_hostgroup_names.update(
-                        self.property_hostgroup_map[_property]
-                    )
+            for prop in db_host.properties:
+                if prop in self.property_hostgroup_map:
+                    synced_hostgroup_names.update(self.property_hostgroup_map[prop])
             for siteadmin in db_host.siteadmins:
                 if siteadmin in self.siteadmin_hostgroup_map:
                     synced_hostgroup_names.update(
