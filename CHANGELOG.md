@@ -45,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Borrows API code from Zabbix-cli v3.
 - Dry run mode now guarantees no changes are made to Zabbix by preventing all write operations via the API.
 
-### Removed
+### Deprecated
 
 - Zabbix 5 support.
   - Should in most cases work with Zabbix 5, but it will not be actively supported going forward.
