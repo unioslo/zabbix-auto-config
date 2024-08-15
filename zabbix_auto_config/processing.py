@@ -1823,12 +1823,12 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                     zabbix_hostgroup = zabbix_hostgroups.get(hostgroup_name, None)
                     if not zabbix_hostgroup:
                         # The hostgroup doesn't exist. We need to create it.
-                        zabbix_hostgroup_id = self.create_hostgroup(hostgroup_name)
+                        hostgroup_id = self.create_hostgroup(hostgroup_name)
                         # Add group to mapping so we don't try to create it again
-                        if zabbix_hostgroup_id:
-                            zabbix_hostgroups[hostgroup_name] = self.api.get_hostgroup(
-                                hostgroup_name
-                            )
+                        if hostgroup_id:
+                            zabbix_hostgroup = self.api.get_hostgroup(hostgroup_id)
+                            zabbix_hostgroups[hostgroup_name] = zabbix_hostgroup
+
                     if zabbix_hostgroup:
                         host_hostgroups[hostgroup_name] = zabbix_hostgroup
 
