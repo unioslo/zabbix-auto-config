@@ -41,6 +41,7 @@ from zabbix_auto_config.pyzabbix.enums import GUIAccess
 from zabbix_auto_config.pyzabbix.enums import InterfaceType
 from zabbix_auto_config.pyzabbix.enums import InventoryMode
 from zabbix_auto_config.pyzabbix.enums import MaintenanceStatus
+from zabbix_auto_config.pyzabbix.enums import MonitoredBy
 from zabbix_auto_config.pyzabbix.enums import MonitoringStatus
 from zabbix_auto_config.pyzabbix.enums import TriggerPriority
 from zabbix_auto_config.pyzabbix.enums import UsergroupPermission
@@ -1389,6 +1390,8 @@ class ZabbixAPI:
             "hostid": host.hostid,
             compat.host_proxyid(self.version): proxy.proxyid,
         }
+        if self.version.release >= (7, 0, 0):
+            params["monitored_by"] = MonitoredBy.PROXY.value
         try:
             resp = self.host.update(**params)
         except ZabbixAPIException as e:
@@ -1405,8 +1408,10 @@ class ZabbixAPI:
         """Clear a host's proxy."""
         params: ParamsType = {
             "hostid": host.hostid,
-            compat.host_proxyid(self.version): None,
+            compat.host_proxyid(self.version): "0",
         }
+        if self.version.release >= (7, 0, 0):
+            params["monitored_by"] = MonitoredBy.SERVER.value
         try:
             resp = self.host.massupdate(**params)
         except ZabbixAPIException as e:
@@ -1416,35 +1421,6 @@ class ZabbixAPI:
                 f"No host ID returned when clearing proxy on host {host}"
             )
         return resp["hostids"][0]
-
-    def update_host_status(self, host: Host, status: MonitoringStatus) -> str:
-        """Update a host status given a host ID and status."""
-        try:
-            resp = self.host.update(hostid=host.hostid, status=status)
-        except ZabbixAPIException as e:
-            raise ZabbixAPICallError(
-                f"Failed to update host status for host {host.host!r} (ID {host.hostid})"
-            ) from e
-        if not resp or not resp.get("hostids"):
-            raise ZabbixNotFoundError(
-                f"No host ID returned when updating status for host {host.host!r} (ID {host.hostid})"
-            )
-        return resp["hostids"][0]
-
-    # NOTE: maybe passing in a list of hosts to this is overkill?
-    # Just pass in a list of host IDs instead?
-    def move_hosts_to_proxy(self, hosts: List[Host], proxy: Proxy) -> None:
-        """Move a list of hosts to a proxy."""
-        params: ParamsType = {
-            "hosts": [{"hostid": host.hostid} for host in hosts],
-            compat.host_proxyid(self.version): proxy.proxyid,
-        }
-        try:
-            self.host.massupdate(**params)
-        except ZabbixAPIException as e:
-            raise ZabbixAPICallError(
-                f"Failed to move hosts {[str(host) for host in hosts]} to proxy {proxy.name!r}"
-            ) from e
 
     def get_template(
         self,

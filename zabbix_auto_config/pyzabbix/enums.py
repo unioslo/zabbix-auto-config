@@ -141,3 +141,11 @@ class SNMPPrivProtocol(IntEnum):
     AES256 = 3
     AES192C = 4
     AES256C = 5
+
+
+class MonitoredBy(IntEnum):  # >= 7.0
+    """Type of entity that monitors the host."""
+
+    SERVER = 0
+    PROXY = 1
+    PROXY_GROUP = 2
