@@ -1475,7 +1475,9 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         try:
             self.api.link_templates_to_hosts(templates, [host])
         except ZabbixAPIException as e:
-            logging.error("Error when setting templates on host %s: %s", host, e)
+            logging.error(
+                "Error when setting templates %s on host %s: %s", to_add, host, e
+            )
         else:
             logging.info("Set templates %s on host: %s", to_add, host)
 
