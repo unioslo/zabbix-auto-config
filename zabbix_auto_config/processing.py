@@ -1802,6 +1802,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
             for hostgroup_name in list(host_hostgroups.keys()):
                 # TODO: Here lies a bug due to managed_hostgroup_names not being properly updated above?
+                # NOTE (pederhan): Not sure what this refers to?
                 if (
                     hostgroup_name in managed_hostgroup_names
                     and hostgroup_name not in synced_hostgroup_names
