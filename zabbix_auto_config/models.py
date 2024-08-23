@@ -84,6 +84,8 @@ class ZabbixSettings(ConfigBaseModel):
     # These groups are not managed by ZAC beyond their creation.
     extra_siteadmin_hostgroup_prefixes: Set[str] = set()
 
+    prefix_separator: str = "-"
+
     @field_validator("timeout")
     @classmethod
     def _validate_timeout(cls, v: Optional[int]) -> Optional[int]:

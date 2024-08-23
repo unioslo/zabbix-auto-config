@@ -1627,6 +1627,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             mapping = utils.mapping_values_with_prefix(
                 self.siteadmin_hostgroup_map,  # this is copied in the function
                 prefix=prefix,
+                separator=self.config.prefix_separator,
             )
             for hostgroups in mapping.values():
                 for hostgroup in hostgroups:
@@ -1658,9 +1659,16 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
         For Zabbix <6.2, host groups are created instead of template groups."""
         # Construct a set of all template group names from siteadmin mapping file
-        # by replacing the host group prefix with the template group prefix
+        # by replacing the host group prefix with the template group prefix.
+        # The prefix is determined by the separator defined in the config file.
+        # If we use the template group prefix `Templates-`, we go from
+        # `Siteadmin-bob-hosts` to `Templates-bob-hosts`.
         tgroups = set(
-            utils.with_prefix(tg, self.config.templategroup_prefix)
+            utils.with_prefix(
+                tg,
+                self.config.templategroup_prefix,
+                separator=self.config.prefix_separator,
+            )
             for tg in itertools.chain.from_iterable(
                 self.siteadmin_hostgroup_map.values()
             )

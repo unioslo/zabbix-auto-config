@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Zabbix 7 compatibility
+- Configuration option for setting group prefix separator.
+  - `[zabbix]`
+    - `prefix_separator`: Separator for group prefixes. Default is `-`.
 - Configuration options for each process.
   - `[zac.process.garbage_collector]`
     - `enabled`: Enable automatic garbage collection.

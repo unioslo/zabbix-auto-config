@@ -80,9 +80,14 @@ hostgroup_source_prefix = "Source-"
 hostgroup_importance_prefix = "Importance-"
 
 # Template group creation
+# If we have a host group named `Siteadmin-my-hosts`, ZAC creates a
+# template group named `Templates-my-hosts`
 # NOTE: will create host groups if enabled on Zabbix <6.2
 create_templategroups = true
 templategroup_prefix = "Templates-"
+
+# Separator used for group name prefixes
+prefix_separator = "-"
 
 extra_siteadmin_hostgroup_prefixes = []
 
