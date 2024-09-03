@@ -14,13 +14,15 @@ from pydantic import BaseModel
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import RootModel
 from pydantic import ValidationInfo
 from pydantic import field_serializer
 from pydantic import field_validator
 from pydantic import model_validator
 from typing_extensions import Annotated
+from typing_extensions import Self
 
-from . import utils
+from zabbix_auto_config import utils
 
 # TODO: Models aren't validated when making changes to a set/list. Why? How to handle?
 
@@ -36,7 +38,7 @@ class ConfigBaseModel(PydanticBaseModel, extra="ignore"):
         """Checks for unknown fields and logs a warning if any are found.
         Does not log warnings if extra is set to `Extra.allow`.
         """
-        if cls.model_config["extra"] == "allow":
+        if cls.model_config.get("extra") == "allow":
             return values
         for key in values:
             if key not in cls.model_fields:
@@ -82,12 +84,59 @@ class ZabbixSettings(ConfigBaseModel):
     # These groups are not managed by ZAC beyond their creation.
     extra_siteadmin_hostgroup_prefixes: Set[str] = set()
 
+    prefix_separator: str = "-"
+
     @field_validator("timeout")
     @classmethod
     def _validate_timeout(cls, v: Optional[int]) -> Optional[int]:
         if v == 0:
             return None
         return v
+
+
+class ZabbixHostSettings(ConfigBaseModel):
+    remove_from_maintenance: bool = False
+    """Remove a host from all its maintenances when disabling it"""
+
+
+class ProcessSettings(ConfigBaseModel):
+    update_interval: int = Field(default=60, ge=0)
+
+
+# TODO: Future expansion of individual process settings
+class SourceMergerSettings(ProcessSettings):
+    pass
+
+
+class HostUpdaterSettings(ProcessSettings):
+    pass
+
+
+class HostGroupUpdaterSettings(ProcessSettings):
+    pass
+
+
+class TemplateUpdaterSettings(ProcessSettings):
+    pass
+
+
+class GarbageCollectorSettings(ProcessSettings):
+    enabled: bool = False
+    """Remove disabled hosts from maintenances and triggers."""
+    delete_empty_maintenance: bool = False
+    """Delete maintenance periods if they are empty after removing disabled hosts."""
+
+
+class ProcessesSettings(ConfigBaseModel):
+    """Settings for the various ZAC processes"""
+
+    source_merger: SourceMergerSettings = SourceMergerSettings()
+    host_updater: HostUpdaterSettings = HostUpdaterSettings()
+    hostgroup_updater: HostGroupUpdaterSettings = HostGroupUpdaterSettings()
+    template_updater: TemplateUpdaterSettings = TemplateUpdaterSettings()
+    garbage_collector: GarbageCollectorSettings = GarbageCollectorSettings(
+        update_interval=86400  # every 24 hours
+    )
 
 
 class ZacSettings(ConfigBaseModel):
@@ -99,6 +148,7 @@ class ZacSettings(ConfigBaseModel):
     failsafe_file: Optional[Path] = None
     failsafe_ok_file: Optional[Path] = None
     failsafe_ok_file_strict: bool = True
+    process: ProcessesSettings = ProcessesSettings()
 
     @field_validator("health_file", "failsafe_file", "failsafe_ok_file", mode="after")
     @classmethod
@@ -171,7 +221,7 @@ class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
     )
 
     @model_validator(mode="after")
-    def _validate_error_duration_is_greater(self) -> "SourceCollectorSettings":
+    def _validate_error_duration_is_greater(self) -> Self:
         # If no tolerance, we don't need to be concerned with how long errors
         # are kept on record, because a single error will disable the collector.
         if self.error_tolerance <= 0:
@@ -202,25 +252,34 @@ class Interface(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
 
     @model_validator(mode="after")
-    def type_2_must_have_details(self) -> "Interface":
+    def type_2_must_have_details(self) -> Self:
         if self.type == 2 and not self.details:
             raise ValueError("Interface of type 2 must have details set")
         return self
 
 
 class Host(BaseModel):
+    """A host collected by ZAC.
+
+    Not to be confused with `zabbix_auto_config.pyzabbix.types.Host`,
+    which is a Zabbix host fetched from the Zabbix API.
+    This model represents a host collected from various sources
+    before it is turned into a Zabbix host."""
+
+    # Required fields
     enabled: bool
     hostname: str
-
+    # Optional fields
     importance: Optional[Annotated[int, Field(ge=0)]] = None
     interfaces: List[Interface] = []
     inventory: Dict[str, str] = {}
-    macros: Optional[None] = None  # TODO: What should macros look like?
+    macros: Optional[Any] = None
     properties: Set[str] = set()
-    proxy_pattern: Optional[str] = None  # NOTE: replace with Optional[typing.Pattern]?
+    proxy_pattern: Optional[str] = None
     siteadmins: Set[str] = set()
     sources: Set[str] = set()
     tags: Set[Tuple[str, str]] = set()
+
     model_config = ConfigDict(validate_assignment=True, revalidate_instances="always")
 
     @model_validator(mode="before")
@@ -319,3 +378,17 @@ class HostActions(BaseModel):
     def write_json(self, path: Path) -> None:
         """Writes a JSON serialized representation of self to a file."""
         utils.write_file(path, self.model_dump_json(indent=2))
+
+
+class HostsSerializer(RootModel[List[Host]]):
+    root: List[Host]
+
+
+def hosts_to_json(hosts: List[Host], indent: int = 2) -> str:
+    """Convert a list of Host objects to a JSON string."""
+    return HostsSerializer(root=hosts).model_dump_json(indent=indent)
+
+
+def print_hosts(hosts: List[Host], indent: int = 2) -> None:
+    """Print a list of Host objects to stdout as JSON."""
+    print(hosts_to_json(hosts, indent=indent))

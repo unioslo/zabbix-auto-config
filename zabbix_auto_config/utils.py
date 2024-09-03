@@ -8,13 +8,16 @@ import multiprocessing
 import queue
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import Dict
-from typing import Iterable
 from typing import List
 from typing import MutableMapping
-from typing import Set
-from typing import Tuple
 from typing import Union
+
+from zabbix_auto_config.pyzabbix.types import HostTag
+
+if TYPE_CHECKING:
+    from zabbix_auto_config._types import ZacTags
 
 
 def is_valid_regexp(pattern: str):
@@ -33,13 +36,12 @@ def is_valid_ip(ip: str):
         return False
 
 
-def zabbix_tags2zac_tags(zabbix_tags: Iterable[Dict[str, str]]) -> Set[Tuple[str, ...]]:
-    return {tuple(tag.values()) for tag in zabbix_tags}
+def zabbix_tags2zac_tags(zabbix_tags: List[HostTag]) -> ZacTags:
+    return {(tag.tag, tag.value) for tag in zabbix_tags}
 
 
-def zac_tags2zabbix_tags(zac_tags: Iterable[Tuple[str, str]]) -> List[Dict[str, str]]:
-    zabbix_tags = [{"tag": tag[0], "value": tag[1]} for tag in zac_tags]
-    return zabbix_tags
+def zac_tags2zabbix_tags(zac_tags: ZacTags) -> List[HostTag]:
+    return [HostTag(tag=tag[0], value=tag[1]) for tag in zac_tags]
 
 
 def read_map_file(path: Union[str, Path]) -> Dict[str, List[str]]:

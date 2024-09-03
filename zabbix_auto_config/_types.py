@@ -7,12 +7,27 @@ from __future__ import annotations
 
 from typing import Any
 from typing import List
+from typing import NamedTuple
 from typing import Protocol
+from typing import Sequence
+from typing import Set
+from typing import Tuple
 from typing import TypedDict
 from typing import runtime_checkable
 
-from .models import Host
-from .models import SourceCollectorSettings
+from zabbix_auto_config.models import Host
+from zabbix_auto_config.models import SourceCollectorSettings
+
+
+class ZabbixTag(TypedDict):
+    tag: str
+    value: str
+
+
+ZabbixTags = Sequence[ZabbixTag]
+
+ZacTag = Tuple[str, str]
+ZacTags = Set[ZacTag]
 
 
 @runtime_checkable
@@ -33,19 +48,36 @@ class HostModifierModule(Protocol):
         ...
 
 
-class HostModifierDict(TypedDict):
-    """The dict created by
-    `zabbix_auto_config.processing.SourceMergerProcess.get_host_modifiers`
-    for each imported host modifier module."""
+class HostModifier(NamedTuple):
+    """An imported host modifier."""
 
     name: str
     module: HostModifierModule
 
 
-class SourceCollectorDict(TypedDict):
+class SourceCollector(NamedTuple):
     """The dict created by `zabbix_auto_config.get_source_collectors` for each
     imported source collector module."""
 
     name: str
     module: SourceCollectorModule
     config: SourceCollectorSettings
+
+
+class QueueDict(TypedDict):
+    """Queue information for the health check dict."""
+
+    size: int
+
+
+class HealthDict(TypedDict):
+    """Application health dict used by `zabbix_auto_config.__init__.write_health`"""
+
+    date: str
+    date_unixtime: int
+    pid: int
+    cwd: str
+    all_ok: bool
+    processes: List[dict]
+    queues: List[QueueDict]
+    failsafe: int

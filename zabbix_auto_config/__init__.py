@@ -10,26 +10,28 @@ import os
 import os.path
 import sys
 import time
+from pathlib import Path
 from typing import List
 
 import multiprocessing_logging
 import tomli
 
+from zabbix_auto_config import models
+from zabbix_auto_config import processing
+from zabbix_auto_config.__about__ import __version__
+from zabbix_auto_config._types import HealthDict
+from zabbix_auto_config._types import HostModifier
+from zabbix_auto_config._types import HostModifierModule
+from zabbix_auto_config._types import SourceCollector
+from zabbix_auto_config._types import SourceCollectorModule
 from zabbix_auto_config.state import get_manager
 
-from . import exceptions
-from . import models
-from . import processing
-from .__about__ import __version__
-from ._types import SourceCollectorDict
-from ._types import SourceCollectorModule
 
-
-def get_source_collectors(config: models.Settings) -> List[SourceCollectorDict]:
+def get_source_collectors(config: models.Settings) -> List[SourceCollector]:
     source_collector_dir = config.zac.source_collector_dir
     sys.path.append(source_collector_dir)
 
-    source_collectors = []  # type: List[SourceCollectorDict]
+    source_collectors = []  # type: List[SourceCollector]
     for (
         source_collector_name,
         source_collector_config,
@@ -43,47 +45,79 @@ def get_source_collectors(config: models.Settings) -> List[SourceCollectorDict]:
                 source_collector_dir,
             )
             continue
-
         if not isinstance(module, SourceCollectorModule):
             logging.error(
                 "Source collector named '%s' is not a valid source collector module",
                 source_collector_config.module_name,
             )
             continue
-
-        source_collector = {
-            "name": source_collector_name,
-            "module": module,
-            "config": source_collector_config,
-        }  # type: SourceCollectorDict
-
-        source_collectors.append(source_collector)
-
+        source_collectors.append(
+            SourceCollector(
+                name=source_collector_name,
+                module=module,
+                config=source_collector_config,
+            )
+        )
     return source_collectors
 
 
-def get_config():
+def get_host_modifiers(modifier_dir: str) -> List[HostModifier]:
+    sys.path.append(modifier_dir)
+    try:
+        module_names = [
+            filename[:-3]
+            for filename in os.listdir(modifier_dir)
+            if filename.endswith(".py") and filename != "__init__.py"
+        ]
+    except FileNotFoundError:
+        logging.error("Host modififier directory %s does not exist.", modifier_dir)
+        sys.exit(1)
+    host_modifiers = []  # type: List[HostModifier]
+    for module_name in module_names:
+        module = importlib.import_module(module_name)
+        if not isinstance(module, HostModifierModule):
+            logging.warning(
+                "Module '%s' is not a valid host modifier module. Skipping.",
+                module_name,
+            )
+            continue
+        host_modifiers.append(
+            HostModifier(
+                name=module_name,
+                module=module,
+            )
+        )
+    logging.info(
+        "Loaded %d host modifiers: %s",
+        len(host_modifiers),
+        ", ".join([repr(modifier.name) for modifier in host_modifiers]),
+    )
+    return host_modifiers
+
+
+def get_config() -> models.Settings:
     cwd = os.getcwd()
     config_file = os.path.join(cwd, "config.toml")
     with open(config_file) as f:
         content = f.read()
-
-    config = tomli.loads(content)
-    config = models.Settings(**config)
-
+    config_dict = tomli.loads(content)
+    config = models.Settings(**config_dict)
     return config
 
 
 def write_health(
-    health_file, processes: List[processing.BaseProcess], queues, failsafe
-):
+    health_file: Path,
+    processes: List[processing.BaseProcess],
+    queues: List[multiprocessing.Queue],
+    failsafe: int,
+) -> None:
     now = datetime.datetime.now()
-    health = {
+    health: HealthDict = {
         "date": now.isoformat(timespec="seconds"),
         "date_unixtime": int(now.timestamp()),
         "pid": os.getpid(),
         "cwd": os.getcwd(),
-        "all_ok": True,
+        "all_ok": all(p.state.ok for p in processes),
         "processes": [],
         "queues": [],
         "failsafe": failsafe,
@@ -99,8 +133,6 @@ def write_health(
             }
         )
 
-    health["all_ok"] = all(p.state.ok for p in processes)
-
     for queue in queues:
         health["queues"].append(
             {
@@ -115,7 +147,7 @@ def write_health(
         logging.error("Unable to write health file %s: %s", health_file, e)
 
 
-def log_process_status(processes):
+def log_process_status(processes: List[processing.BaseProcess]) -> None:
     process_statuses = []
 
     for process in processes:
@@ -126,7 +158,7 @@ def log_process_status(processes):
     logging.info("Process status: %s", ", ".join(process_statuses))
 
 
-def main():
+def main() -> None:
     multiprocessing_logging.install_mp_handler()
     logging.basicConfig(
         format="%(asctime)s %(levelname)s [%(processName)s %(process)d] [%(name)s] %(message)s",
@@ -135,73 +167,89 @@ def main():
     )
     config = get_config()
     logging.getLogger().setLevel(config.zac.log_level)
-    logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
+    logging.getLogger("httpcore").setLevel(logging.ERROR)
+    logging.getLogger("httpx").setLevel(logging.ERROR)
 
     logging.info("Main start (%d) version %s", os.getpid(), __version__)
     stop_event = multiprocessing.Event()
     state_manager = get_manager()
-    processes = []  # type: List[processing.BaseProcess]
 
-    source_hosts_queues = []
+    # Import host modifier and source collector modules
+    host_modifiers = get_host_modifiers(config.zac.host_modifier_dir)
     source_collectors = get_source_collectors(config)
+
+    # Initialize source collector processes from imported modules
+    source_hosts_queues = []  # type: List[multiprocessing.Queue[models.Host]]
+    src_processes = []  # type: List[processing.BaseProcess]
     for source_collector in source_collectors:
-        source_hosts_queue = multiprocessing.Queue(maxsize=1)
-        process = processing.SourceCollectorProcess(
-            source_collector["name"],
+        # Each source collector has its own queue
+        source_hosts_queue = multiprocessing.Queue(maxsize=1)  # type: multiprocessing.Queue[models.Host]
+        source_hosts_queues.append(source_hosts_queue)
+        process: processing.BaseProcess = processing.SourceCollectorProcess(
+            source_collector.name,
             state_manager.State(),
-            source_collector["module"],
-            source_collector["config"],
+            source_collector.module,
+            source_collector.config,
             source_hosts_queue,
         )
-        source_hosts_queues.append(source_hosts_queue)
-        processes.append(process)
+        src_processes.append(process)
 
-    try:
-        process = processing.SourceHandlerProcess(
+    # Initialize the default processes
+    processes: List[processing.BaseProcess] = [
+        processing.SourceHandlerProcess(
             "source-handler",
             state_manager.State(),
             config.zac.db_uri,
             source_hosts_queues,
-        )
-        processes.append(process)
-
-        process = processing.SourceMergerProcess(
+        ),
+        processing.SourceMergerProcess(
             "source-merger",
             state_manager.State(),
             config.zac.db_uri,
-            config.zac.host_modifier_dir,
-        )
-        processes.append(process)
-
-        process = processing.ZabbixHostUpdater(
+            host_modifiers,
+        ),
+        processing.ZabbixHostUpdater(
             "zabbix-host-updater",
             state_manager.State(),
             config.zac.db_uri,
             config,
-        )
-        processes.append(process)
-
-        process = processing.ZabbixHostgroupUpdater(
+        ),
+        processing.ZabbixHostgroupUpdater(
             "zabbix-hostgroup-updater",
             state_manager.State(),
             config.zac.db_uri,
             config,
-        )
-        processes.append(process)
-
-        process = processing.ZabbixTemplateUpdater(
+        ),
+        processing.ZabbixTemplateUpdater(
             "zabbix-template-updater",
             state_manager.State(),
             config.zac.db_uri,
             config,
-        )
-        processes.append(process)
-    except exceptions.ZACException as e:
-        logging.error("Failed to initialize child processes. Exiting: %s", str(e))
-        sys.exit(1)
+        ),
+    ]
 
-    for process in processes:
-        process.start()
+    # Garbage collection process
+    if config.zac.process.garbage_collector.enabled:
+        processes.append(
+            processing.ZabbixGarbageCollector(
+                "zabbix-garbage-collector",
+                state_manager.State(),
+                config.zac.db_uri,
+                config,
+            )
+        )
+
+    # Combine the source collector processes with the other processes
+    processes.extend(src_processes)
+
+    # Abort if we can't start _all_ processes
+    for pr in processes:
+        try:
+            pr.start()
+        except Exception as e:
+            logging.error("Unable to start process %s: %s", pr.name, e)
+            stop_event.set()  # Stop other proceses immediately
+            break
 
     with processing.SignalHandler(stop_event):
         status_interval = 60
@@ -237,25 +285,26 @@ def main():
             ", ".join([str(queue.qsize()) for queue in source_hosts_queues]),
         )
 
-        for process in processes:
-            logging.info("Terminating: %s(%d)", process.name, process.pid)
-            process.terminate()
+        for pr in processes:
+            logging.info("Terminating: %s(%d)", pr.name, pr.pid)
+            pr.terminate()
 
-        alive_processes = [process for process in processes if process.is_alive()]
-        while alive_processes:
-            process = alive_processes[0]
-            logging.info("Waiting for: %s(%d)", process.name, process.pid)
-            log_process_status(processes)  # TODO: Too verbose?
-            process.join(10)
-            if process.exitcode is None:
-                logging.warning(
-                    "Process hanging. Signaling new terminate: %s(%d)",
-                    process.name,
-                    process.pid,
-                )
-                process.terminate()
+        def get_alive():
+            return [process for process in processes if process.is_alive()]
+
+        while alive := get_alive():
+            log_process_status(processes)
+            for process in alive:
+                logging.info("Waiting for: %s(%d)", process.name, process.pid)
+                process.join(10)
+                if process.exitcode is None:
+                    logging.warning(
+                        "Process hanging. Signaling new terminate: %s(%d)",
+                        process.name,
+                        process.pid,
+                    )
+                    process.terminate()
             time.sleep(1)
-            alive_processes = [process for process in processes if process.is_alive()]
 
     logging.info("Main exit")
 
