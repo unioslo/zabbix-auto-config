@@ -224,7 +224,7 @@ class Template(ZabbixAPIBaseModel):
 class TemplateGroup(ZabbixAPIBaseModel):
     groupid: str
     name: str
-    uuid: str
+    uuid: str = ""
     templates: List[Template] = []
 
 

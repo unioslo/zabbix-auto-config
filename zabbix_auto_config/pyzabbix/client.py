@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Dict
+from typing import Iterator
 from typing import List
 from typing import Literal
 from typing import MutableMapping
@@ -618,6 +619,7 @@ class ZabbixAPI:
             status=status,
             agent_status=agent_status,
         )
+        hosts = list(hosts)  # consume the iterator
         if not hosts:
             raise ZabbixNotFoundError(
                 f"Host {name_or_id!r} not found. Check your search pattern and filters."
@@ -645,8 +647,7 @@ class ZabbixAPI:
         search: Optional[
             bool
         ] = True,  # we generally always want to search when multiple hosts are requested
-        # **filter_kwargs,
-    ) -> List[Host]:
+    ) -> Iterator[Host]:
         """Fetch all hosts matching the given criteria(s).
 
         Hosts can be filtered by name or ID. Names and IDs cannot be mixed.
@@ -680,7 +681,9 @@ class ZabbixAPI:
         Returns:
             List[Host]: _description_
         """
-        params: ParamsType = {"output": "extend"}
+        params: ParamsType = {
+            "output": ["hostid", "host", "proxyid", "status", "inventory_mode"]
+        }
         filter_params: ParamsType = {}
         search_params: ParamsType = {}
 
@@ -733,9 +736,9 @@ class ZabbixAPI:
             # still returns the result under the "groups" property
             # even if we use the new 6.2 selectHostGroups param
             param = compat.param_host_get_groups(self.version)
-            params[param] = "extend"
+            params[param] = ["groupid", "name"]
         if select_templates:
-            params["selectParentTemplates"] = "extend"
+            params["selectParentTemplates"] = ["templateid", "host"]
         if select_inventory:
             params["selectInventory"] = "extend"
         if select_macros:
@@ -751,7 +754,8 @@ class ZabbixAPI:
 
         resp: List[Any] = self.host.get(**params) or []
         # TODO add result to cache
-        return [Host(**resp) for resp in resp]
+        for r in resp:
+            yield Host.model_validate(r)
 
     def create_host(
         self,
@@ -1454,7 +1458,7 @@ class ZabbixAPI:
         select_parent_templates: bool = False,
     ) -> List[Template]:
         """Fetch one or more templates given a name or ID."""
-        params: ParamsType = {"output": "extend"}
+        params: ParamsType = {"output": ["templateid", "host"]}
         search_params: ParamsType = {}
 
         # TODO: refactor this along with other methods that take names or ids (or wildcards)
@@ -1474,11 +1478,11 @@ class ZabbixAPI:
         if search_params:
             params["search"] = search_params
         if select_hosts:
-            params["selectHosts"] = "extend"
+            params["selectHosts"] = ["hostid", "host"]
         if select_templates:
-            params["selectTemplates"] = "extend"
+            params["selectTemplates"] = ["templateid", "host"]
         if select_parent_templates:
-            params["selectParentTemplates"] = "extend"
+            params["selectParentTemplates"] = ["templateid", "host"]
 
         try:
             templates = self.template.get(**params)
