@@ -280,7 +280,7 @@ def main() -> None:
 
             time.sleep(1)
 
-        logging.debug(
+        logging.info(
             "Queues: %s",
             ", ".join([str(queue.qsize()) for queue in source_hosts_queues]),
         )

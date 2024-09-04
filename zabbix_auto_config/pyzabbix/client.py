@@ -257,6 +257,12 @@ class ZabbixAPI:
         try:
             response = self.session.post(self.url, json=request_json)
         except Exception as e:
+            logging.error(
+                "Failed to send request to %s (%s) with params %s",
+                self.url,
+                method,
+                params,
+            )
             raise ZabbixAPIRequestError(
                 f"Failed to send request to {self.url} ({method}) with params {params}",
                 params=params,
