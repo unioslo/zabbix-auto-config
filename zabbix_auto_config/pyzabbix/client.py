@@ -681,7 +681,7 @@ class ZabbixAPI:
         Returns:
             List[Host]: _description_
         """
-        params: ParamsType = {"output": "extend"}
+        params: ParamsType = {"output": ["hostid", "host"]}
         filter_params: ParamsType = {}
         search_params: ParamsType = {}
 
@@ -734,9 +734,9 @@ class ZabbixAPI:
             # still returns the result under the "groups" property
             # even if we use the new 6.2 selectHostGroups param
             param = compat.param_host_get_groups(self.version)
-            params[param] = "extend"
+            params[param] = ["groupid", "name"]
         if select_templates:
-            params["selectParentTemplates"] = "extend"
+            params["selectParentTemplates"] = ["templateid", "host"]
         if select_inventory:
             params["selectInventory"] = "extend"
         if select_macros:
@@ -1456,7 +1456,7 @@ class ZabbixAPI:
         select_parent_templates: bool = False,
     ) -> List[Template]:
         """Fetch one or more templates given a name or ID."""
-        params: ParamsType = {"output": "extend"}
+        params: ParamsType = {"output": ["templateid", "host"]}
         search_params: ParamsType = {}
 
         # TODO: refactor this along with other methods that take names or ids (or wildcards)
@@ -1476,11 +1476,11 @@ class ZabbixAPI:
         if search_params:
             params["search"] = search_params
         if select_hosts:
-            params["selectHosts"] = "extend"
+            params["selectHosts"] = ["hostid", "host"]
         if select_templates:
-            params["selectTemplates"] = "extend"
+            params["selectTemplates"] = ["templateid", "host"]
         if select_parent_templates:
-            params["selectParentTemplates"] = "extend"
+            params["selectParentTemplates"] = ["templateid", "host"]
 
         try:
             templates = self.template.get(**params)
