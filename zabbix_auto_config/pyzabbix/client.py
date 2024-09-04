@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Dict
+from typing import Iterator
 from typing import List
 from typing import Literal
 from typing import MutableMapping
@@ -618,6 +619,7 @@ class ZabbixAPI:
             status=status,
             agent_status=agent_status,
         )
+        hosts = list(hosts)  # consume the iterator
         if not hosts:
             raise ZabbixNotFoundError(
                 f"Host {name_or_id!r} not found. Check your search pattern and filters."
@@ -645,8 +647,7 @@ class ZabbixAPI:
         search: Optional[
             bool
         ] = True,  # we generally always want to search when multiple hosts are requested
-        # **filter_kwargs,
-    ) -> List[Host]:
+    ) -> Iterator[Host]:
         """Fetch all hosts matching the given criteria(s).
 
         Hosts can be filtered by name or ID. Names and IDs cannot be mixed.
@@ -751,7 +752,8 @@ class ZabbixAPI:
 
         resp: List[Any] = self.host.get(**params) or []
         # TODO add result to cache
-        return [Host(**resp) for resp in resp]
+        for r in resp:
+            yield Host.model_validate(r)
 
     def create_host(
         self,

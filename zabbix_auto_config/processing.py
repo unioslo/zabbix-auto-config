@@ -789,7 +789,7 @@ class ZabbixGarbageCollector(ZabbixUpdater):
             return
         # Get all disabled hosts
         disabled_hosts = self.api.get_hosts(status=MonitoringStatus.OFF)
-        self.cleanup_maintenances(disabled_hosts)
+        self.cleanup_maintenances(list(disabled_hosts))
 
 
 class ZabbixHostUpdater(ZabbixUpdater):
@@ -917,7 +917,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             return
 
         try:
-            hosts = self.api.get_hosts(hostname, search=False)
+            hosts = list(self.api.get_hosts(hostname, search=False))
 
             if hosts:
                 host = hosts[0]
