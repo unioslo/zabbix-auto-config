@@ -75,3 +75,6 @@ extend-select = [
 force-single-line = true
 # Add annotations import to every file
 required-imports = ["from __future__ import annotations"]
+
+[tool.pyright]
+pythonVersion = "3.8"
