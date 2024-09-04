@@ -1528,7 +1528,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                 if template_names := self.property_template_map.get(prop):
                     synced_template_names.update(template_names)
             synced_template_names = synced_template_names.intersection(
-                set(zabbix_templates.keys())
+                set(zabbix_templates)  # list of dict keys
             )  # If the template isn't in zabbix we can't manage it
 
             host_templates: Dict[str, Template] = {}
