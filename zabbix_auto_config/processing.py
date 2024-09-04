@@ -1493,15 +1493,14 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         db_hosts = self.get_db_hosts()
 
         # Get hosts from Zabbix
-        _hosts = self.api.get_hosts(
+        zabbix_hosts = self.api.get_hosts(
             status=MonitoringStatus.ON,
             flags=0,
             select_groups=True,
             select_templates=True,
         )
-        zabbix_hosts = {host.host: host for host in _hosts}
 
-        for zabbix_hostname, zabbix_host in zabbix_hosts.items():
+        for zabbix_host in zabbix_hosts:
             if self.stop_event.is_set():
                 logging.debug("Told to stop. Breaking")
                 break
@@ -1514,13 +1513,11 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                 continue
 
             # Disabled hosts are not managed
-            if zabbix_hostname not in db_hosts:
+            if not (db_host := db_hosts.get(zabbix_host.host)):
                 logging.debug(
                     "Skipping host (It is not enabled in the database): %s", zabbix_host
                 )
                 continue
-
-            db_host = db_hosts[zabbix_hostname]
 
             # Determine managed templates
             synced_template_names: Set[str] = set()
@@ -1547,7 +1544,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                     logging.debug(
                         "Going to remove template '%s' from host '%s'.",
                         template_name,
-                        zabbix_hostname,
+                        zabbix_host.host,
                     )
                     host_templates_to_remove[template_name] = host_templates[
                         template_name
@@ -1558,13 +1555,13 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                     logging.debug(
                         "Going to add template '%s' to host '%s'.",
                         template_name,
-                        zabbix_hostname,
+                        zabbix_host.host,
                     )
                     host_templates[template_name] = zabbix_templates[template_name]
             if host_templates != old_host_templates:
                 logging.info(
                     "Updating templates on host '%s'. Old: %s. New: %s",
-                    zabbix_hostname,
+                    zabbix_host.host,
                     ", ".join(old_host_templates.keys()),
                     ", ".join(host_templates.keys()),
                 )
@@ -1744,16 +1741,14 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         db_hosts = self.get_db_hosts()
 
         # Get hosts from Zabbix
-        _hosts = self.api.get_hosts(
+        zabbix_hosts = self.api.get_hosts(
             status=MonitoringStatus.ON,
             flags=0,
             select_groups=True,
             select_templates=True,
         )
-        zabbix_hosts = {host.host: host for host in _hosts}
-
         # Iterate over hosts in Zabbix and update synced hosts
-        for zabbix_hostname, zabbix_host in zabbix_hosts.items():
+        for zabbix_host in zabbix_hosts:
             if self.stop_event.is_set():
                 logging.debug("Told to stop. Breaking")
                 break
@@ -1766,13 +1761,13 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 continue
 
             # Disabled hosts are not managed
-            if zabbix_hostname not in db_hosts:
+            if zabbix_host.host not in db_hosts:
                 logging.debug(
                     "Skipping host (It is not enabled in the database): %s", zabbix_host
                 )
                 continue
 
-            db_host = db_hosts[zabbix_hostname]
+            db_host = db_hosts[zabbix_host.host]
 
             # Determine host groups to sync for host
             # Sync host groups derived from its properties, siteadmins, sources, etc.
@@ -1842,7 +1837,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             if sorted(host_hostgroups) != sorted(old_host_hostgroups):
                 logging.info(
                     "Updating host groups on host '%s'. Old: %s. New: %s",
-                    zabbix_hostname,
+                    zabbix_host.host,
                     # Just re-compute here (it's cheap enough)
                     ", ".join(sorted(old_host_hostgroups)),
                     ", ".join(sorted(host_hostgroups)),
