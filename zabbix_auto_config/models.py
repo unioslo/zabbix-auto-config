@@ -143,7 +143,7 @@ class ZacSettings(ConfigBaseModel):
     source_collector_dir: str
     host_modifier_dir: str
     db_uri: str
-    log_level: int = Field(logging.DEBUG, description="The log level to use.")
+    log_level: int = Field(logging.INFO, description="The log level to use.")
     health_file: Optional[Path] = None
     failsafe_file: Optional[Path] = None
     failsafe_ok_file: Optional[Path] = None

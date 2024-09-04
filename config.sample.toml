@@ -9,7 +9,7 @@ host_modifier_dir = "path/to/host_modifier_dir/"
 db_uri = "dbname='zac' user='zabbix' host='localhost' password='secret' port=5432 connect_timeout=2"
 
 # Log level for the application.
-log_level = "DEBUG"
+log_level = "INFO"
 
 # Health status for each ZAC process.
 health_file = "/tmp/zac_health.json"
