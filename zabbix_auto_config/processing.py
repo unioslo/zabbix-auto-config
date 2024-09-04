@@ -1185,8 +1185,8 @@ class ZabbixHostUpdater(ZabbixUpdater):
             else:
                 zabbix_managed_hosts.append(host)
 
-        db_hostnames = set(db_hosts.keys())
-        zabbix_hostnames = set(zabbix_hosts.keys())
+        db_hostnames = set(db_hosts)
+        zabbix_hostnames = set(zabbix_hosts)
         zabbix_managed_hostnames = {host.host for host in zabbix_managed_hosts}
         zabbix_manual_hostnames = {host.host for host in zabbix_manual_hosts}
 
@@ -1486,7 +1486,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
             zabbix_templates[zabbix_template.host] = zabbix_template
 
         managed_template_names = managed_template_names.intersection(
-            set(zabbix_templates.keys())
+            set(zabbix_templates)
         )  # If the template isn't in zabbix we can't manage it
 
         # Get hosts from DB
@@ -1536,7 +1536,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
             host_templates_to_remove: Dict[str, Template] = {}
 
             # Update templates on host
-            for template_name in list(host_templates.keys()):
+            for template_name in list(host_templates):
                 if (
                     template_name in managed_template_names
                     and template_name not in synced_template_names
@@ -1551,7 +1551,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                     ]
                     del host_templates[template_name]
             for template_name in synced_template_names:
-                if template_name not in host_templates.keys():
+                if template_name not in host_templates:
                     logging.debug(
                         "Going to add template '%s' to host '%s'.",
                         template_name,
@@ -1798,7 +1798,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 host_hostgroups[zabbix_hostgroup.name] = zabbix_hostgroup
             old_host_hostgroups = host_hostgroups.copy()
 
-            for hostgroup_name in list(host_hostgroups.keys()):
+            for hostgroup_name in list(host_hostgroups):
                 # TODO: Here lies a bug due to managed_hostgroup_names not being properly updated above?
                 # NOTE (pederhan): Not sure what this refers to?
                 if (
