@@ -681,7 +681,9 @@ class ZabbixAPI:
         Returns:
             List[Host]: _description_
         """
-        params: ParamsType = {"output": ["hostid", "host"]}
+        params: ParamsType = {
+            "output": ["hostid", "host", "proxyid", "status", "inventory_mode"]
+        }
         filter_params: ParamsType = {}
         search_params: ParamsType = {}
 
