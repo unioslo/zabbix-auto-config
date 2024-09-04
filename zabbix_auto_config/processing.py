@@ -87,7 +87,6 @@ class BaseProcess(multiprocessing.Process):
                     break
 
                 if self.next_update > datetime.datetime.now():
-                    # logging.debug(f"Waiting for next update {self.next_update.isoformat()}")
                     time.sleep(1)
                     continue
 
@@ -330,7 +329,7 @@ class SourceHandlerProcess(BaseProcess):
             source = source_hosts["source"]
             hosts = source_hosts["hosts"]
 
-            logging.debug(
+            logging.info(
                 "Handling %d hosts from source, '%s', from queue. Current queue size: %d",
                 len(source_hosts["hosts"]),
                 source,
@@ -350,14 +349,12 @@ class SourceHandlerProcess(BaseProcess):
             if current_host == host:
                 return HostAction.NO_CHANGE
             else:
-                # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
                 cursor.execute(
                     f"UPDATE {self.db_source_table} SET data = %s WHERE data->>'hostname' = %s AND data->'sources' ? %s",
                     [host.model_dump_json(), host.hostname, source],
                 )
                 return HostAction.UPDATE
         else:
-            # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
             cursor.execute(
                 f"INSERT INTO {self.db_source_table} (data) VALUES (%s)",
                 [host.model_dump_json()],
@@ -507,17 +504,14 @@ class SourceMergerProcess(BaseProcess):
 
         if current_host:
             if current_host == host:
-                # logging.debug(f"Host <{host['hostname']}> from source <{source}> is equal to current host")
                 return HostAction.NO_CHANGE
             else:
-                # logging.debug(f"Replaced host <{host['hostname']}> from source <{source}>")
                 cursor.execute(
                     f"UPDATE {self.db_hosts_table} SET data = %s WHERE data->>'hostname' = %s",
                     [host.model_dump_json(), host.hostname],
                 )
                 return HostAction.UPDATE
         else:
-            # logging.debug(f"Inserted host <{host['hostname']}> from source <{source}>")
             cursor.execute(
                 f"INSERT INTO {self.db_hosts_table} (data) VALUES (%s)",
                 [host.model_dump_json()],
@@ -671,6 +665,7 @@ class ZabbixUpdater(BaseProcess):
 
         ver = self.api.apiinfo.version()
         self.zabbix_version = Version(ver)
+        logging.info("Connected to Zabbix API version: %s", ver)
 
     def work(self) -> None:
         start_time = time.time()
@@ -1209,18 +1204,18 @@ class ZabbixHostUpdater(ZabbixUpdater):
             db_hostnames.intersection(zabbix_manual_hostnames)
         )
 
-        logging.debug("Total in zabbix: %d", len(zabbix_hostnames))
-        logging.debug("Total in db: %d", len(db_hostnames))
-        logging.debug("Manual in zabbix: %d", len(zabbix_manual_hostnames))
-        logging.debug("Manual and in source: %d", len(hostnames_in_manual_and_source))
-        logging.debug(
+        logging.info("Total in zabbix: %d", len(zabbix_hostnames))
+        logging.info("Total in db: %d", len(db_hostnames))
+        logging.info("Manual in zabbix: %d", len(zabbix_manual_hostnames))
+        logging.info("Manual and in source: %d", len(hostnames_in_manual_and_source))
+        logging.info(
             "Manual and in source: %s", " ".join(hostnames_in_manual_and_source[:10])
         )
-        logging.debug("Only in zabbix: %d", len(hostnames_to_remove))
-        logging.debug("Only in zabbix: %s", " ".join(hostnames_to_remove[:10]))
-        logging.debug("Only in db: %d", len(hostnames_to_add))
-        logging.debug("Only in db: %s", " ".join(hostnames_to_add[:10]))
-        logging.debug("In both: %d", len(hostnames_in_both))
+        logging.info("Only in zabbix: %d", len(hostnames_to_remove))
+        logging.info("Only in zabbix: %s", " ".join(hostnames_to_remove[:10]))
+        logging.info("Only in db: %d", len(hostnames_to_add))
+        logging.info("Only in db: %s", " ".join(hostnames_to_add[:10]))
+        logging.info("In both: %d", len(hostnames_in_both))
 
         # Check if we have too many hosts to add/remove
         check_failsafe(self.settings, hostnames_to_add, hostnames_to_remove)
@@ -1315,7 +1310,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                             or zabbix_interface.port != interface.port
                             or zabbix_interface.useip != useip
                         ):
-                            logging.debug(
+                            logging.info(
                                 "DNS interface of type %s for host '%s' is configured wrong",
                                 interface.type,
                                 db_host.hostname,
@@ -1336,7 +1331,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                                 str(details_dict.get(k)) == str(v)
                                 for k, v in interface.details.items()
                             ):
-                                logging.debug(
+                                logging.info(
                                     "SNMP interface for host '%s' differs from source data. Fixing.",
                                     db_host.hostname,
                                 )
@@ -1446,7 +1441,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
 
     def clear_templates(self, templates: List[Template], host: Host) -> None:
         if self.config.dryrun:
-            logging.debug(
+            logging.info(
                 "DRYRUN: Clearing templates %s on host: %s",
                 ", ".join(t.host for t in templates),
                 host,
@@ -1469,7 +1464,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         to_add = ", ".join(f"{t.host!r}" for t in templates)
 
         if self.config.dryrun:
-            logging.debug("DRYRUN: Setting templates %s on host: %s", to_add, host)
+            logging.info("DRYRUN: Setting templates %s on host: %s", to_add, host)
             return
 
         try:
@@ -1595,7 +1590,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         """Set host groups on a host given a list of host groups."""
         to_add = ", ".join(f"{hg.name!r}" for hg in hostgroups)
         if self.config.dryrun:
-            logging.debug("DRYRUN: Setting hostgroups %s on host: %s", to_add, host)
+            logging.info("DRYRUN: Setting hostgroups %s on host: %s", to_add, host)
             return
         try:
             self.api.set_host_hostgroups(host, hostgroups)
@@ -1606,7 +1601,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
     def create_hostgroup(self, hostgroup_name: str) -> Optional[str]:
         if self.config.dryrun:
-            logging.debug("DRYRUN: Creating hostgroup: '%s'", hostgroup_name)
+            logging.info("DRYRUN: Creating hostgroup: '%s'", hostgroup_name)
             return None
 
         logging.debug("Creating hostgroup: '%s'", hostgroup_name)
@@ -1637,7 +1632,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
     def create_templategroup(self, templategroup_name: str) -> Optional[str]:
         if self.config.dryrun:
-            logging.debug("DRYRUN: Creating template group: '%s'", templategroup_name)
+            logging.info("DRYRUN: Creating template group: '%s'", templategroup_name)
             return None
 
         logging.debug("Creating template group: '%s'", templategroup_name)
