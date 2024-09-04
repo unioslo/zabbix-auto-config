@@ -164,7 +164,7 @@ class ZacSettings(ConfigBaseModel):
         return v
 
     @field_serializer("log_level")
-    def _serialize_log_level(self, v: str) -> str:
+    def _serialize_log_level(self, v: int) -> str:
         """Serializes the log level as a string.
         Ensures consistent semantics between loading/storing log level in config.
         E.g. we dump `"INFO"` instead of `20`.
@@ -176,6 +176,13 @@ class ZacSettings(ConfigBaseModel):
     def _validate_log_level(cls, v: Any) -> int:
         """Validates the log level and converts it to an integer.
         The log level can be specified as an integer or a string."""
+        # NOTE: this is basically an overcomplicated version of
+        # `logging.getLevelName(v)`, but it's necessary for 2 reasons:
+        # 1. We want to validate that the level is a valid log level.
+        #    `logging.getLevelName(v)` doesn't raise an error if `v` is invalid.
+        #    It just returns `Level <v>`, which is not helpful.
+        # 2. `logging.getLevelName(v)` with string arguments
+        #    is deprecated in Python 3.10.
         if isinstance(v, int):
             if v not in logging._levelToName:
                 raise ValueError(
@@ -184,8 +191,7 @@ class ZacSettings(ConfigBaseModel):
             return v
         elif isinstance(v, str):
             v = v.upper()
-            level_int = logging._nameToLevel.get(v, None)
-            if level_int is None:
+            if (level_int := logging._nameToLevel.get(v)) is None:
                 raise ValueError(
                     f"Invalid log level: {v} is not a valid log level name."
                 )
