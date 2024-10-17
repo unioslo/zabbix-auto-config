@@ -147,7 +147,7 @@ class ZabbixAPIResponse(BaseModel):
 
     jsonrpc: str
     id: int
-    result: Any = None  # can subclass this and specify types (ie. ZabbixAPIListResponse, ZabbixAPIStrResponse, etc.)
+    result: Any = None
     """Result of API call, if request succeeded."""
     error: Optional[ZabbixAPIError] = None
     """Error info, if request failed."""

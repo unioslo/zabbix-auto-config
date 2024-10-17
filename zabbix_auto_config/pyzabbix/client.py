@@ -34,6 +34,7 @@ from zabbix_auto_config.exceptions import ZabbixAPICallError
 from zabbix_auto_config.exceptions import ZabbixAPIException
 from zabbix_auto_config.exceptions import ZabbixAPIRequestError
 from zabbix_auto_config.exceptions import ZabbixAPIResponseParsingError
+from zabbix_auto_config.exceptions import ZabbixAPISessionExpired
 from zabbix_auto_config.exceptions import ZabbixNotFoundError
 from zabbix_auto_config.pyzabbix import compat
 from zabbix_auto_config.pyzabbix.enums import AgentAvailable
@@ -296,8 +297,13 @@ class ZabbixAPI:
             # some errors don't contain 'data': workaround for ZBX-9340
             if not resp.error.data:
                 resp.error.data = "No data"
-            raise ZabbixAPIRequestError(
-                f"Error: {resp.error.message} {resp.error.data}",
+            msg = f"Error: {resp.error.message} {resp.error.data}"
+            if "re-login" in msg:
+                cls = ZabbixAPISessionExpired
+            else:
+                cls = ZabbixAPIRequestError
+            raise cls(
+                msg,
                 api_response=resp,
                 response=response,
             )
@@ -753,7 +759,9 @@ class ZabbixAPI:
             params["sortorder"] = sort_order
 
         resp: List[Any] = self.host.get(**params) or []
-        # TODO add result to cache
+
+        # Instantiate one at the time when iterating
+        # which should avoid some memory pressure when there are many hosts
         for r in resp:
             yield Host.model_validate(r)
 

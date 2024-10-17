@@ -41,6 +41,7 @@ from zabbix_auto_config.errcount import RollingErrorCounter
 from zabbix_auto_config.exceptions import SourceCollectorError
 from zabbix_auto_config.exceptions import SourceCollectorTypeError
 from zabbix_auto_config.exceptions import ZabbixAPIException
+from zabbix_auto_config.exceptions import ZabbixAPISessionExpired
 from zabbix_auto_config.exceptions import ZabbixNotFoundError
 from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.failsafe import check_failsafe
@@ -103,6 +104,13 @@ class BaseProcess(multiprocessing.Process):
                         logging.error("Timeout exception: %s", str(e))
                     elif isinstance(e, ZACException):
                         logging.error("Work exception: %s", str(e))
+                    elif isinstance(e, ZabbixAPISessionExpired):
+                        logging.error("API Session expired: %s", str(e))
+                        if isinstance(self, ZabbixUpdater):
+                            logging.info(
+                                "Reconnecting to Zabbix API and retrying update"
+                            )
+                            self.login()
                     elif isinstance(e, ZabbixAPIException):
                         logging.error("API exception: %s", str(e))
                     else:
@@ -631,6 +639,16 @@ class ZabbixUpdater(BaseProcess):
 
         self.update_interval = 60  # default. Overriden in subclasses
 
+        self.property_template_map = utils.read_map_file(
+            os.path.join(self.config.map_dir, "property_template_map.txt")
+        )
+        self.property_hostgroup_map = utils.read_map_file(
+            os.path.join(self.config.map_dir, "property_hostgroup_map.txt")
+        )
+        self.siteadmin_hostgroup_map = utils.read_map_file(
+            os.path.join(self.config.map_dir, "siteadmin_hostgroup_map.txt")
+        )
+
         pyzabbix_logger = logging.getLogger("pyzabbix")
         pyzabbix_logger.setLevel(logging.ERROR)
 
@@ -639,6 +657,13 @@ class ZabbixUpdater(BaseProcess):
             timeout=self.config.timeout,  # timeout for connect AND read
             read_only=self.config.dryrun,  # prevent accidental changes
         )
+
+        self.login()
+        ver = self.api.apiinfo.version()
+        self.zabbix_version = Version(ver)
+        logging.info("Connected to Zabbix API version: %s", ver)
+
+    def login(self) -> None:
         try:
             self.api.login(self.config.username, self.config.password)
         except httpx.ConnectError as e:
@@ -652,20 +677,6 @@ class ZabbixUpdater(BaseProcess):
         except (ZabbixAPIException, httpx.HTTPError) as e:
             logging.error("Unable to login to Zabbix API: %s", str(e))
             raise ZACException(*e.args)
-
-        self.property_template_map = utils.read_map_file(
-            os.path.join(self.config.map_dir, "property_template_map.txt")
-        )
-        self.property_hostgroup_map = utils.read_map_file(
-            os.path.join(self.config.map_dir, "property_hostgroup_map.txt")
-        )
-        self.siteadmin_hostgroup_map = utils.read_map_file(
-            os.path.join(self.config.map_dir, "siteadmin_hostgroup_map.txt")
-        )
-
-        ver = self.api.apiinfo.version()
-        self.zabbix_version = Version(ver)
-        logging.info("Connected to Zabbix API version: %s", ver)
 
     def work(self) -> None:
         start_time = time.time()

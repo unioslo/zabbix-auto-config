@@ -52,6 +52,10 @@ class ZabbixAPIRequestError(ZabbixAPIException):
         return reason
 
 
+class ZabbixAPISessionExpired(ZabbixAPIRequestError):
+    """Zabbix API session expired."""
+
+
 class ZabbixAPIResponseParsingError(ZabbixAPIRequestError):
     """Zabbix API request error."""
 
