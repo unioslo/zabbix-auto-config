@@ -107,7 +107,7 @@ class BaseProcess(multiprocessing.Process):
                     elif isinstance(e, ZabbixAPISessionExpired):
                         logging.error("API Session expired: %s", str(e))
                         if isinstance(self, ZabbixUpdater):
-                            logging.error(
+                            logging.info(
                                 "Reconnecting to Zabbix API and retrying update"
                             )
                             self.login()
