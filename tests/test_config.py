@@ -4,6 +4,10 @@ import logging
 
 import pytest
 import tomli
+from hypothesis import given
+from hypothesis import settings
+from hypothesis import strategies as st
+from inline_snapshot import snapshot
 from pydantic import ValidationError
 
 import zabbix_auto_config.models as models
@@ -69,13 +73,10 @@ def test_sourcecollectorsettings_no_tolerance() -> None:
         error_duration=0,
     )
     assert settings.error_tolerance == 0
-    # In case the actual implementaiton changes in the future, we don't
-    # want to test the _exact_ value, but we know it will not be 0
-    assert settings.error_duration > 0
+    assert settings.error_duration == snapshot(9999)
 
 
 def test_sourcecollectorsettings_no_error_duration():
-    # TODO: check if we can just remove this test
     # In order to not have an error_duration, error_tolerance must be 0 too
     settings = models.SourceCollectorSettings(
         module_name="foo",
@@ -83,18 +84,33 @@ def test_sourcecollectorsettings_no_error_duration():
         error_duration=0,
         error_tolerance=0,
     )
-    # See docstring in test_sourcecollectorsettings_no_tolerance
-    assert settings.error_duration > 0
+    assert settings.error_duration == snapshot(9999)
 
-    # With tolerance raises an error
-    # NOTE: we test the error message in depth in test_sourcecollectorsettings_invalid_error_duration
-    with pytest.raises(ValidationError):
-        models.SourceCollectorSettings(
-            module_name="foo",
-            update_interval=60,
-            error_duration=0,
-            error_tolerance=5,
-        )
+    # With tolerance we get a default value
+    settings = models.SourceCollectorSettings(
+        module_name="foo",
+        update_interval=60,
+        error_duration=0,
+        error_tolerance=5,
+    )
+
+    assert settings.error_duration == snapshot(354)
+
+
+@given(
+    update_interval=st.integers(min_value=0, max_value=100),
+    error_tolerance=st.integers(min_value=0, max_value=100),
+)
+@settings(max_examples=1000)
+def test_sourcecollectorsettings_no_error_duration_fuzz(
+    update_interval: int, error_tolerance: int
+):
+    """Test model with a variety of update intervals and error tolerances"""
+    models.SourceCollectorSettings(
+        module_name="foo",
+        update_interval=update_interval,
+        error_tolerance=error_tolerance,
+    )
 
 
 def test_sourcecollectorsettings_duration_too_short():
@@ -112,6 +128,9 @@ def test_sourcecollectorsettings_duration_too_short():
     error = errors[0]
     assert "greater than 300" in error["msg"]
     assert error["type"] == "value_error"
+    assert error["msg"] == snapshot(
+        "Value error, Invalid value for error_duration (180). It should be greater than 300: error_tolerance (5) * update_interval (60)"
+    )
 
 
 def test_sourcecollectorsettings_duration_negative():
