@@ -234,13 +234,15 @@ class SourceCollectorProcess(BaseProcess):
             self.disabled_until = datetime.datetime.now() + datetime.timedelta(
                 seconds=disable_duration
             )
+            # Reset the error counter so that previous errors don't count towards
+            # the error counter in the next run in case the disable duration is short
+            self.error_counter.reset()
         else:
-            logging.info("Disabling source '%s' indefinitely", self.name)
-            self.disabled_until = datetime.datetime.max
+            logging.info(
+                "Source '%s' has a disable duration of 0. Keeping it enabled...",
+                self.name,
+            )
 
-        # Reset the error counter so that previous errors don't count towards
-        # the error counter in the next run in case the disable duration is short
-        self.error_counter.reset()
         # TODO: raise specific exception here instead of ZACException
 
     def collect(self) -> None:

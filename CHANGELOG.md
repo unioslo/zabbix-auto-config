@@ -13,8 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Source collectors are now disabled on error by default instead of terminating the process.
-  - The old behavior can be restored by setting `source_collectors.<name>.exit_on_error = true` on the relevant source collectors.
+- A Source Collector `disable_duration` of 0 will now skip disabling the the source collector on error instead of disabling it indefinitely.
 
 ## [0.2.0](https://github.com/unioslo/zabbix-auto-config/releases/tag/zac-v0.2.0)
 
