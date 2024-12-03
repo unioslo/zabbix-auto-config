@@ -218,7 +218,7 @@ class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
         ge=0,
     )
     exit_on_error: bool = Field(
-        True,
+        False,
         description="Exit ZAC if the collector failure tolerance is exceeded. Collector is disabled otherwise.",
     )
     disable_duration: int = Field(
