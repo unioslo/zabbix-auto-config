@@ -36,7 +36,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=7.4.3", "pytest-timeout>=2.2.0", "hypothesis>=6.62.1"]
+test = ["pytest>=7.4.3", "pytest-timeout>=2.2.0", "hypothesis>=6.62.1", "inline-snapshot>=0.14.0"]
 
 [project.urls]
 Source = "https://github.com/unioslo/zabbix-auto-config"

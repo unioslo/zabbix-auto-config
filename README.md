@@ -263,6 +263,8 @@ For instance, with an `error_tolerance` of 5 and an `update_interval` of 60, `er
 
 A useful guide is to set `error_duration` as `(error_tolerance + 1) * update_interval`, providing an additional buffer equivalent to one update interval.
 
+If `error_tolerance` is set, but `error_duration` is not, the application will set an `error_duration` that is slightly longer than the minimum required to ensure correct error detection.
+
 #### exit_on_error
 
 `exit_on_error` (default: true) determines if the application should terminate, or disable the failing collector when number of errors exceed the tolerance. If set to `true`, the application will exit. Otherwise, the collector will be disabled for `disable_duration` seconds. For backwards compatibility with previous versions of Zabbix-auto-config, this option defaults to `true`. In a future major version, the default will be changed to `false`.

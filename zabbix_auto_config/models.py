@@ -213,6 +213,7 @@ class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
         description=(
             "The duration in seconds that errors are stored."
             "If `error_tolerance` errors occur in this period, the collector is marked as failing."
+            "If `error_tolerance`is set, but this is not, it is set to `round(error_tolerance * update_interval + (update_interval*0.9))`."
         ),
         ge=0,
     )
@@ -234,12 +235,25 @@ class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
             # hack to ensure RollingErrorCounter.count() doesn't discard the error
             # before it is counted
             self.error_duration = 9999
-        elif (
+            return self
+
+        # Set default error duration if not set
+        if self.error_tolerance > 0 and not self.error_duration:
+            # Set the error duration to tolerance * update_interval + 90% of update_interval
+            # so that it's possible to hit the error tolerance within the duration if all
+            # errors happen in succession.
+            self.error_duration = round(
+                self.error_tolerance * self.update_interval
+                + (self.update_interval * 0.9)
+            )
+
+        # Ensure the error duration is greater than the product of the error tolerance and update interval
+        if (
             product := self.error_tolerance * self.update_interval
         ) > self.error_duration:
             raise ValueError(
-                f"Invalid value for error_duration ({self.error_duration}). It should be greater than error_tolerance ({self.error_tolerance}) "
-                f"times update_interval ({self.update_interval}), i.e., greater than {product}. Please adjust accordingly."
+                f"Invalid value for error_duration ({self.error_duration}). "
+                f"It should be greater than {product}: error_tolerance ({self.error_tolerance}) * update_interval ({self.update_interval})"
             )
         return self
 
