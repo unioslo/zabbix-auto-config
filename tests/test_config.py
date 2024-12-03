@@ -4,6 +4,9 @@ import logging
 
 import pytest
 import tomli
+from hypothesis import given
+from hypothesis import settings
+from hypothesis import strategies as st
 from inline_snapshot import snapshot
 from pydantic import ValidationError
 
@@ -92,6 +95,22 @@ def test_sourcecollectorsettings_no_error_duration():
     )
 
     assert settings.error_duration == snapshot(354)
+
+
+@given(
+    update_interval=st.integers(min_value=0, max_value=100),
+    error_tolerance=st.integers(min_value=0, max_value=100),
+)
+@settings(max_examples=1000)
+def test_sourcecollectorsettings_no_error_duration_fuzz(
+    update_interval: int, error_tolerance: int
+):
+    """Test model with a variety of update intervals and error tolerances"""
+    models.SourceCollectorSettings(
+        module_name="foo",
+        update_interval=update_interval,
+        error_tolerance=error_tolerance,
+    )
 
 
 def test_sourcecollectorsettings_duration_too_short():
