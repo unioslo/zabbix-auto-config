@@ -205,20 +205,53 @@ class SourceCollectorProcess(BaseProcess):
         try:
             self.collect()
         except Exception as e:
-            logging.error("Collect exception: %s", str(e))
-            self.error_counter.add(exception=e)
-            if self.error_counter.tolerance_exceeded():
-                if self.config.exit_on_error:
-                    logging.critical(
-                        "Error tolerance exceeded. Terminating application."
-                    )
-                    self.stop_event.set()
-                    # TODO: raise exception with message above or just an empty exception?
-                else:
-                    self.disable()
-            raise ZACException(
-                f"Failed to collect from source {self.name!r}: {e}"
-            ) from e
+            self.handle_error(e)
+        else:
+            self.handle_success()
+
+    def add_backoff(self) -> None:
+        """Increase the update interval by the backoff factor."""
+        self.update_interval *= self.config.backoff_factor
+        logging.info(
+            "%s: Backing off. Increased update interval to %.2f",
+            self.name,
+            self.update_interval,
+        )
+
+    def reset_backoff(self) -> None:
+        """Reset the update interval to the original value."""
+        if self.update_interval == self.config.update_interval:
+            return  # Nothing to do
+        self.update_interval = self.config.update_interval
+        logging.info(
+            "%s: Reset update interval to %.2f",
+            self.name,
+            self.update_interval,
+        )
+
+    def handle_success(self) -> None:
+        """Handle a successful collection."""
+        self.reset_backoff()
+
+    def handle_error(self, e: Exception) -> None:
+        """Handle exceptions raised during collection."""
+        logging.error("Collect exception: %s", str(e))
+        self.error_counter.add(exception=e)
+
+        if self.error_counter.tolerance_exceeded():
+            strat = self.config.failure_strategy
+            if strat == models.FailureStrategy.DISABLE:
+                self.disable()
+            elif strat == models.FailureStrategy.BACKOFF:
+                self.add_backoff()
+            elif strat == models.FailureStrategy.EXIT:
+                self.stop_event.set()
+            else:
+                logging.info(
+                    "Source '%s' has no failure handling strategy. Keeping it enabled...",
+                    self.name,
+                )
+        raise ZACException(f"Failed to collect from source {self.name!r}: {e}") from e
 
     def disable(self) -> None:
         if self.disabled:
@@ -227,23 +260,16 @@ class SourceCollectorProcess(BaseProcess):
 
         self.disabled = True
         disable_duration = self.config.disable_duration
-        if disable_duration > 0:
-            logging.info(
-                "Disabling source '%s' for %s seconds", self.name, disable_duration
-            )
-            self.disabled_until = datetime.datetime.now() + datetime.timedelta(
-                seconds=disable_duration
-            )
-            # Reset the error counter so that previous errors don't count towards
-            # the error counter in the next run in case the disable duration is short
-            self.error_counter.reset()
-        else:
-            logging.info(
-                "Source '%s' has a disable duration of 0. Keeping it enabled...",
-                self.name,
-            )
 
-        # TODO: raise specific exception here instead of ZACException
+        logging.info(
+            "Disabling source '%s' for %s seconds", self.name, disable_duration
+        )
+        self.disabled_until = datetime.datetime.now() + datetime.timedelta(
+            seconds=disable_duration
+        )
+        # Reset the error counter so that previous errors don't count towards
+        # the error counter in the next run in case the disable duration is short
+        self.error_counter.reset()
 
     def collect(self) -> None:
         start_time = time.time()

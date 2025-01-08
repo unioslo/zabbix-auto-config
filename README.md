@@ -46,7 +46,7 @@ For automatic linking in templates you could create the templates:
 
 ## Database
 
-The application requires a PostgreSQL database to store the state of the collected hosts. The database can be created with the following command:
+The application requires a PostgreSQL database to store the state of the collected hosts. The database can be created with the following command from your local machine:
 
 ```bash
 PGPASSWORD=secret psql -h localhost -U postgres -p 5432 -U zabbix << EOF
@@ -61,7 +61,9 @@ CREATE TABLE hosts_source (
 EOF
 ```
 
-Replace login credentials with your own when running against a different database. This is a one-time procedure per environment.
+If running from inside a dev container, replace the host (`-h`) with the container name of the database container (default: `db`).
+
+This is a one-time procedure per environment.
 
 ## Application
 
@@ -249,7 +251,11 @@ The following configurations options are available:
 
 ### Optional configuration (error handling)
 
-If `error_tolerance` number of errors occur within `error_duration` seconds, the collector is disabled. Source collectors do not tolerate errors by default and must opt-in to this behavior by setting `error_tolerance` and `error_duration` to non-zero values. If `exit_on_error` is set to `true`, the application will exit. Otherwise, the collector will be disabled for `disable_duration` seconds.
+If `error_tolerance` number of errors occur within `error_duration` seconds, the collector is disabled for a given duration. This is an opt-in feature per source collector.
+
+By default, source collectors are never disabled, and instead increase their update intervals using an exponential backoff strategy on each successive error. See the `disable_duration` option for more information.
+
+
 
 #### error_tolerance
 
@@ -271,7 +277,29 @@ If `error_tolerance` is set, but `error_duration` is not, the application will s
 
 #### disable_duration
 
-`disable_duration` (default: 3600) is the duration in seconds to disable collector for. If set to 0, the collector is disabled indefinitely, requiring a restart of the application to re-enable it.
+`disable_duration` (default: 3600) is the duration in seconds to disable collector for. The following disable modes are supported:
+
+- `disable_duration` > 0: Hard disable for `disable_duration` seconds after `error_tolerance` failures
+- `disable_duration` = 0: Increase collection interval using exponential backoff after each failure instead of disabling source.
+- `disable_duration` < 0: No disable mechanism (always try at fixed interval)
+
+They are described in more detail below:
+
+##### Hard disable
+
+When `disable_duration` is greater than 0, the collector is disabled for `disable_duration` seconds after `error_tolerance` failures within `error_duration` seconds. The collector will not be called during this period. After the `disable_duration` has passed, the collector will be re-enabled and the error count will be reset.
+
+##### Exponential backoff
+
+When `disable_duration` is set to 0, the collector will not be disabled, but the update interval will be increased by a factor of `backoff_factor` after each failure. The update interval will be reset to the original value after a successful collection. This mode is useful for sources that are expected to be temporarily unavailable at times.
+
+##### No disable
+
+When `disable_duration` is less than 0, the collector will not be disabled, and the update interval will not be increased. This mode is useful when using sources that are frequently unavailable, but are not critical to the operation of the application.
+
+#### backoff_factor
+
+`backoff_factor` (default: 1.5) is the factor by which the update interval is increased after each failure when `disable_duration` is set to 0. The update interval is reset to the original value after a successful collection.
 
 ### Keyword arguments
 

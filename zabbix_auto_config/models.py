@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from enum import Enum
 from pathlib import Path
 from typing import Any
 from typing import Dict
@@ -200,6 +201,15 @@ class ZacSettings(ConfigBaseModel):
             raise TypeError("Log level must be an integer or string.")
 
 
+class FailureStrategy(str, Enum):
+    """Strategies for handling collector failures."""
+
+    EXIT = "exit"
+    DISABLE = "disable"
+    BACKOFF = "backoff"
+    NONE = "none"
+
+
 class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
     module_name: str
     update_interval: int
@@ -218,24 +228,40 @@ class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
         ge=0,
     )
     exit_on_error: bool = Field(
-        True,
+        False,
         description="Exit ZAC if the collector failure tolerance is exceeded. Collector is disabled otherwise.",
     )
     disable_duration: int = Field(
-        3600,
-        description="Duration to disable the collector for if the error tolerance is exceeded. 0 to disable indefinitely.",
-        ge=0,
+        0,
+        description="Duration to disable the collector for if the error tolerance is exceeded.",
+    )
+    backoff_factor: float = Field(
+        1.5,
+        description="Factor to multiply the update interval by when the collector is disabled.",
+        ge=1.0,
     )
 
-    @model_validator(mode="after")
-    def _validate_error_duration_is_greater(self) -> Self:
+    @property
+    def failure_strategy(self) -> FailureStrategy:
+        # Supercedes disable_duration-based strategies
+        if self.exit_on_error:
+            return FailureStrategy.EXIT
+        if self.disable_duration > 0:
+            return FailureStrategy.DISABLE
+        if self.disable_duration == 0:
+            return FailureStrategy.BACKOFF
+        # Never disable if < 0
+        return FailureStrategy.NONE
+
+    def _validate_error_duration_is_greater(self) -> None:
+        """Validate that error_duration is greater than the product of error_tolerance and update_interval."""
         # If no tolerance, we don't need to be concerned with how long errors
         # are kept on record, because a single error will disable the collector.
         if self.error_tolerance <= 0:
             # hack to ensure RollingErrorCounter.count() doesn't discard the error
             # before it is counted
             self.error_duration = 9999
-            return self
+            return
 
         # Set default error duration if not set
         if self.error_tolerance > 0 and not self.error_duration:
@@ -255,6 +281,35 @@ class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
                 f"Invalid value for error_duration ({self.error_duration}). "
                 f"It should be greater than {product}: error_tolerance ({self.error_tolerance}) * update_interval ({self.update_interval})"
             )
+        return
+
+    def _validate_settings(self) -> None:
+        # Update interval of 0 with backoff strategy is invalid
+        if (
+            self.update_interval == 0
+            and self.failure_strategy == FailureStrategy.BACKOFF
+        ):
+            logging.debug(
+                "Update interval for collector '%s' is 0, but exponential backoff strategy is set due to `disable_duration = 0`. "
+                "Setting `disable_duration = -1` to set failure strategy to none",
+                self.module_name,
+            )
+            self.disable_duration = -1
+            assert self.failure_strategy == FailureStrategy.NONE
+
+        # Ensure any errors cause backoff to be triggered
+        if self.failure_strategy == FailureStrategy.BACKOFF:
+            self.error_tolerance = 0
+            logging.debug(
+                "Setting error_tolerance to 0 for collector '%s' due to backoff strategy",
+            )
+
+    @model_validator(mode="after")
+    def _do_validate(self) -> Self:
+        # Guarantee validator order by having a single validator that calls
+        # other validators in the desired order.
+        self._validate_error_duration_is_greater()
+        self._validate_settings()
         return self
 
 

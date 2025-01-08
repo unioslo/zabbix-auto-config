@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Default value for source collector config `source_collectors.<name>.error_duration` is now computed from `round(error_tolerance * update_interval + (update_interval*0.9))`
+- New failure handling strategies for source collectors, which can be set using `disable_duration` for each source collector.
+  - `disable_duration == 0` (default): Use exponential backoff to increase the update interval on error. The update interval is reset to the original value on success.
+  - `disable_duration > 0`: Disable the source collector for a set duration.
+  - `disable_duration < 0`: Do not disable the source collector on error.
+  - `exit_on_error` takes precedence over `disable_duration`. If `exit_on_error` is set to `true`, the source collector will exit on error regardless of the `disable_duration` setting.
 
 ### Changed
 
