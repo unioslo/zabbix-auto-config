@@ -214,12 +214,12 @@ class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
     module_name: str
     update_interval: int
     error_tolerance: int = Field(
-        0,
+        default=0,
         description="Number of errors to allow within the last `error_duration` seconds before marking the collector as failing.",
         ge=0,
     )
     error_duration: int = Field(
-        0,
+        default=0,
         description=(
             "The duration in seconds that errors are stored."
             "If `error_tolerance` errors occur in this period, the collector is marked as failing."
@@ -228,15 +228,15 @@ class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
         ge=0,
     )
     exit_on_error: bool = Field(
-        False,
+        default=False,
         description="Exit ZAC if the collector failure tolerance is exceeded. Collector is disabled otherwise.",
     )
     disable_duration: int = Field(
-        0,
+        default=0,
         description="Duration to disable the collector for if the error tolerance is exceeded.",
     )
     backoff_factor: float = Field(
-        1.5,
+        default=1.5,
         description="Factor to multiply the update interval by when the collector is disabled.",
         ge=1.0,
     )
