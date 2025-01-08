@@ -18,7 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- A Source Collector `disable_duration` of 0 will now skip disabling the the source collector on error instead of disabling it indefinitely.
+- The default value of `exit_on_error` for source collectors is now `false`.
+- The default value of `disable_duration` for source collectors is now `0`. This means that the source collector will use exponential backoff to increase the update interval on error.
 
 ## [0.2.0](https://github.com/unioslo/zabbix-auto-config/releases/tag/zac-v0.2.0)
 
