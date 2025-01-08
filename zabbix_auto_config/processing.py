@@ -209,7 +209,7 @@ class SourceCollectorProcess(BaseProcess):
         else:
             self.handle_success()
 
-    def add_backoff(self) -> None:
+    def increase_update_interval(self) -> None:
         """Increase the update interval by the backoff factor."""
         self.update_interval *= self.config.backoff_factor
         logging.info(
@@ -218,8 +218,8 @@ class SourceCollectorProcess(BaseProcess):
             self.update_interval,
         )
 
-    def reset_backoff(self) -> None:
-        """Reset the update interval to the original value."""
+    def reset_update_interval(self) -> None:
+        """Reset the update interval to its original value."""
         if self.update_interval == self.config.update_interval:
             return  # Nothing to do
         self.update_interval = self.config.update_interval
@@ -231,7 +231,7 @@ class SourceCollectorProcess(BaseProcess):
 
     def handle_success(self) -> None:
         """Handle a successful collection."""
-        self.reset_backoff()
+        self.reset_update_interval()
 
     def handle_error(self, e: Exception) -> None:
         """Handle exceptions raised during collection."""
@@ -243,7 +243,7 @@ class SourceCollectorProcess(BaseProcess):
             if strat == models.FailureStrategy.DISABLE:
                 self.disable()
             elif strat == models.FailureStrategy.BACKOFF:
-                self.add_backoff()
+                self.increase_update_interval()
             elif strat == models.FailureStrategy.EXIT:
                 self.stop_event.set()
             else:
