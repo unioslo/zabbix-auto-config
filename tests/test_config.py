@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-
 import pytest
 import tomli
 from hypothesis import given
@@ -22,10 +20,9 @@ def test_config_extra_field(sample_config: str, caplog: pytest.LogCaptureFixture
     config["foo"] = "bar"
     models.Settings(**config)
     assert len(caplog.records) == 1
-    record = caplog.records[0]
-    assert record.levelname == "WARNING"
-    assert record.levelno == logging.WARNING
-    assert "'foo'" in record.message
+    assert caplog.record_tuples == snapshot(
+        [("root", 30, "Settings: Got unknown config field 'foo'.")]
+    )
 
 
 def test_config_extra_field_allowed(
@@ -50,12 +47,17 @@ def test_sourcecollectorsettings_defaults():
         module_name="foo",
         update_interval=60,
     )
-    assert settings.module_name == "foo"
-    assert settings.update_interval == 60
-    assert settings.error_duration > 0
-    assert settings.error_tolerance == 0
-    assert settings.exit_on_error is True
-    assert settings.disable_duration == 3600
+    assert settings.model_dump() == snapshot(
+        {
+            "module_name": "foo",
+            "update_interval": 60,
+            "error_tolerance": 0,
+            "error_duration": 9999,
+            "exit_on_error": False,
+            "disable_duration": 0,
+            "backoff_factor": 1.5,
+        }
+    )
 
 
 def test_sourcecollectorsettings_no_tolerance() -> None:
@@ -72,7 +74,7 @@ def test_sourcecollectorsettings_no_tolerance() -> None:
         error_tolerance=0,
         error_duration=0,
     )
-    assert settings.error_tolerance == 0
+    assert settings.error_tolerance == snapshot(0)
     assert settings.error_duration == snapshot(9999)
 
 
@@ -106,6 +108,7 @@ def test_sourcecollectorsettings_no_error_duration_fuzz(
     update_interval: int, error_tolerance: int
 ):
     """Test model with a variety of update intervals and error tolerances"""
+    # We only check that instantiating the model does not raise an exception
     models.SourceCollectorSettings(
         module_name="foo",
         update_interval=update_interval,
@@ -123,13 +126,20 @@ def test_sourcecollectorsettings_duration_too_short():
             error_tolerance=5,
             error_duration=180,
         )
-    errors = exc_info.value.errors()
-    assert len(errors) == 1
-    error = errors[0]
-    assert "greater than 300" in error["msg"]
-    assert error["type"] == "value_error"
-    assert error["msg"] == snapshot(
-        "Value error, Invalid value for error_duration (180). It should be greater than 300: error_tolerance (5) * update_interval (60)"
+    errors = exc_info.value.errors(include_url=False, include_context=False)
+    assert len(errors) == snapshot(1)
+    assert errors[0] == snapshot(
+        {
+            "type": "value_error",
+            "loc": (),
+            "msg": "Value error, Invalid value for error_duration (180). It should be greater than 300: error_tolerance (5) * update_interval (60)",
+            "input": {
+                "module_name": "foo",
+                "update_interval": 60,
+                "error_tolerance": 5,
+                "error_duration": 180,
+            },
+        }
     )
 
 
@@ -142,8 +152,13 @@ def test_sourcecollectorsettings_duration_negative():
             error_tolerance=5,
             error_duration=-1,
         )
-    errors = exc_info.value.errors()
+    errors = exc_info.value.errors(include_url=False, include_context=False)
     assert len(errors) == 1
-    error = errors[0]
-    assert error["loc"] == ("error_duration",)
-    assert error["type"] == "greater_than_equal"
+    assert errors[0] == snapshot(
+        {
+            "type": "greater_than_equal",
+            "loc": ("error_duration",),
+            "msg": "Input should be greater than or equal to 0",
+            "input": -1,
+        }
+    )
