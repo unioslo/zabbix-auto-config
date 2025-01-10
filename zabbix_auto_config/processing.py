@@ -84,7 +84,7 @@ class BaseProcess(multiprocessing.Process):
                 parent_process = multiprocessing.parent_process()
                 if parent_process is None or not parent_process.is_alive():
                     logging.error("Parent is dead. Stopping")
-                    self.stop_event.set()
+                    self.stop()
                     break
 
                 if self.next_update > datetime.datetime.now():
@@ -128,6 +128,11 @@ class BaseProcess(multiprocessing.Process):
                     )
 
         logging.info("Process exiting")
+
+    def stop(self) -> None:
+        """Stop the process by setting its stop event."""
+        logging.info("Stopping process")
+        self.stop_event.set()
 
     def work(self) -> None:
         pass
@@ -211,7 +216,16 @@ class SourceCollectorProcess(BaseProcess):
 
     def increase_update_interval(self) -> None:
         """Increase the update interval by the backoff factor."""
-        self.update_interval *= self.config.backoff_factor
+
+        new_interval = self.update_interval * self.config.backoff_factor
+        if new_interval > self.config.max_backoff:
+            new_interval = self.config.max_backoff
+            logging.info(
+                "%s: Reached max update interval of %.2f",
+                self.name,
+                self.config.max_backoff,
+            )
+        self.update_interval = new_interval
         logging.info(
             "%s: Backing off. Increased update interval to %.2f",
             self.name,
@@ -238,19 +252,23 @@ class SourceCollectorProcess(BaseProcess):
         logging.error("Collect exception: %s", str(e))
         self.error_counter.add(exception=e)
 
-        if self.error_counter.tolerance_exceeded():
-            strat = self.config.failure_strategy
-            if strat == models.FailureStrategy.DISABLE:
-                self.disable()
-            elif strat == models.FailureStrategy.BACKOFF:
-                self.increase_update_interval()
-            elif strat == models.FailureStrategy.EXIT:
-                self.stop_event.set()
-            else:
-                logging.info(
-                    "Source '%s' has no failure handling strategy. Keeping it enabled...",
-                    self.name,
-                )
+        strat = self.config.failure_strategy
+
+        # Handle immediate strategies (no tolerance check needed)
+        if strat == models.FailureStrategy.BACKOFF:
+            self.increase_update_interval()
+        # Handle tolerance-based strategies
+        elif strat.supports_error_tolerance():
+            if self.error_counter.tolerance_exceeded():
+                if strat == models.FailureStrategy.EXIT:
+                    self.stop()
+                elif strat == models.FailureStrategy.DISABLE:
+                    self.disable()
+        else:
+            logging.info(
+                "Source '%s' has no failure handling strategy. Keeping it enabled...",
+                self.name,
+            )
         raise ZACException(f"Failed to collect from source {self.name!r}: {e}") from e
 
     def disable(self) -> None:

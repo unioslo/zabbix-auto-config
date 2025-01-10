@@ -47,6 +47,11 @@ def test_sourcecollectorsettings_defaults():
         module_name="foo",
         update_interval=60,
     )
+
+    # Default strategy should be to use exponential backoff
+    assert settings.failure_strategy == models.FailureStrategy.BACKOFF
+
+    # Snapshot of values
     assert settings.model_dump() == snapshot(
         {
             "module_name": "foo",
@@ -56,6 +61,7 @@ def test_sourcecollectorsettings_defaults():
             "exit_on_error": False,
             "disable_duration": 0,
             "backoff_factor": 1.5,
+            "max_backoff": 3600,
         }
     )
 
