@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from enum import Enum
 from pathlib import Path
 from typing import Any
 from typing import Dict
@@ -200,16 +201,29 @@ class ZacSettings(ConfigBaseModel):
             raise TypeError("Log level must be an integer or string.")
 
 
+class FailureStrategy(str, Enum):
+    """Strategies for handling collector failures."""
+
+    EXIT = "exit"
+    DISABLE = "disable"
+    BACKOFF = "backoff"
+    NONE = "none"
+
+    def supports_error_tolerance(self) -> bool:
+        """Whether the strategy supports error tolerance."""
+        return self in {FailureStrategy.EXIT, FailureStrategy.DISABLE}
+
+
 class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
     module_name: str
-    update_interval: int
+    update_interval: int = Field(..., ge=0)
     error_tolerance: int = Field(
-        0,
+        default=0,
         description="Number of errors to allow within the last `error_duration` seconds before marking the collector as failing.",
         ge=0,
     )
     error_duration: int = Field(
-        0,
+        default=0,
         description=(
             "The duration in seconds that errors are stored."
             "If `error_tolerance` errors occur in this period, the collector is marked as failing."
@@ -218,24 +232,45 @@ class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
         ge=0,
     )
     exit_on_error: bool = Field(
-        True,
+        default=False,
         description="Exit ZAC if the collector failure tolerance is exceeded. Collector is disabled otherwise.",
     )
     disable_duration: int = Field(
-        3600,
-        description="Duration to disable the collector for if the error tolerance is exceeded. 0 to disable indefinitely.",
+        default=0,
+        description="Duration to disable the collector for if the error tolerance is exceeded.",
+    )
+    backoff_factor: float = Field(
+        default=1.5,
+        description="Factor to multiply the update interval by when the collector is disabled.",
+        ge=1.0,
+    )
+    max_backoff: float = Field(
+        default=3600,
+        description="Maximum backoff duration in seconds.",
         ge=0,
     )
 
-    @model_validator(mode="after")
-    def _validate_error_duration_is_greater(self) -> Self:
+    @property
+    def failure_strategy(self) -> FailureStrategy:
+        # Supercedes disable_duration-based strategies
+        if self.exit_on_error:
+            return FailureStrategy.EXIT
+        if self.disable_duration > 0:
+            return FailureStrategy.DISABLE
+        if self.disable_duration == 0:
+            return FailureStrategy.BACKOFF
+        # Never disable if < 0
+        return FailureStrategy.NONE
+
+    def _validate_error_duration_is_greater(self) -> None:
+        """Ensure error tolerance and treshold is set correctly."""
         # If no tolerance, we don't need to be concerned with how long errors
         # are kept on record, because a single error will disable the collector.
         if self.error_tolerance <= 0:
             # hack to ensure RollingErrorCounter.count() doesn't discard the error
             # before it is counted
             self.error_duration = 9999
-            return self
+            return
 
         # Set default error duration if not set
         if self.error_tolerance > 0 and not self.error_duration:
@@ -255,6 +290,43 @@ class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
                 f"Invalid value for error_duration ({self.error_duration}). "
                 f"It should be greater than {product}: error_tolerance ({self.error_tolerance}) * update_interval ({self.update_interval})"
             )
+        return
+
+    def _validate_backoff_settings(self) -> None:
+        """Ensure backoff settings are valid."""
+        if not self.failure_strategy == FailureStrategy.BACKOFF:
+            return
+
+        # Update interval of 0 cannot be used with backoff strategy
+        if self.update_interval == 0:
+            logging.debug(
+                "Update interval for collector '%s' is 0, but exponential backoff strategy is set due to `disable_duration = 0`. "
+                "Setting `disable_duration = -1` so no failure strategy is applied.",
+                self.module_name,
+            )
+            self.disable_duration = -1
+            assert self.failure_strategy == FailureStrategy.NONE
+
+        # Ensure any errors cause backoff to be triggered
+        if self.error_tolerance != 0:
+            self.error_tolerance = 0
+            logging.debug(
+                "Setting error_tolerance to 0 for collector '%s' due to backoff strategy",
+            )
+
+        if self.max_backoff < self.update_interval:
+            raise ValueError(
+                f"Invalid value for max_backoff ({self.max_backoff}). "
+                f"It should be greater than or equal to update_interval ({self.update_interval})"
+            )
+
+    @model_validator(mode="after")
+    def _do_validate(self) -> Self:
+        # Guarantee validator order by having a single validator that calls
+        # other validators in the desired order.
+        # TODO: refactor methods. Too much logic and mutation in each validator.
+        self._validate_error_duration_is_greater()
+        self._validate_backoff_settings()
         return self
 
 

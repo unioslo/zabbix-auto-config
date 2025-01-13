@@ -5,7 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-<!-- ## [Unreleased] -->
+## Unreleased
+
+### Added
+
+- Default value for source collector config `source_collectors.<name>.error_duration` is now computed from `round(error_tolerance * update_interval + (update_interval*0.9))`
+- New failure handling strategies for source collectors, which can be set using `disable_duration` for each source collector.
+  - `disable_duration == 0` (default): Use exponential backoff to increase the update interval on error. The update interval is reset to the original value on success.
+  - `disable_duration > 0`: Disable the source collector for a set duration.
+  - `disable_duration < 0`: Never disable, never increase the update interval.
+  - `exit_on_error` takes precedence over `disable_duration`. If `exit_on_error` is set to `true`, the source collector will exit on error regardless of the `disable_duration` setting.
+
+### Changed
+
+- The default value of `exit_on_error` for source collectors is now `false`.
+- The default value of `disable_duration` for source collectors is now `0`. This means that the source collector will use exponential backoff to increase the update interval on error.
 
 ## [0.2.0](https://github.com/unioslo/zabbix-auto-config/releases/tag/zac-v0.2.0)
 

@@ -98,29 +98,67 @@ module_name = "mysource"
 # How often to run the source collector in seconds
 update_interval = 60
 
-# How many errors to tolerate before disabling the source
-error_tolerance = 5 # Tolerate 5 errors within `error_duration` seconds
-
-# How long an error should be kept in the error tally before discarding it
-error_duration = 360 # should be greater than update_interval
-
-# Exit the application if the source fails
-# If true, the application will exit if the source fails
-# If false, the source will be disabled for `disable_duration` seconds
-exit_on_error = false # Disable source if it fails
-
-# How long to wait before reactivating a disabled source
-disable_duration = 3600 # Time in seconds to wait before reactivating a disabled source
-
 # Any other options are passed as keyword arguments to the source collector's
 # `collect()` function
 kwarg_passed_to_source = "value" # extra fields are passed to the source module as kwargs
 another_kwarg = "value2"         # We can pass an arbitrary number of kwargs to the source module
 
 
-[source_collectors.othersource]
-module_name = "mysource"
+# We can define multiple sources using the same module as long
+# as their config entries have different names
+[source_collectors.othersource] # different name
+module_name = "mysource" # same module as above
 update_interval = 60
-error_tolerance = 0      # no tolerance for errors (default)
-exit_on_error = true     # exit application if source fails (default)
-source = "other"         # extra kwarg used in mysource module
+
+# By default, the application applies an exponential backoff to sources
+# that fail to collect data due to network issues or other problems.
+# The backoff factor is multiplied by the update interval to determine
+# how long to wait before retrying the source.
+# The default backoff factor is 1.5. Backoff is disabled if the factor is 1.
+backoff_factor = 2 # Increase the backoff factor for this source
+
+# We can limit how long the backoff time can grow to prevent a source
+# from waiting too long between retries.
+max_backoff = 3600 # Maximum backoff time in seconds
+
+
+[source_collectors.error_tolerance_source]
+module_name = "mysource" # re-using same module
+update_interval = 60
+
+# Error tolerance settings
+#
+# We can define a custom error tolerance for each source collector.
+# By setting an error tolerance, exponential backoff is disabled for the source
+# and the source will keep retrying at the same interval until it succeeds
+# or hits the error tolerance.
+
+# By setting `error_tolerance` and `error_duration` we can control how many
+# errors within a certain timespan are tolerated before the source is disabled
+# for a certain duration.
+
+# How many errors to tolerate before disabling the source
+error_tolerance = 5 # Tolerate 5 errors within `error_duration` seconds
+
+# How long an error should be kept in the error tally before discarding it
+# In this case, we consider 5 errors or more within 10 minutes as a failure
+error_duration = 600 # should be greater than update_interval
+
+# Duration to disable source if error threshold is reached
+# If this is set to 0, error tolerance is disabled, and the source will
+# go back to using exponential backoff as its retry strategy.
+disable_duration = 3600 # time in seconds (1 hour)
+
+# Exit the application if the source fails
+# If true, the application will exit if the source fails
+# If false, the source will be disabled for `disable_duration` seconds
+exit_on_error = false # Disable source if it fails
+
+[source_collectors.no_error_handling_source]
+module_name = "mysource" # re-using same module
+update_interval = 60
+
+# If disable_duration is set to a negative value, the source uses neither
+# exponential backoff nor error tolerance. It will keep retrying at the
+# same pace no matter how many errors it encounters.
+disable_duration = -1

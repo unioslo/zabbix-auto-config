@@ -210,3 +210,12 @@ def test_zabbix_settings_timeout(timeout: int, expect: Optional[int]) -> None:
         timeout=timeout,
     )
     assert settings.timeout == expect
+
+
+def test_failure_strategy_supports_error_tolerance() -> None:
+    """Test that only EXIT and DISABLE support error tolerance."""
+    for strategy in models.FailureStrategy:
+        if strategy in (models.FailureStrategy.EXIT, models.FailureStrategy.DISABLE):
+            assert strategy.supports_error_tolerance()
+        else:
+            assert not strategy.supports_error_tolerance()

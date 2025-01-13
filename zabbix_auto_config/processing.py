@@ -84,7 +84,7 @@ class BaseProcess(multiprocessing.Process):
                 parent_process = multiprocessing.parent_process()
                 if parent_process is None or not parent_process.is_alive():
                     logging.error("Parent is dead. Stopping")
-                    self.stop_event.set()
+                    self.stop()
                     break
 
                 if self.next_update > datetime.datetime.now():
@@ -128,6 +128,11 @@ class BaseProcess(multiprocessing.Process):
                     )
 
         logging.info("Process exiting")
+
+    def stop(self) -> None:
+        """Stop the process by setting its stop event."""
+        logging.info("Stopping process")
+        self.stop_event.set()
 
     def work(self) -> None:
         pass
@@ -205,20 +210,66 @@ class SourceCollectorProcess(BaseProcess):
         try:
             self.collect()
         except Exception as e:
-            logging.error("Collect exception: %s", str(e))
-            self.error_counter.add(exception=e)
+            self.handle_error(e)
+        else:
+            self.handle_success()
+
+    def increase_update_interval(self) -> None:
+        """Increase the update interval by the backoff factor."""
+
+        new_interval = self.update_interval * self.config.backoff_factor
+        if new_interval > self.config.max_backoff:
+            new_interval = self.config.max_backoff
+            logging.info(
+                "%s: Reached max update interval of %.2f",
+                self.name,
+                self.config.max_backoff,
+            )
+        self.update_interval = new_interval
+        logging.info(
+            "%s: Backing off. Increased update interval to %.2f",
+            self.name,
+            self.update_interval,
+        )
+
+    def reset_update_interval(self) -> None:
+        """Reset the update interval to its original value."""
+        if self.update_interval == self.config.update_interval:
+            return  # Nothing to do
+        self.update_interval = self.config.update_interval
+        logging.info(
+            "%s: Reset update interval to %.2f",
+            self.name,
+            self.update_interval,
+        )
+
+    def handle_success(self) -> None:
+        """Handle a successful collection."""
+        self.reset_update_interval()
+
+    def handle_error(self, e: Exception) -> None:
+        """Handle exceptions raised during collection."""
+        logging.error("Collect exception: %s", str(e))
+        self.error_counter.add(exception=e)
+
+        strat = self.config.failure_strategy
+
+        # Handle immediate strategies (no tolerance check needed)
+        if strat == models.FailureStrategy.BACKOFF:
+            self.increase_update_interval()
+        # Handle tolerance-based strategies
+        elif strat.supports_error_tolerance():
             if self.error_counter.tolerance_exceeded():
-                if self.config.exit_on_error:
-                    logging.critical(
-                        "Error tolerance exceeded. Terminating application."
-                    )
-                    self.stop_event.set()
-                    # TODO: raise exception with message above or just an empty exception?
-                else:
+                if strat == models.FailureStrategy.EXIT:
+                    self.stop()
+                elif strat == models.FailureStrategy.DISABLE:
                     self.disable()
-            raise ZACException(
-                f"Failed to collect from source {self.name!r}: {e}"
-            ) from e
+        else:
+            logging.info(
+                "Source '%s' has no failure handling strategy. Keeping it enabled...",
+                self.name,
+            )
+        raise ZACException(f"Failed to collect from source {self.name!r}: {e}") from e
 
     def disable(self) -> None:
         if self.disabled:
@@ -227,21 +278,16 @@ class SourceCollectorProcess(BaseProcess):
 
         self.disabled = True
         disable_duration = self.config.disable_duration
-        if disable_duration > 0:
-            logging.info(
-                "Disabling source '%s' for %s seconds", self.name, disable_duration
-            )
-            self.disabled_until = datetime.datetime.now() + datetime.timedelta(
-                seconds=disable_duration
-            )
-        else:
-            logging.info("Disabling source '%s' indefinitely", self.name)
-            self.disabled_until = datetime.datetime.max
 
+        logging.info(
+            "Disabling source '%s' for %s seconds", self.name, disable_duration
+        )
+        self.disabled_until = datetime.datetime.now() + datetime.timedelta(
+            seconds=disable_duration
+        )
         # Reset the error counter so that previous errors don't count towards
         # the error counter in the next run in case the disable duration is short
         self.error_counter.reset()
-        # TODO: raise specific exception here instead of ZACException
 
     def collect(self) -> None:
         start_time = time.time()
