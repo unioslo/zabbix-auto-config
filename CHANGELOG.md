@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New failure handling strategies for source collectors, which can be set using `disable_duration` for each source collector.
   - `disable_duration == 0` (default): Use exponential backoff to increase the update interval on error. The update interval is reset to the original value on success.
   - `disable_duration > 0`: Disable the source collector for a set duration.
-  - `disable_duration < 0`: Do not disable the source collector on error.
+  - `disable_duration < 0`: Never disable, never increase the update interval.
   - `exit_on_error` takes precedence over `disable_duration`. If `exit_on_error` is set to `true`, the source collector will exit on error regardless of the `disable_duration` setting.
 
 ### Changed
