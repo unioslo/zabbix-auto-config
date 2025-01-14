@@ -8,14 +8,13 @@ import pytest
 from httpx import ConnectTimeout
 from httpx import ReadTimeout
 
+from tests.conftest import MockZabbixAPI
+from tests.conftest import PicklableMock
 from zabbix_auto_config import exceptions
 from zabbix_auto_config.models import Settings
 from zabbix_auto_config.models import ZabbixSettings
 from zabbix_auto_config.processing import ZabbixUpdater
 from zabbix_auto_config.state import get_manager
-
-from ..conftest import MockZabbixAPI
-from ..conftest import PicklableMock
 
 
 def raises_connect_timeout(*args, **kwargs):
