@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import copy
-import datetime
 import ipaddress
 import logging
 import multiprocessing
 import queue
 import re
+from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Dict
 from typing import List
 from typing import MutableMapping
+from typing import Optional
 from typing import Union
 
 from zabbix_auto_config.pyzabbix.types import HostTag
@@ -170,9 +171,28 @@ def drain_queue(q: multiprocessing.Queue) -> None:
             break
 
 
-def timedelta_to_str(td: datetime.timedelta) -> str:
-    """Converts a timedelta to a string of the form HH:MM:SS."""
-    return str(td).partition(".")[0]
+def format_timedelta(td: Optional[timedelta] = None) -> str:
+    """Format a timedelta object showing only hours, minutes, and seconds.
+
+    Args:
+        td: The timedelta object to format
+
+    Returns:
+        A string representation in the format "HH:MM:SS"
+    """
+    if td is None:
+        return "00:00:00"
+
+    # Convert to total seconds and handle sign
+    total_seconds = int(td.total_seconds())
+    sign = "-" if total_seconds < 0 else ""
+    total_seconds = abs(total_seconds)
+
+    # Convert to hours, minutes, seconds
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    return f"{sign}{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
 def write_file(path: Union[str, Path], content: str, end: str = "\n") -> None:
