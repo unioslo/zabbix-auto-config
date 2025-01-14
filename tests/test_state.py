@@ -4,6 +4,7 @@ import datetime
 import time
 
 import pytest
+from inline_snapshot import snapshot
 
 from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.processing import BaseProcess
@@ -144,13 +145,19 @@ def test_state_asdict_ok(use_manager: bool) -> None:
     else:
         state = State()
     state.set_ok()
-    assert state.asdict() == {
-        "ok": True,
-        "error": None,
-        "error_type": None,
-        "error_count": 0,
-        "error_time": None,
-    }
+    assert state.asdict() == snapshot(
+        {
+            "ok": True,
+            "error": None,
+            "error_type": None,
+            "error_time": None,
+            "error_count": 0,
+            "execution_count": 0,
+            "total_duration": datetime.timedelta(0),
+            "max_duration": datetime.timedelta(0),
+            "last_duration_warning": None,
+        }
+    )
 
 
 class CustomException(Exception):
@@ -174,9 +181,40 @@ def test_state_asdict_error(use_manager: bool) -> None:
     assert post >= d["error_time"] >= pre
     d.pop("error_time")
 
-    assert d == {
-        "ok": False,
-        "error": "Test error",
-        "error_type": "CustomException",
-        "error_count": 1,
-    }
+    assert d == snapshot(
+        {
+            "ok": False,
+            "error": "Test error",
+            "error_type": "CustomException",
+            "error_count": 1,
+            "execution_count": 0,
+            "total_duration": datetime.timedelta(0),
+            "max_duration": datetime.timedelta(0),
+            "last_duration_warning": None,
+        }
+    )
+
+
+def test_state_record_execution() -> None:
+    state = State()
+
+    # Add 1 second execution
+    state.record_execution(datetime.timedelta(seconds=1))
+    assert state.execution_count == 1
+    assert state.total_duration == datetime.timedelta(seconds=1)
+    assert state.max_duration == datetime.timedelta(seconds=1)
+    assert state.avg_duration == datetime.timedelta(seconds=1 / 1)
+
+    # Add 2 second execution
+    state.record_execution(datetime.timedelta(seconds=2))
+    assert state.execution_count == 2
+    assert state.total_duration == datetime.timedelta(seconds=3)
+    assert state.max_duration == datetime.timedelta(seconds=2)
+    assert state.avg_duration == datetime.timedelta(seconds=3 / 2)
+
+    # Add 1 second execution
+    state.record_execution(datetime.timedelta(seconds=1))
+    assert state.execution_count == 3
+    assert state.total_duration == datetime.timedelta(seconds=4)
+    assert state.max_duration == datetime.timedelta(seconds=2)
+    assert state.avg_duration == datetime.timedelta(seconds=4 / 3)

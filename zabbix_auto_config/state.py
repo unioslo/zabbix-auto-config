@@ -3,6 +3,9 @@ from __future__ import annotations
 import time
 import types
 from dataclasses import asdict
+from dataclasses import field
+from datetime import datetime
+from datetime import timedelta
 from multiprocessing.managers import BaseManager
 from multiprocessing.managers import NamespaceProxy  # type: ignore # why unexported?
 from typing import Any
@@ -14,24 +17,35 @@ from pydantic.dataclasses import dataclass
 
 @dataclass
 class State:
-    """Health state of a process."""
+    """Health state and performance metrics of a process.
 
+    This class tracks both error states and execution statistics for a process,
+    providing a comprehensive view of the process's health and performance.
+
+    Attributes:
+        ok: Status of the process. False if an error occurred in the most recent run.
+        error: Error message from most recent error, if any.
+        error_type: Error type name from most recent error, if any.
+        error_time: Timestamp of the most recent error, if any.
+        error_count: Total number of errors encountered since process start.
+        execution_count: Total number of executions since process start.
+        total_duration: Cumulative execution time of all runs.
+        max_duration: Longest execution time observed.
+        last_duration_warning: When the last warning about long execution was logged.
+    """
+
+    # Error tracking
     ok: bool = True
-    """Status of the process. False if an error has occurred in the most recent run."""
-
-    # BELOW: Only applicable if ok is False
-
     error: Optional[str] = None
-    """Error message for most recent error."""
-
     error_type: Optional[str] = None
-    """Error type name for most recent error"""
-
     error_time: Optional[float] = None
-    """Timestamp of the most recent error."""
-
     error_count: int = 0
-    """Number of errors the process has encountered since starting."""
+
+    # Execution metrics
+    execution_count: int = 0
+    total_duration: timedelta = field(default_factory=timedelta)
+    max_duration: timedelta = field(default_factory=timedelta)
+    last_duration_warning: Optional[datetime] = None
 
     def asdict(self) -> Dict[str, Any]:
         """Return dict representation of the State object."""
@@ -41,9 +55,7 @@ class State:
     def set_ok(self) -> None:
         """Set current state to OK, clear error information.
 
-        NOTE
-        ----
-        Does not reset the error count.
+        NOTE: Does not reset the error count or execution metrics.
         """
         self.ok = True
         self.error = None
@@ -51,12 +63,37 @@ class State:
         self.error_time = None
 
     def set_error(self, exc: Exception) -> None:
-        """Set current state to error and record error information."""
+        """Set current state to error and record error information.
+
+        Args:
+            exc (Exception): The exception that caused the error state.
+        """
         self.ok = False
         self.error = str(exc)
         self.error_type = type(exc).__name__
         self.error_time = time.time()
         self.error_count += 1
+
+    def record_execution(self, duration: timedelta) -> None:
+        """Record metrics for a process execution.
+
+        Args:
+            duration (timedelta): The duration of the execution that just completed.
+        """
+        self.execution_count += 1
+        self.total_duration += duration
+        self.max_duration = max(self.max_duration, duration)
+
+    @property
+    def avg_duration(self) -> Optional[timedelta]:
+        """Calculate average execution duration.
+
+        Returns:
+            Optional[timedelta]: Average duration of all executions, or None if no executions recorded.
+        """
+        if self.execution_count == 0:
+            return None
+        return self.total_duration / self.execution_count
 
 
 class Manager(BaseManager):

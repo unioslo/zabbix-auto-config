@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from ipaddress import IPv4Address
 from ipaddress import IPv6Address
 from pathlib import Path
@@ -235,3 +236,36 @@ def test_mapping_values_with_prefix_no_prefix_separator(
     )
     assert res == {"user1@example.com": ["Foouser1-primary", "Foouser1-secondary"]}
     assert caplog.text.count("WARNING") == 2
+
+
+@pytest.mark.parametrize(
+    "inp,expected",
+    [
+        # Normal cases
+        (timedelta(hours=1, minutes=30, seconds=45), "01:30:45"),
+        (timedelta(hours=0, minutes=5, seconds=30), "00:05:30"),
+        (timedelta(hours=24, minutes=0, seconds=0), "24:00:00"),
+        # Zero and near-zero cases
+        (timedelta(seconds=0), "00:00:00"),
+        (timedelta(microseconds=999999), "00:00:00"),  # Should truncate to zero
+        # Negative durations
+        (timedelta(hours=-1, minutes=-30, seconds=-45), "-01:30:45"),
+        (timedelta(hours=-2), "-02:00:00"),
+        # Large durations (multiple days)
+        (timedelta(days=1, hours=2, minutes=3, seconds=4), "26:03:04"),
+        (timedelta(days=2), "48:00:00"),
+        # Fractional components
+        (timedelta(hours=1, minutes=30, seconds=45, microseconds=500000), "01:30:45"),
+        # None case
+        (None, "00:00:00"),
+        # Edge cases around zero
+        (timedelta(microseconds=1), "00:00:00"),
+        (timedelta(microseconds=-1), "00:00:00"),
+        # Mixed positive/negative components
+        (timedelta(hours=1, minutes=-30), "00:30:00"),  # Python normalizes this
+        # Large negative durations
+        (timedelta(days=-2, hours=-3), "-51:00:00"),
+    ],
+)
+def test_format_timedelta(inp: timedelta, expected: str):
+    assert utils.format_timedelta(inp) == expected

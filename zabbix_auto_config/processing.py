@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime
 import itertools
 import logging
 import multiprocessing
@@ -15,6 +14,8 @@ import sys
 import time
 from collections import Counter
 from collections import defaultdict
+from datetime import datetime
+from datetime import timedelta
 from enum import Enum
 from typing import TYPE_CHECKING
 from typing import Any
@@ -71,7 +72,7 @@ class BaseProcess(multiprocessing.Process):
         self.state = state
 
         self.update_interval = 1
-        self.next_update = datetime.datetime.now()
+        self.next_update = datetime.now()
 
         self.state.set_ok()
         self.stop_event = multiprocessing.Event()
@@ -87,17 +88,17 @@ class BaseProcess(multiprocessing.Process):
                     self.stop()
                     break
 
-                if self.next_update > datetime.datetime.now():
+                if self.next_update > datetime.now():
                     time.sleep(1)
                     continue
 
-                self.next_update = datetime.datetime.now() + datetime.timedelta(
+                start_time = datetime.now()
+                self.next_update = datetime.now() + timedelta(
                     seconds=self.update_interval
                 )
 
                 try:
                     self.work()
-                    self.state.set_ok()
                 except Exception as e:
                     # These are the error types we handle ourselves then continue
                     if isinstance(e, httpx.TimeoutException):
@@ -116,16 +117,35 @@ class BaseProcess(multiprocessing.Process):
                     else:
                         raise e  # all other exceptions are fatal
                     self.state.set_error(e)
+                else:
+                    self.state.set_ok()
 
+                work_duration = datetime.now() - start_time
+                self.state.record_execution(work_duration)
+
+                # Only warn about long-running tasks if:
+                # 1. Interval is non-zero (not continuous processing)
+                # 2. Work took longer than the interval
+                # 3. Haven't warned in last hour
                 if (
-                    self.update_interval > 1
-                    and self.next_update < datetime.datetime.now()
-                ):
-                    # Only log warning when update_interval is actually changed from default
-                    logging.warning(
-                        "Next update is in the past. Interval too short? Lagging behind? Next update was: %s",
-                        self.next_update.isoformat(timespec="seconds"),
+                    self.update_interval > 0
+                    and work_duration.total_seconds() > self.update_interval
+                    and (
+                        not self.state.last_duration_warning
+                        or datetime.now() - self.state.last_duration_warning
+                        > timedelta(hours=1)
                     )
+                ):
+                    logging.warning(
+                        "Work duration (%s) exceeded update interval (%s). "
+                        "Stats - Avg duration: %s, Max duration: %s, Updates: %d",
+                        utils.format_timedelta(work_duration),
+                        utils.format_timedelta(timedelta(seconds=self.update_interval)),
+                        utils.format_timedelta(self.state.avg_duration),
+                        utils.format_timedelta(self.state.max_duration),
+                        self.state.execution_count,
+                    )
+                    self.state.last_duration_warning = datetime.now()
 
         logging.info("Process exiting")
 
@@ -185,7 +205,7 @@ class SourceCollectorProcess(BaseProcess):
 
         # Repeated errors will disable the source
         self.disabled = False
-        self.disabled_until = datetime.datetime.now()
+        self.disabled_until = datetime.now()
         self.error_counter = RollingErrorCounter(
             duration=self.config.error_duration,
             tolerance=self.config.error_tolerance,
@@ -196,10 +216,10 @@ class SourceCollectorProcess(BaseProcess):
         # If not, we raise a ZACException, so that the state of the process
         # is marked as not ok.
         if self.disabled:
-            if self.disabled_until > datetime.datetime.now():
-                time_left = self.disabled_until - datetime.datetime.now()
+            if self.disabled_until > datetime.now():
+                time_left = self.disabled_until - datetime.now()
                 raise ZACException(
-                    f"Source is disabled for {utils.timedelta_to_str(time_left)}"
+                    f"Source is disabled for {utils.format_timedelta(time_left)}"
                 )
             else:
                 logging.info("Reactivating source")
@@ -282,9 +302,7 @@ class SourceCollectorProcess(BaseProcess):
         logging.info(
             "Disabling source '%s' for %s seconds", self.name, disable_duration
         )
-        self.disabled_until = datetime.datetime.now() + datetime.timedelta(
-            seconds=disable_duration
-        )
+        self.disabled_until = datetime.now() + timedelta(seconds=disable_duration)
         # Reset the error counter so that previous errors don't count towards
         # the error counter in the next run in case the disable duration is short
         self.error_counter.reset()
