@@ -3,14 +3,12 @@ from __future__ import annotations
 import datetime
 import importlib
 import importlib.metadata
-import json
 import logging
 import multiprocessing
 import os
 import os.path
 import sys
 import time
-from pathlib import Path
 from typing import List
 
 import multiprocessing_logging
@@ -19,11 +17,11 @@ import tomli
 from zabbix_auto_config import models
 from zabbix_auto_config import processing
 from zabbix_auto_config.__about__ import __version__
-from zabbix_auto_config._types import HealthDict
 from zabbix_auto_config._types import HostModifier
 from zabbix_auto_config._types import HostModifierModule
 from zabbix_auto_config._types import SourceCollector
 from zabbix_auto_config._types import SourceCollectorModule
+from zabbix_auto_config.health import write_health
 from zabbix_auto_config.state import get_manager
 
 
@@ -103,48 +101,6 @@ def get_config() -> models.Settings:
     config_dict = tomli.loads(content)
     config = models.Settings(**config_dict)
     return config
-
-
-def write_health(
-    health_file: Path,
-    processes: List[processing.BaseProcess],
-    queues: List[multiprocessing.Queue],
-    failsafe: int,
-) -> None:
-    now = datetime.datetime.now()
-    health: HealthDict = {
-        "date": now.isoformat(timespec="seconds"),
-        "date_unixtime": int(now.timestamp()),
-        "pid": os.getpid(),
-        "cwd": os.getcwd(),
-        "all_ok": all(p.state.ok for p in processes),
-        "processes": [],
-        "queues": [],
-        "failsafe": failsafe,
-    }
-
-    for process in processes:
-        health["processes"].append(
-            {
-                "name": process.name,
-                "pid": process.pid,
-                "alive": process.is_alive(),
-                **process.state.asdict(),
-            }
-        )
-
-    for queue in queues:
-        health["queues"].append(
-            {
-                "size": queue.qsize(),
-            }
-        )
-
-    try:
-        with open(health_file, "w") as f:
-            f.write(json.dumps(health))
-    except Exception as e:
-        logging.error("Unable to write health file %s: %s", health_file, e)
 
 
 def log_process_status(processes: List[processing.BaseProcess]) -> None:
