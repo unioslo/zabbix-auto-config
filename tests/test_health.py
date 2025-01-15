@@ -9,9 +9,7 @@ from zabbix_auto_config.health import ProcessInfo
 from zabbix_auto_config.state import State
 
 
-def test_healthfile_to_json(health_file: HealthFile) -> None:
-    # NOTE: timedeltas are serialized as `PT#S` where # is the number of seconds
-
+def test_healthfile_to_json() -> None:
     health_file = HealthFile(
         date=datetime.datetime(2021, 1, 1, 0, 0, 0),
         cwd="/path/to/zac",
@@ -36,6 +34,8 @@ def test_healthfile_to_json(health_file: HealthFile) -> None:
             )
         ],
     )
+
+    # NOTE: timedeltas are serialized as `PT#S` where # is the number of seconds
     assert health_file.to_json() == snapshot(
         """\
 {
