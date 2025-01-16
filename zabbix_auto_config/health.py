@@ -5,6 +5,7 @@ import multiprocessing
 import os
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from typing import List
 from typing import Optional
 
@@ -12,9 +13,11 @@ from pydantic import BaseModel
 from pydantic import Field
 from pydantic import computed_field
 from pydantic import field_serializer
+from pydantic import field_validator
 
 from zabbix_auto_config import processing
 from zabbix_auto_config.state import State
+from zabbix_auto_config.state import StateProxy
 
 
 class ProcessInfo(BaseModel):
@@ -22,6 +25,13 @@ class ProcessInfo(BaseModel):
     pid: Optional[int]
     alive: bool
     state: State
+
+    @field_validator("state", mode="before")
+    @classmethod
+    def validate_state(cls, value: State) -> Any:
+        if isinstance(value, StateProxy):
+            return value._getvalue()
+        return value
 
 
 class QueueInfo(BaseModel):
