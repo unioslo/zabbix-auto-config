@@ -153,8 +153,8 @@ def test_state_asdict_ok(use_manager: bool) -> None:
             "error_time": None,
             "error_count": 0,
             "execution_count": 0,
-            "total_duration": datetime.timedelta(0),
-            "max_duration": datetime.timedelta(0),
+            "total_duration": 0.0,
+            "max_duration": 0.0,
             "last_duration_warning": None,
         }
     )
@@ -188,8 +188,8 @@ def test_state_asdict_error(use_manager: bool) -> None:
             "error_type": "CustomException",
             "error_count": 1,
             "execution_count": 0,
-            "total_duration": datetime.timedelta(0),
-            "max_duration": datetime.timedelta(0),
+            "total_duration": 0.0,
+            "max_duration": 0.0,
             "last_duration_warning": None,
         }
     )

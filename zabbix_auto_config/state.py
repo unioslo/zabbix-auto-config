@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import time
 import types
-from dataclasses import asdict
-from dataclasses import field
 from datetime import datetime
 from datetime import timedelta
 from multiprocessing.managers import BaseManager
@@ -12,11 +10,12 @@ from typing import Any
 from typing import Dict
 from typing import Optional
 
-from pydantic.dataclasses import dataclass
+from pydantic import BaseModel
+from pydantic import Field
+from pydantic import field_serializer
 
 
-@dataclass
-class State:
+class State(BaseModel):
     """Health state and performance metrics of a process.
 
     This class tracks both error states and execution statistics for a process,
@@ -43,14 +42,17 @@ class State:
 
     # Execution metrics
     execution_count: int = 0
-    total_duration: timedelta = field(default_factory=timedelta)
-    max_duration: timedelta = field(default_factory=timedelta)
+    total_duration: timedelta = Field(default_factory=timedelta)
+    max_duration: timedelta = Field(default_factory=timedelta)
     last_duration_warning: Optional[datetime] = None
+
+    @field_serializer("total_duration", "max_duration", when_used="json")
+    def _serialize_timedelta(self, value: timedelta) -> float:
+        return value.total_seconds()
 
     def asdict(self) -> Dict[str, Any]:
         """Return dict representation of the State object."""
-        # NOTE: just construct dict ourselves instead?
-        return asdict(self)
+        return self.model_dump(mode="json")
 
     def set_ok(self) -> None:
         """Set current state to OK, clear error information.
