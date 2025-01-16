@@ -6,7 +6,7 @@ Note: Primarily tested with Zabbix 7.0 and 6.4, but should work with 6.0 and 5.2
 
 ## Requirements
 
-* Python >=3.8
+* Python >=3.9
 * pip >=21.3
 * Zabbix >=6.4
 

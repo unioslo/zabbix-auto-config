@@ -7,7 +7,7 @@ name = "zabbix-auto-config"
 dynamic = ["version"]
 description = "Zabbix auto config - ZAC"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license.file = "LICENSE"
 keywords = []
 authors = [{ name = "Paal Braathen", email = "paal.braathen@usit.uio.no" }]
@@ -19,7 +19,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -77,4 +76,4 @@ force-single-line = true
 required-imports = ["from __future__ import annotations"]
 
 [tool.pyright]
-pythonVersion = "3.8"
+pythonVersion = "3.9"
