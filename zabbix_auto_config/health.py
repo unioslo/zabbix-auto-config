@@ -5,6 +5,7 @@ import multiprocessing
 import os
 from datetime import datetime
 from pathlib import Path
+from typing import List
 from typing import Optional
 
 from pydantic import BaseModel
@@ -33,8 +34,8 @@ class HealthFile(BaseModel):
     date: datetime = Field(default_factory=datetime.now)
     cwd: str
     pid: int
-    processes: list[ProcessInfo] = []
-    queues: list[QueueInfo] = []
+    processes: List[ProcessInfo] = []
+    queues: List[QueueInfo] = []
     failsafe: int
 
     @computed_field
