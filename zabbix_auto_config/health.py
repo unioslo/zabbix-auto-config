@@ -16,6 +16,17 @@ from zabbix_auto_config import processing
 from zabbix_auto_config.state import State
 
 
+class ProcessInfo(BaseModel):
+    name: str
+    pid: Optional[int]
+    alive: bool
+    state: State
+
+
+class QueueInfo(BaseModel):
+    size: int
+
+
 class HealthFile(BaseModel):
     """Health file for the application."""
 
@@ -42,17 +53,6 @@ class HealthFile(BaseModel):
 
     def to_json(self) -> str:
         return self.model_dump_json(indent=2)
-
-
-class ProcessInfo(BaseModel):
-    name: str
-    pid: Optional[int]
-    alive: bool
-    state: State
-
-
-class QueueInfo(BaseModel):
-    size: int
 
 
 def write_health(
