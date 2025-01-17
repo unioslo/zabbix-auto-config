@@ -1131,7 +1131,7 @@ class ZabbixAPI:
             params["users"] = [{"userid": uid} for uid in new_userids]
         else:
             params["userids"] = new_userids
-        self.usergroup.update(usrgrpid=usergroup.usrgrpid, userids=new_userids)
+        self.usergroup.update(**params)
 
     def update_usergroup_rights(
         self,
