@@ -1,20 +1,22 @@
-# About
+# Zabbix-auto-config
 
-Zabbix-auto-config is an utility that aims to automatically configure hosts, host groups, host inventories, template groups and templates in the monitoring software [Zabbix](https://www.zabbix.com/).
+## About
+
+Zabbix-auto-config is a utility that aims to automatically configure hosts, host groups, host inventories, template groups and templates in the monitoring software [Zabbix](https://www.zabbix.com/).
 
 Note: Primarily tested with Zabbix 7.0 and 6.4, but should work with 6.0 and 5.2.
 
 ## Requirements
 
 * Python >=3.9
-* pip >=21.3
+* pip >=21.3 or [uv](https://docs.astral.sh/uv/getting-started/installation/) >= 0.5.0
 * Zabbix >=6.4
 
-# Quick start
+## Quick start
 
 This is a crash course in how to quickly get this application up and running in a local test environment:
 
-## Zabbix test instance
+### Zabbix test instance
 
 Setup a Zabbix test instance with [podman](https://podman.io/) and [podman-compose](https://github.com/containers/podman-compose/).
 
@@ -22,7 +24,7 @@ Setup a Zabbix test instance with [podman](https://podman.io/) and [podman-compo
 TAG=7.0-ubuntu-latest ZABBIX_PASSWORD=secret podman-compose up -d
 ```
 
-## Zabbix prerequisites
+### Zabbix prerequisites
 
 The following host groups are created in Zabbix if they do not exist:
 
@@ -44,7 +46,7 @@ For automatic linking in templates you could create the templates:
 * Template-barry
 * Template-pizza
 
-## Database
+### Database
 
 The application requires a PostgreSQL database to store the state of the collected hosts. The database can be created with the following command from your local machine:
 
@@ -65,23 +67,35 @@ If running from inside a dev container, replace the host (`-h`) with the contain
 
 This is a one-time procedure per environment.
 
-## Application
+### Application
 
-### Installation
+#### Installation
 
-Installing the project in a virtual environment directly with pip is the recommended way to go:
+Clone the repository:
 
 ```bash
-python -m venv venv
-. venv/bin/activate
+git clone https://github.com/unioslo/zabbix-auto-config.git
+```
+
+#### uv
+
+In order to get the exact dependencies from the lock file, it's recommended to install the application with `uv sync`:
+
+```
+uv sync --no-dev
+```
+
+#### pip
+
+```
 pip install -e .
 ```
 
-When installing from source, installing in editable mode is recommended, as it allows for pulling in changes from git without having to reinstall the project.
+When installing from source, installing in editable mode is recommended, as it allows for pulling in changes from git without having to reinstall the package.
 
-### Configuration (mock environment)
+#### Configuration (mock environment)
 
-A ZAC environment with mock source collectors, host modifiers, and mapping files can be set up with the following commands:
+A ZAC environment with a set of mock source collectors, host modifiers, and mapping files can be set up with the following commands:
 
 ```bash
 cp config.sample.toml config.toml
@@ -140,15 +154,17 @@ bob@example.com:Hostgroup-bob-hosts
 EOF
 ```
 
-### Running
+This will create a new config file, set up a source collector, and create mapping files for siteadmins and properties to host groups and templates.
 
-Installing the application adds the `zac` command to your path. You can run the application with:
+#### Running
+
+Installing the application adds the `zac` command to your path. After activating your virtual environment, you can run the application with:
 
 ```bash
 zac
 ```
 
-## Systemd unit
+### Systemd unit
 
 To add automatic startup of the application with systemd, create a unit file in `/etc/systemd/system/zabbix-auto-config.service`:
 
@@ -156,13 +172,15 @@ To add automatic startup of the application with systemd, create a unit file in 
 [Unit]
 Description=Zabbix auto config
 After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 User=zabbix
 Group=zabbix
-WorkingDirectory=/home/zabbix/zabbix-auto-config
-Environment=PATH=/home/zabbix/zabbix-auto-config/venv/bin
-ExecStart=/home/zabbix/zabbix-auto-config/venv/bin/zac
+WorkingDirectory=/home/zabbix/zabbix-auto-config # replace with installation path
+Environment=PATH=/home/zabbix/zabbix-auto-config/.venv/bin # ditto
+ExecStart=/home/zabbix/zabbix-auto-config/.venv/bin/zac # ditto
 TimeoutSec=300
 Restart=always
 RestartSec=5s
@@ -171,13 +189,22 @@ RestartSec=5s
 WantedBy=multi-user.target
 ```
 
-## Source collectors
+Then enable and start the service:
+
+```bash
+systemctl enable zabbix-auto-config
+systemctl start zabbix-auto-config
+```
+
+This will start the application on boot and restart it if it crashes.
+
+### Source collectors
 
 ZAC relies on "Source Collectors" to fetch host data from various sources.
 A source can be anything: an API, a file, a database, etc. What matters is that
 the source is able to return a list of `zabbix_auto_config.models.Host` objects. ZAC uses these objects to create or update hosts in Zabbix. If a host with the same hostname is collected from multiple different sources, its information is combined into a single logical host object before being used to create/update the host in Zabbix.
 
-### Writing a source collector
+#### Writing a source collector
 
 Source collectors are Python modules placed in a directory specified by the `source_collector_dir` option in the `[zac]` table of the configuration file. Zabbix-auto-config attempts to load all modules referenced by name in the configuration file from this directory. If any referenced modules cannot be found in the directory, they will be ignored.
 
@@ -221,7 +248,7 @@ if __name__ == "__main__":
         f.write(hosts_to_json(collect()))
 ```
 
-### Configuration
+#### Configuration
 
 The configuration entry for loading a source collector module, like the `load_from_json.py` module above, includes both mandatory and optional fields. Here's how it can be configured:
 
@@ -241,27 +268,27 @@ Only the extra `filename` option is passed in as a kwarg to the `collect()` func
 
 The following configurations options are available:
 
-### Mandatory configuration
+#### Mandatory configuration
 
-#### module_name
+##### module_name
+
 `module_name` is the name of the module to load. This is the name that will be used in the configuration file to reference the module. It must correspond with the name of the module file, without the `.py` extension.
 
-#### update_interval
+##### update_interval
+
 `update_interval` is the number of seconds between updates. This is the interval at which the `collect()` function will be called.
 
-### Optional configuration (error handling)
+#### Optional configuration (error handling)
 
 If `error_tolerance` number of errors occur within `error_duration` seconds, the collector is disabled for a given duration. This is an opt-in feature per source collector.
 
 By default, source collectors are never disabled, and instead increase their update intervals using an exponential backoff strategy on each successive error. See the `disable_duration` option for more information.
 
-
-
-#### error_tolerance
+##### error_tolerance
 
 `error_tolerance` (default: 0) is the maximum number of errors tolerated within `error_duration` seconds.
 
-#### error_duration
+##### error_duration
 
 `error_duration` (default: 0) specifies the duration in seconds to track and log errors. This value should be at least equal to `error_tolerance * update_interval` to ensure correct error detection.
 
@@ -271,47 +298,45 @@ A useful guide is to set `error_duration` as `(error_tolerance + 1) * update_int
 
 If `error_tolerance` is set, but `error_duration` is not, the application will set an `error_duration` that is slightly longer than the minimum required to ensure correct error detection.
 
-#### exit_on_error
+##### exit_on_error
 
 `exit_on_error` (default: true) determines if the application should terminate, or disable the failing collector when number of errors exceed the tolerance. If set to `true`, the application will exit. Otherwise, the collector will be disabled for `disable_duration` seconds. For backwards compatibility with previous versions of Zabbix-auto-config, this option defaults to `true`. In a future major version, the default will be changed to `false`.
 
-#### disable_duration
+##### disable_duration
 
 `disable_duration` (default: 3600) is the duration in seconds to disable collector for. The following disable modes are supported:
 
-- `disable_duration` > 0: Hard disable for `disable_duration` seconds after `error_tolerance` failures
-- `disable_duration` = 0: Increase collection interval using exponential backoff after each failure instead of disabling source.
-- `disable_duration` < 0: No disable mechanism (always try at fixed interval)
+* `disable_duration` > 0: Hard disable for `disable_duration` seconds after `error_tolerance` failures
+* `disable_duration` = 0: Increase collection interval using exponential backoff after each failure instead of disabling source.
+* `disable_duration` < 0: No disable mechanism (always try at fixed interval)
 
 They are described in more detail below:
 
-##### Hard disable
+###### Hard disable
 
 When `disable_duration` is greater than 0, the collector is disabled for `disable_duration` seconds after `error_tolerance` failures within `error_duration` seconds. The collector will not be called during this period. After the `disable_duration` has passed, the collector will be re-enabled and the error count will be reset.
 
-##### Exponential backoff
+###### Exponential backoff
 
 When `disable_duration` is set to 0, the collector will not be disabled, but the update interval will be increased by a factor of `backoff_factor` after each failure. The update interval will be reset to the original value after a successful collection. This mode is useful for sources that are expected to be temporarily unavailable at times.
 
-##### No disable
+###### No disable
 
 When `disable_duration` is less than 0, the collector will not be disabled, and the update interval will not be increased. This mode is useful when using sources that are frequently unavailable, but are not critical to the operation of the application.
 
-#### backoff_factor
+##### backoff_factor
 
 `backoff_factor` (default: 1.5) is the factor by which the update interval is increased after each failure when `disable_duration` is set to 0. The update interval is reset to the original value after a successful collection.
 
-### Keyword arguments
+#### Keyword arguments
 
 Any extra config options specified in the configuration file will be passed to the `collect()` function as keyword arguments. In the example above, the `filename` option is passed to the `collect()` function, and then accessed via `kwargs["filename"]`.
 
-
-## Host modifiers
+### Host modifiers
 
 Host modifiers are Python modules (files) that are placed in a directory defined by the option `host_modifier_dir` in the `[zac]` table of the config file. A host modifier is a module that contains a function named `modify` that takes a `Host` object as its only argument, modifies it, and returns it. Zabbix-auto-config will attempt to load all modules in the given directory.
 
-
-### Writing a host modifier
+#### Writing a host modifier
 
 A host modifier module that adds a given siteadmin to all hosts could look like this:
 
@@ -332,7 +357,7 @@ Any module that contains a function named `modify` which takes a `Host` and retu
 
 See the [`Host`](https://github.com/unioslo/zabbix-auto-config/blob/2b45f1cb7da0d46b8b218005ebbf751cb17f8793/zabbix_auto_config/models.py#L111-L123) class in `zabbix_auto_config/models.py` for the available fields that can be accessed and modified. One restriction applies: the `modify` function should _never_ modify the hostname of the host. Attempting to do so will result in an error.
 
-## Host inventory
+### Host inventory
 
 Zac manages only inventory properties configured as `managed_inventory` in `config.toml`. An inventory property will not be removed/blanked from Zabbix even if the inventory property is removed from `managed_inventory` list or from the host in the source e.g:
 
@@ -340,14 +365,14 @@ Zac manages only inventory properties configured as `managed_inventory` in `conf
 2. Remove the "location" property from the host in the source
 3. "location=x" will remain in Zabbix
 
-## Garbage Collection
+### Garbage Collection
 
 ZAC provides an optional Zabbix garbage collection module that cleans up stale data from Zabbix that is not otherwise managed by ZAC, such as maintenances.
 
 The garbage collector currently does the following:
 
-- Removes disabled hosts from maintenances.
-- Deletes maintenances that only contain disabled hosts.
+* Removes disabled hosts from maintenances.
+* Deletes maintenances that only contain disabled hosts.
 
 Under normal usage, hosts are removed from maintenances when being disabled by ZAC, but if hosts are disabled outside of ZAC, they will not be removed from maintenances. The GC module will remove these hosts, and optionally delete the maintenance altogether if it only contains disabled hosts.
 
@@ -368,56 +393,37 @@ update_interval = 3600 # Run every hour
 
 ----
 
-## Development
+### Development
 
-We use the project management tool [Hatch](https://hatch.pypa.io/latest/) for developing the project. The tool manages virtual environment creation, dependency installation, as well as building and publishing of the project, and more.
+We use [uv](https://docs.astral.sh/uv/getting-started/installation/) to manage the development environment. The following instructions assume that you have uv installed.
 
-Install Hatch with pipx:
-
-```bash
-pipx install hatch
-```
-
-Install the application with Hatch and enter the virtual environment:
+Install the development dependencies:
 
 ```bash
-hatch shell
+uv sync
 ```
 
-The path to the current Hatch environment can always be found with:
+Optionally also activate the virtual environment:
 
 ```bash
-hatch env find
+. .venv/bin/activate
 ```
 
-### Testing
+#### Testing
 
-Inside a Hatch environment, tests can be run in two ways.
-
-With Hatch:
+Run unit tests with:
 
 ```bash
-hatch run test
+uv run pytest
 ```
 
-Or by directly invoking pytest:
+In order to update snapshots, run:
 
 ```bash
-pytest
+uv run pytest --inline-snapshot=review
 ```
 
-The only difference is that Hatch will automatically check dependencies and install/upgrade them if necessary before running the tests.
-
-#### Testing without Hatch
-
-If you just want to run tests without Hatch, you can do so by installing the development dependencies independently:
-
-```bash
-# Set up venv or similar ...
-pip install .[test]
-```
-
-### Pre-commit
+#### Pre-commit
 
 We use [pre-commit](https://pre-commit.com/) to manage pre-commit hooks. Install the hooks with:
 

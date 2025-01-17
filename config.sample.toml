@@ -44,9 +44,9 @@ update_interval = 60
 [zac.process.garbage_collector]
 # Enable garbage collection, including:
 #   - Remove disabled hosts from maintenances
+#   - Delete maintenances if all hosts are disabled (optional)
 enabled = false
-# Delete maintenances if all its hosts are disabled
-delete_empty_maintenance = false
+delete_empty_maintenance = false # Delete maintenances if all its hosts are disabled
 update_interval = 86400 # every 24 hours
 
 
@@ -89,6 +89,9 @@ templategroup_prefix = "Templates-"
 # Separator used for group name prefixes
 prefix_separator = "-"
 
+# Extra host groups to create for each site admin
+# i.e. if we have a group in the mapping file called `Hostgroup-bob-hosts`
+# we can create `Secondary-bob-hosts` in Zabbix if we specify `Secondary`
 extra_siteadmin_hostgroup_prefixes = []
 
 [source_collectors.mysource]
