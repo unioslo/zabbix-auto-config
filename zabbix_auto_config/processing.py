@@ -326,7 +326,7 @@ class SourceCollectorProcess(BaseProcess):
                     f"Collected object is not a Host object: {host!r}. Type: {type(host)}"
                 )
 
-            host.sources = set([self.name])
+            host.sources = {self.name}
             valid_hosts.append(host)
 
         # Add source hosts to queue
@@ -1688,7 +1688,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
     def create_extra_hostgroups(self, existing_hostgroups: List[HostGroup]) -> None:
         """Creates additonal host groups based on the prefixes specified
         in the config file. These host groups are not assigned hosts by ZAC."""
-        hostgroup_names = set(h.name for h in existing_hostgroups)
+        hostgroup_names = {h.name for h in existing_hostgroups}
 
         for prefix in self.config.extra_siteadmin_hostgroup_prefixes:
             mapping = utils.mapping_values_with_prefix(
@@ -1730,7 +1730,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         # The prefix is determined by the separator defined in the config file.
         # If we use the template group prefix `Templates-`, we go from
         # `Siteadmin-bob-hosts` to `Templates-bob-hosts`.
-        tgroups = set(
+        tgroups = {
             utils.with_prefix(
                 tg,
                 self.config.templategroup_prefix,
@@ -1739,7 +1739,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             for tg in itertools.chain.from_iterable(
                 self.siteadmin_hostgroup_map.values()
             )
-        )
+        }
         if compat.templategroups_supported(self.zabbix_version):
             logging.debug(
                 "Zabbix version is %s. Will create template groups.",
@@ -1760,7 +1760,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             tgroups: A set of template group names to create.
         """
         res = self.api.get_templategroups()
-        existing_tgroups = set(tg.name for tg in res)
+        existing_tgroups = {tg.name for tg in res}
         for tgroup in tgroups:
             if tgroup in existing_tgroups:
                 continue
@@ -1777,7 +1777,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         Args:
             tgroups: A set of host group names to create.
         """
-        existing_hgroup_names = set(h.name for h in existing_hostgroups)
+        existing_hgroup_names = {h.name for h in existing_hostgroups}
         for tgroup in tgroups:
             if tgroup in existing_hgroup_names:
                 continue
@@ -1846,7 +1846,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
             # Determine host groups to sync for host
             # Sync host groups derived from its properties, siteadmins, sources, etc.
-            synced_hostgroup_names = set([self.config.hostgroup_all])
+            synced_hostgroup_names = {self.config.hostgroup_all}
             for prop in db_host.properties:
                 if prop in self.property_hostgroup_map:
                     synced_hostgroup_names.update(self.property_hostgroup_map[prop])

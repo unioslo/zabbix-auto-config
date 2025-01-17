@@ -386,7 +386,7 @@ class ZabbixAPI:
         search_params: ParamsType = {}
 
         if "*" in names_or_ids:
-            names_or_ids = tuple()
+            names_or_ids = ()
 
         if names_or_ids:
             for name_or_id in names_or_ids:
@@ -544,7 +544,7 @@ class ZabbixAPI:
         search_params: ParamsType = {}
 
         if "*" in names_or_ids:
-            names_or_ids = tuple()
+            names_or_ids = ()
 
         if names_or_ids:
             for name_or_id in names_or_ids:
@@ -1043,7 +1043,7 @@ class ZabbixAPI:
         search_params: ParamsType = {}
 
         if "*" in names:
-            names = tuple()
+            names = ()
         if search:
             params["searchByAny"] = True  # Union search (default is intersection)
             params["searchWildcardsEnabled"] = True
@@ -1471,7 +1471,7 @@ class ZabbixAPI:
 
         # TODO: refactor this along with other methods that take names or ids (or wildcards)
         if "*" in template_names_or_ids:
-            template_names_or_ids = tuple()
+            template_names_or_ids = ()
 
         for name_or_id in template_names_or_ids:
             name_or_id = name_or_id.strip()
@@ -2152,29 +2152,27 @@ class ZabbixAPI:
         return ZabbixAPIObjectClass(attr, self)
 
 
-WRITE_OPERATIONS = set(
-    [
-        "create",
-        "delete",
-        "update",
-        "massadd",
-        "massupdate",
-        "massremove",
-        "push",  # history
-        "clear",  # history
-        "acknowledge",  # event
-        "import",  # configuration
-        "propagate",  # hostgroup, templategroup
-        "replacehostinterfaces",  # hostinterface
-        "copy",  # discoveryrule
-        "execute",  # script
-        "resettotp",  # user
-        "unblock",  # user
-        "createglobal",  # macro
-        "deleteglobal",  # macro
-        "updateglobal",  # macro
-    ]
-)
+WRITE_OPERATIONS = {
+    "create",
+    "delete",
+    "update",
+    "massadd",
+    "massupdate",
+    "massremove",
+    "push",  # history
+    "clear",  # history
+    "acknowledge",  # event
+    "import",  # configuration
+    "propagate",  # hostgroup, templategroup
+    "replacehostinterfaces",  # hostinterface
+    "copy",  # discoveryrule
+    "execute",  # script
+    "resettotp",  # user
+    "unblock",  # user
+    "createglobal",  # macro
+    "deleteglobal",  # macro
+    "updateglobal",  # macro
+}
 
 
 class ZabbixAPIObjectClass:
