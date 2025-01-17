@@ -82,6 +82,8 @@ extend-include = [
 
 [tool.ruff.lint]
 extend-select = [
+    "E",       # pydecodestyle (errors)
+    "W",       # pydecodestyle (warnings)
     "G",       # flake8-logging-format
     "I",       # isort
     "LOG",     # flake8-logging
@@ -91,6 +93,11 @@ extend-select = [
     "C4",      # flake8-comprehensions
     "B",       # flake8-bugbear
 ]
+# 2. Avoid enforcing line-length violations (`E501`)
+ignore = ["E501"]
+
+# 3. Avoid trying to fix flake8-bugbear (`B`) violations.
+unfixable = ["B"]
 
 [tool.ruff.format]
 # Enable auto-formatting for docstrings.
