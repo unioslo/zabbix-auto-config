@@ -6,7 +6,6 @@ import time
 from typing import Callable
 
 import pytest
-
 from zabbix_auto_config.errcount import Error
 from zabbix_auto_config.errcount import RollingErrorCounter
 from zabbix_auto_config.errcount import get_td

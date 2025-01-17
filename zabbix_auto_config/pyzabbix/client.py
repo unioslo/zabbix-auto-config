@@ -183,7 +183,7 @@ class ZabbixAPI:
         # Without an API connection, we cannot determine
         # the user parameter name to use when logging in.
         try:
-            self.version  # property
+            self.version  # property # noqa: B018
         except ZabbixAPIRequestError as e:
             raise ZabbixAPIException(
                 f"Failed to connect to Zabbix API at {self.url}"
@@ -386,7 +386,7 @@ class ZabbixAPI:
         search_params: ParamsType = {}
 
         if "*" in names_or_ids:
-            names_or_ids = tuple()
+            names_or_ids = ()
 
         if names_or_ids:
             for name_or_id in names_or_ids:
@@ -544,7 +544,7 @@ class ZabbixAPI:
         search_params: ParamsType = {}
 
         if "*" in names_or_ids:
-            names_or_ids = tuple()
+            names_or_ids = ()
 
         if names_or_ids:
             for name_or_id in names_or_ids:
@@ -846,7 +846,7 @@ class ZabbixAPI:
         except ZabbixAPIException as e:
             raise ZabbixAPICallError(
                 f"Failed to update host {host.host} ({host.hostid}): {e}"
-            )
+            ) from e
 
     def delete_host(self, host_id: str) -> None:
         """Deletes a host."""
@@ -1043,7 +1043,7 @@ class ZabbixAPI:
         search_params: ParamsType = {}
 
         if "*" in names:
-            names = tuple()
+            names = ()
         if search:
             params["searchByAny"] = True  # Union search (default is intersection)
             params["searchWildcardsEnabled"] = True
@@ -1128,10 +1128,10 @@ class ZabbixAPI:
             new_userids = list(set(current_userids + ids_update))
 
         if self.version.release >= (6, 0, 0):
-            params["users"] = {"userid": uid for uid in new_userids}
+            params["users"] = [{"userid": uid} for uid in new_userids]
         else:
             params["userids"] = new_userids
-        self.usergroup.update(usrgrpid=usergroup.usrgrpid, userids=new_userids)
+        self.usergroup.update(**params)
 
     def update_usergroup_rights(
         self,
@@ -1471,7 +1471,7 @@ class ZabbixAPI:
 
         # TODO: refactor this along with other methods that take names or ids (or wildcards)
         if "*" in template_names_or_ids:
-            template_names_or_ids = tuple()
+            template_names_or_ids = ()
 
         for name_or_id in template_names_or_ids:
             name_or_id = name_or_id.strip()
@@ -1961,7 +1961,7 @@ class ZabbixAPI:
                 params["hostids"] = [h.hostid for h in hosts]
         if hostgroups:
             if self.version.release >= (6, 0, 0):
-                params["groups"] = {"groupid": hg.groupid for hg in hostgroups}
+                params["groups"] = [{"groupid": hg.groupid} for hg in hostgroups]
             else:
                 params["groupids"] = [hg.groupid for hg in hostgroups]
         if data_collection:
@@ -2152,29 +2152,27 @@ class ZabbixAPI:
         return ZabbixAPIObjectClass(attr, self)
 
 
-WRITE_OPERATIONS = set(
-    [
-        "create",
-        "delete",
-        "update",
-        "massadd",
-        "massupdate",
-        "massremove",
-        "push",  # history
-        "clear",  # history
-        "acknowledge",  # event
-        "import",  # configuration
-        "propagate",  # hostgroup, templategroup
-        "replacehostinterfaces",  # hostinterface
-        "copy",  # discoveryrule
-        "execute",  # script
-        "resettotp",  # user
-        "unblock",  # user
-        "createglobal",  # macro
-        "deleteglobal",  # macro
-        "updateglobal",  # macro
-    ]
-)
+WRITE_OPERATIONS = {
+    "create",
+    "delete",
+    "update",
+    "massadd",
+    "massupdate",
+    "massremove",
+    "push",  # history
+    "clear",  # history
+    "acknowledge",  # event
+    "import",  # configuration
+    "propagate",  # hostgroup, templategroup
+    "replacehostinterfaces",  # hostinterface
+    "copy",  # discoveryrule
+    "execute",  # script
+    "resettotp",  # user
+    "unblock",  # user
+    "createglobal",  # macro
+    "deleteglobal",  # macro
+    "updateglobal",  # macro
+}
 
 
 class ZabbixAPIObjectClass:

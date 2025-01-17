@@ -106,7 +106,7 @@ class InterfaceType(IntEnum):
         try:
             return PORTS[self]
         except KeyError:
-            raise ZACException(f"Unknown interface type: {self}")
+            raise ZACException(f"Unknown interface type: {self}") from None
 
 
 class SNMPSecurityLevel(IntEnum):

@@ -10,7 +10,6 @@ from unittest.mock import MagicMock
 
 import pytest
 import tomli
-
 from zabbix_auto_config import models
 
 

@@ -458,7 +458,7 @@ class Host(BaseModel):
                 self.hostname,
             )
             # TODO: Do something different? Is alphabetically first "good enough"? It will be consistent at least.
-            self.proxy_pattern = sorted(list(proxy_patterns))[0]
+            self.proxy_pattern = sorted(proxy_patterns)[0]
         elif len(proxy_patterns) == 1:
             self.proxy_pattern = proxy_patterns.pop()
 

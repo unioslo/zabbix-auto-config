@@ -7,7 +7,6 @@ from typing import List
 from unittest.mock import MagicMock
 
 import pytest
-
 from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.failsafe import check_failsafe
 from zabbix_auto_config.failsafe import check_failsafe_ok_file
