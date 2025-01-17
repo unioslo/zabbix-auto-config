@@ -65,6 +65,21 @@ exclude = ["/.github", "/tests", "/path"]
 [tool.hatch.build.targets.wheel]
 packages = ["zabbix_auto_config"]
 
+
+[tool.pyright]
+pythonVersion = "3.9"
+
+[tool.ruff]
+# Same as Black.
+line-length = 88
+src = ["zabbix_auto_config"]
+extend-exclude = ["zabbix_auto_config/__init__.py"]
+extend-include = [
+    "pyproject.toml",
+    "zabbix_auto_config/**/*.py",
+    "tests/**/*.py",
+]
+
 [tool.ruff.lint]
 extend-select = [
     "G",       # flake8-logging-format
@@ -75,11 +90,15 @@ extend-select = [
     "TID252",  # flake8-tidy-imports (prefer absolute imports)
 ]
 
+[tool.ruff.format]
+# Enable auto-formatting for docstrings.
+docstring-code-format = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [tool.ruff.lint.isort]
 # Force one line per import to simplify diffing and merging
 force-single-line = true
 # Add annotations import to every file
 required-imports = ["from __future__ import annotations"]
-
-[tool.pyright]
-pythonVersion = "3.9"

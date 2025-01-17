@@ -17,7 +17,6 @@ from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
 from pytest import LogCaptureFixture
-
 from zabbix_auto_config import utils
 from zabbix_auto_config.pyzabbix.types import HostTag
 

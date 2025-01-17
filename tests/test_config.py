@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import pytest
 import tomli
+import zabbix_auto_config.models as models
 from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
 from inline_snapshot import snapshot
 from pydantic import ValidationError
-
-import zabbix_auto_config.models as models
 
 
 def test_sample_config(sample_config: str):

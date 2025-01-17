@@ -3,7 +3,6 @@ from __future__ import annotations
 import datetime
 
 import pytest
-
 from zabbix_auto_config.health import HealthFile
 from zabbix_auto_config.health import ProcessInfo
 from zabbix_auto_config.state import State
