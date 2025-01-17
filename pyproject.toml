@@ -89,6 +89,7 @@ extend-select = [
     "PLE1206", # pylint (too few logging args)
     "TID252",  # flake8-tidy-imports (prefer absolute imports)
     "C4",      # flake8-comprehensions
+    "B",       # flake8-bugbear
 ]
 
 [tool.ruff.format]

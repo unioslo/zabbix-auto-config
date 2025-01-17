@@ -381,7 +381,7 @@ class SourceHandlerProcess(BaseProcess):
             # TODO: Test connection? Cursor?
         except psycopg2.OperationalError as e:
             logging.error("Unable to connect to database.")
-            raise ZACException(*e.args)
+            raise ZACException(*e.args) from e
 
         self.source_hosts_queues = source_hosts_queues
         for source_hosts_queue in self.source_hosts_queues:
@@ -696,7 +696,7 @@ class ZabbixUpdater(BaseProcess):
             # TODO: Test connection? Cursor?
         except psycopg2.OperationalError as e:
             logging.error("Unable to connect to database. Process exiting with error")
-            raise ZACException(*e.args)
+            raise ZACException(*e.args) from e
 
         self.config = settings.zabbix
         self.settings = settings
@@ -732,15 +732,15 @@ class ZabbixUpdater(BaseProcess):
             self.api.login(self.config.username, self.config.password)
         except httpx.ConnectError as e:
             logging.error("Error while connecting to Zabbix: %s", self.config.url)
-            raise ZACException(*e.args)
+            raise ZACException(*e.args) from e
         except httpx.TimeoutException as e:
             logging.error(
                 "Timed out while connecting to Zabbix API: %s", self.config.url
             )
-            raise ZACException(*e.args)
+            raise ZACException(*e.args) from e
         except (ZabbixAPIException, httpx.HTTPError) as e:
             logging.error("Unable to login to Zabbix API: %s", str(e))
-            raise ZACException(*e.args)
+            raise ZACException(*e.args) from e
 
     def work(self) -> None:
         start_time = time.time()
@@ -778,7 +778,7 @@ class ZabbixUpdater(BaseProcess):
             names = [name] if name else []
             hostgroups = self.api.get_hostgroups(*names)
         except ZabbixAPIException as e:
-            raise ZACException("Error when fetching hostgroups: %s", e)
+            raise ZACException("Error when fetching hostgroups: %s", e) from e
         return hostgroups
 
 
@@ -1250,7 +1250,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         zabbix_managed_hosts: List[Host] = []
         zabbix_manual_hosts: List[Host] = []
 
-        for hostname, host in zabbix_hosts.items():
+        for host in zabbix_hosts.values():
             if self.stop_event.is_set():
                 logging.debug("Told to stop. Breaking")
                 break

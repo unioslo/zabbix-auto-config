@@ -183,7 +183,7 @@ class ZabbixAPI:
         # Without an API connection, we cannot determine
         # the user parameter name to use when logging in.
         try:
-            self.version  # property
+            self.version  # property # noqa: B018
         except ZabbixAPIRequestError as e:
             raise ZabbixAPIException(
                 f"Failed to connect to Zabbix API at {self.url}"
@@ -846,7 +846,7 @@ class ZabbixAPI:
         except ZabbixAPIException as e:
             raise ZabbixAPICallError(
                 f"Failed to update host {host.host} ({host.hostid}): {e}"
-            )
+            ) from e
 
     def delete_host(self, host_id: str) -> None:
         """Deletes a host."""
@@ -1128,7 +1128,7 @@ class ZabbixAPI:
             new_userids = list(set(current_userids + ids_update))
 
         if self.version.release >= (6, 0, 0):
-            params["users"] = {"userid": uid for uid in new_userids}
+            params["users"] = [{"userid": uid} for uid in new_userids]
         else:
             params["userids"] = new_userids
         self.usergroup.update(usrgrpid=usergroup.usrgrpid, userids=new_userids)
@@ -1961,7 +1961,7 @@ class ZabbixAPI:
                 params["hostids"] = [h.hostid for h in hosts]
         if hostgroups:
             if self.version.release >= (6, 0, 0):
-                params["groups"] = {"groupid": hg.groupid for hg in hostgroups}
+                params["groups"] = [{"groupid": hg.groupid} for hg in hostgroups]
             else:
                 params["groupids"] = [hg.groupid for hg in hostgroups]
         if data_collection:
