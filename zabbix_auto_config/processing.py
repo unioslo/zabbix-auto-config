@@ -285,6 +285,13 @@ class SourceCollectorProcess(BaseProcess):
                 or self.error_counter.tolerance_exceeded()
             ):
                 handler()
+            else:
+                logging.debug(
+                    "Source '%s' has not reached error tolerance of %d (current: %d) Keeping it enabled...",
+                    self.name,
+                    self.config.error_tolerance,
+                    self.error_counter.count(),
+                )
         else:
             logging.info(
                 "Source '%s' has no failure handling strategy. Keeping it enabled...",
