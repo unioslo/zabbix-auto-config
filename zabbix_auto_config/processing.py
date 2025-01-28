@@ -720,6 +720,7 @@ class ZabbixUpdater(BaseProcess):
             self.config.url,
             timeout=self.config.timeout,  # timeout for connect AND read
             read_only=self.config.dryrun,  # prevent accidental changes
+            verify_ssl=self.config.verify_ssl,
         )
 
         self.login()
