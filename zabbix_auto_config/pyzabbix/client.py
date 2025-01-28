@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import logging
+import ssl
 from datetime import datetime
 from typing import TYPE_CHECKING
 from typing import Any
@@ -133,13 +134,14 @@ class ZabbixAPI:
         server: str = "http://localhost/zabbix",
         timeout: Optional[int] = None,
         read_only: bool = False,
+        verify_ssl: Union[str, bool] = True,
     ):
         """Parameters:
         server: Base URI for zabbix web interface (omitting /api_jsonrpc.php)
         timeout: optional connect and read timeout in seconds.
         """
         self.timeout = timeout if timeout else None
-        self.session = self._get_client(verify_ssl=True, timeout=timeout)
+        self.session = self._get_client(verify_ssl=verify_ssl, timeout=timeout)
         self.read_only = read_only
 
         self.auth = ""
@@ -153,13 +155,19 @@ class ZabbixAPI:
         self._version: Optional[Version] = None
 
     def _get_client(
-        self, verify_ssl: bool, timeout: Union[float, int, None] = None
+        self, verify_ssl: Union[str, bool], timeout: Union[float, int, None] = None
     ) -> httpx.Client:
         kwargs: HTTPXClientKwargs = {}
         if timeout is not None:
             kwargs["timeout"] = timeout
+
+        if isinstance(verify_ssl, str):
+            ctx = ssl.create_default_context(cafile=verify_ssl)
+        else:
+            ctx = verify_ssl
+
         client = httpx.Client(
-            verify=verify_ssl,
+            verify=ctx,
             # Default headers for all requests
             headers={
                 "Content-Type": "application/json-rpc",
@@ -168,6 +176,7 @@ class ZabbixAPI:
             },
             **kwargs,
         )
+
         return client
 
     def login(
