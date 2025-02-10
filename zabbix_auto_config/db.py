@@ -44,7 +44,7 @@ class PostgresConnectionParams(BaseModel):
     host: str
     password: str
     port: int = DEFAULT_PORT
-    connect_timeout: int | None = None
+    connect_timeout: Optional[int] = None
 
     @field_validator("port", "connect_timeout", mode="before")
     @classmethod
