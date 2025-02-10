@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `disable_duration < 0`: Never disable, never increase the update interval.
   - `exit_on_error` takes precedence over `disable_duration`. If `exit_on_error` is set to `true`, the source collector will exit on error regardless of the `disable_duration` setting.
 - `zabbix.verify_ssl` option to control SSL certificate verification for Zabbix API connections. Can be a boolean or a path to a CA bundle. Defaults to `true`.
+- Automatic DB and table creation on startup if they do not exist.
 
 ### Changed
 

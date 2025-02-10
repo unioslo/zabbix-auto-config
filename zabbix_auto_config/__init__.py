@@ -21,6 +21,7 @@ from zabbix_auto_config._types import HostModifier
 from zabbix_auto_config._types import HostModifierModule
 from zabbix_auto_config._types import SourceCollector
 from zabbix_auto_config._types import SourceCollectorModule
+from zabbix_auto_config.db import init_db
 from zabbix_auto_config.health import write_health
 from zabbix_auto_config.state import get_manager
 
@@ -129,6 +130,10 @@ def main() -> None:
     logging.info("Main start (%d) version %s", os.getpid(), __version__)
     stop_event = multiprocessing.Event()
     state_manager = get_manager()
+
+
+    # Ensure database and tables exist
+    init_db(uri=config.zac.db_uri)
 
     # Import host modifier and source collector modules
     host_modifiers = get_host_modifiers(config.zac.host_modifier_dir)

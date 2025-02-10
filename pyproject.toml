@@ -32,6 +32,8 @@ dependencies = [
     "tomli>=2.0.0",
     "packaging>=23.2",
     "typing_extensions>=4.12.0",
+    "sqlalchemy>=2.0.38",
+    "sqlalchemy-utils>=0.41.2",
 ]
 
 
@@ -65,6 +67,8 @@ exclude = ["/.github", "/tests", "/path"]
 [tool.hatch.build.targets.wheel]
 packages = ["zabbix_auto_config"]
 
+[tool.inline-snapshot]
+format-command = "ruff format --stdin-filename {filename}"
 
 [tool.pyright]
 pythonVersion = "3.9"

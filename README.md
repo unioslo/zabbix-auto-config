@@ -46,24 +46,12 @@ For automatic linking in templates you could create the templates:
 
 ### Database
 
-The application requires a PostgreSQL database to store the state of the collected hosts. The database can be created with the following command from your local machine:
+The application requires a PostgreSQL database to store the state of the collected hosts. The database and tables are created automatically on the first run of the application provided that the database connection is configured correctly in `config.toml`.
 
-```bash
-PGPASSWORD=secret psql -h localhost -U postgres -p 5432 -U zabbix << EOF
-CREATE DATABASE zac;
-\c zac
-CREATE TABLE hosts (
-    data jsonb
-);
-CREATE TABLE hosts_source (
-    data jsonb
-);
-EOF
+```toml
+[zac]
+db_uri = "dbname='zac' user='zabbix' host='localhost' password='secret' port=5432 connect_timeout=2"
 ```
-
-If running from inside a dev container, replace the host (`-h`) with the container name of the database container (default: `db`).
-
-This is a one-time procedure per environment.
 
 ### Application
 
@@ -75,7 +63,9 @@ Clone the repository:
 git clone https://github.com/unioslo/zabbix-auto-config.git
 ```
 
-#### uv
+Thereafter, the application can be installed with `uv` or `pip`
+
+#### uv (recommended)
 
 In order to get the exact dependencies from the lock file, it's recommended to install the application with `uv sync`:
 
