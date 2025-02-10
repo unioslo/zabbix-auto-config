@@ -40,7 +40,9 @@ class Error:
         return self.timestamp < other.timestamp
 
     @compare
-    def __eq__(self, other: "Error") -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, self.__class__):
+            return False
         return self.timestamp == other.timestamp
 
     @compare
@@ -56,7 +58,9 @@ class Error:
         return self.timestamp >= other.timestamp
 
     @compare
-    def __ne__(self, other: "Error") -> bool:
+    def __ne__(self, other: object) -> bool:
+        if not isinstance(other, self.__class__):
+            return False
         return self.timestamp != other.timestamp
 
 
