@@ -131,7 +131,6 @@ def main() -> None:
     stop_event = multiprocessing.Event()
     state_manager = get_manager()
 
-
     # Ensure database and tables exist
     init_db(uri=config.zac.db_uri)
 
