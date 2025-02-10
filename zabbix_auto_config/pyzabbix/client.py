@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import ssl
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Dict
@@ -134,14 +135,17 @@ class ZabbixAPI:
         server: str = "http://localhost/zabbix",
         timeout: Optional[int] = None,
         read_only: bool = False,
-        verify_ssl: Union[str, bool] = True,
+        verify_ssl: Union[bool, Path] = True,
     ):
         """Parameters:
         server: Base URI for zabbix web interface (omitting /api_jsonrpc.php)
         timeout: optional connect and read timeout in seconds.
+        read_only: Prevent all write operations to the API.
+        verify_ssl: Verify SSL certificates. Can be a boolean or a path to a CA bundle.
+
         """
         self.timeout = timeout if timeout else None
-        self.session = self._get_client(verify_ssl=verify_ssl, timeout=timeout)
+        self.session = self._get_client(verify_ssl=verify_ssl)
         self.read_only = read_only
 
         self.auth = ""
@@ -154,17 +158,26 @@ class ZabbixAPI:
         # Attributes for properties
         self._version: Optional[Version] = None
 
-    def _get_client(
-        self, verify_ssl: Union[str, bool], timeout: Union[float, int, None] = None
-    ) -> httpx.Client:
-        kwargs: HTTPXClientKwargs = {}
-        if timeout is not None:
-            kwargs["timeout"] = timeout
-
-        if isinstance(verify_ssl, str):
-            ctx = ssl.create_default_context(cafile=verify_ssl)
+    def _get_ssl_context(
+        self, verify_ssl: Union[bool, Path]
+    ) -> Union[ssl.SSLContext, bool]:
+        if isinstance(verify_ssl, Path):
+            if not verify_ssl.exists():
+                raise ValueError(f"CA bundle not found: {verify_ssl}")
+            if verify_ssl.is_dir():
+                ctx = ssl.create_default_context(capath=verify_ssl)
+            else:
+                ctx = ssl.create_default_context(cafile=verify_ssl)
         else:
             ctx = verify_ssl
+        return ctx
+
+    def _get_client(self, verify_ssl: Union[bool, Path]) -> httpx.Client:
+        kwargs: HTTPXClientKwargs = {}
+        if self.timeout is not None:
+            kwargs["timeout"] = self.timeout
+
+        ctx = self._get_ssl_context(verify_ssl)
 
         client = httpx.Client(
             verify=ctx,

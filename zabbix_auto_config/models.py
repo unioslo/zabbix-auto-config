@@ -62,7 +62,7 @@ class ZabbixSettings(ConfigBaseModel):
         description="The timeout in seconds for HTTP requests to Zabbix.",
         ge=0,
     )
-    verify_ssl: Union[bool, str] = True
+    verify_ssl: Union[bool, Path] = True
     """Path to a CA bundle file or `True` to use the system's CA bundle. False to disable SSL verification."""
 
     tags_prefix: str = "zac_"
