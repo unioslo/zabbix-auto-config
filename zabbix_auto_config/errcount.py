@@ -39,7 +39,6 @@ class Error:
     def __lt__(self, other: "Error") -> bool:
         return self.timestamp < other.timestamp
 
-    @compare
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, self.__class__):
             return False
@@ -57,11 +56,8 @@ class Error:
     def __ge__(self, other: "Error") -> bool:
         return self.timestamp >= other.timestamp
 
-    @compare
     def __ne__(self, other: object) -> bool:
-        if not isinstance(other, self.__class__):
-            return False
-        return self.timestamp != other.timestamp
+        return not self == other
 
 
 class RollingErrorCounter:
