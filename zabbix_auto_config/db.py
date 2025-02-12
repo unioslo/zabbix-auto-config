@@ -6,6 +6,7 @@ from typing import Optional
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
+from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.models import DBSettings
 from zabbix_auto_config.models import Settings
 
@@ -85,4 +86,7 @@ def init_db(config: Settings) -> None:
     specifies that they should be initialized.
     """
     initializer = PostgresDBInitializer(config)
-    initializer.init_db()
+    try:
+        initializer.init_db()
+    except psycopg2.Error as e:
+        raise ZACException(f"Error initializing database: {e}") from e
