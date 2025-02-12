@@ -149,6 +149,11 @@ class DBTableSettings(ConfigBaseModel):
     hosts_source: str = Field(default="hosts_source")
 
 
+class DBInitSettings(ConfigBaseModel):
+    db: bool = Field(default=True)
+    tables: bool = Field(default=True)
+
+
 class DBSettings(ConfigBaseModel):
     """Settings for the database connection."""
 
@@ -159,20 +164,48 @@ class DBSettings(ConfigBaseModel):
     port: int = Field(default=5432)
     connect_timeout: int = Field(default=2)
 
-    # DB initialization settings
-    init_db: bool = Field(default=True)
-    init_tables: bool = Field(default=True)
-
     # Table names
     tables: DBTableSettings = Field(default_factory=DBTableSettings)
+    # Initialization settings
+    init: DBInitSettings = Field(default_factory=DBInitSettings)
 
     # ZacSettings Validator mutates model, check assigned values
-    model_config = ConfigDict(validate_assignment=True)  # NOTE: DO NOT CHANGE
+    model_config = ConfigDict(
+        # Validate values assigned by ZacSettings validator
+        validate_assignment=True,
+        # Pass extra keys to psycopg2.connect as kwargs
+        extra="allow",
+    )
 
-    @property
-    def valid(self) -> bool:
-        """DB config is valid to use for authentication"""
-        return bool(self.user and self.password)
+    def get_connect_kwargs(self) -> Dict[str, Any]:
+        """Return kwargs for psycopg2.connect.
+
+        Only include non-empty values."""
+        kwargs = {
+            "dbname": self.dbname,
+            "user": self.user,
+            "password": self.password,
+            "host": self.host,
+            "port": self.port,
+            "connect_timeout": self.connect_timeout,
+            **self.extra_kwargs(),
+        }
+        return {k: v for k, v in kwargs.items() if v}
+
+    def extra_kwargs(self) -> Dict[str, Any]:
+        """Return extra kwargs for psycopg2.connect."""
+        extra: Dict[str, Any] = {}
+        if not self.model_extra:
+            return extra
+        for k, v in self.model_extra.items():
+            # Only support top-level [zac.db] keys, no nesting, no containers
+            if not isinstance(v, (str, int, float, bool)):
+                continue
+            # Should not contain any of the model fields
+            if k in self.model_fields:
+                continue
+            extra[k] = v
+        return extra
 
 
 class ZacSettings(ConfigBaseModel):
@@ -216,30 +249,26 @@ class ZacSettings(ConfigBaseModel):
         # Combine quoted and unquoted values, preferring quoted
         params = {match[0]: match[1] or match[2] for match in matches}
 
-        self.db.user = params.get("user", "")
-        self.db.password = params.get("password", "")
-        self.db.dbname = params.get("dbname", "zac")
-        self.db.host = params.get("host", "localhost")
-        self.db.port = params.get("port", 5432)
-        self.db.connect_timeout = params.get("connect_timeout", 5)
+        self.db.user = params.pop("user", "")
+        self.db.password = params.pop("password", "")
+        self.db.dbname = params.pop("dbname", "zac")
+        self.db.host = params.pop("host", "localhost")
+        self.db.port = params.pop("port", 5432)
+        self.db.connect_timeout = params.pop("connect_timeout", 5)
+
+        if params:
+            for key, value in params.items():
+                # Set any remaining parameters as attributes on the DBSettings object
+                setattr(self.db, key, value)
 
     # NOTE: remove this validator when db_uri is removed
-    #       and make user/password required
     @model_validator(mode="after")
     def _require_db_or_db_uri(self) -> Self:
-        """Require either `db` settings or `db_uri`.
-
-        Compatibility layer for supporting legacy `db_uri` setting."""
+        """Compatibility layer for supporting legacy `db_uri` setting."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")  # ignore warnings in this block
             if self.db_uri:
                 self._db_uri_to_db_settings(self.db_uri)
-
-        # Since we support both `db` and `db_uri`, we need to make
-        # the required fields in `DBSettings` optional, convert `db_uri`
-        # to `DBSettings`, and then validate the required fields here.
-        if not self.db.valid:
-            raise ValueError("`zac.db.user` and `zac.db.password` are required.")
         return self
 
     @field_validator("health_file", "failsafe_file", "failsafe_ok_file", mode="after")

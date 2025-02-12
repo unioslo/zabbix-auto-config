@@ -252,9 +252,19 @@ def test_zacsettings_db_uri_all(config: models.Settings):
             "host": "localhost",
             "port": 5432,
             "connect_timeout": 2,
-            "init_db": True,
-            "init_tables": True,
             "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+            "init": {"db": True, "tables": True},
+        }
+    )
+
+    assert settings.db.get_connect_kwargs() == snapshot(
+        {
+            "dbname": "zac",
+            "user": "zabbix",
+            "password": "secret",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 2,
         }
     )
 
@@ -274,49 +284,110 @@ def test_zacsettings_db_uri_only_required(config: models.Settings):
             "host": "localhost",
             "port": 5432,
             "connect_timeout": 5,
-            "init_db": True,
-            "init_tables": True,
             "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+            "init": {"db": True, "tables": True},
+        }
+    )
+
+    assert settings.db.get_connect_kwargs() == snapshot(
+        {
+            "dbname": "zac",
+            "user": "zabbix",
+            "password": "secret",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 5,
         }
     )
 
 
-def test_zacsettings_db_uri_missing_required(config: models.Settings):
-    """Parse a PostgreSQL connection string with missing required args."""
-    with pytest.raises(ValidationError) as excinfo:
-        _get_zac_settings(
-            config,
-            "user='zabbix'",
-        )
-    assert excinfo.value.errors(
-        include_url=False, include_context=False, include_input=False
-    ) == snapshot(
-        [
-            {
-                "type": "value_error",
-                "loc": (),
-                "msg": "Value error, `zac.db.user` and `zac.db.password` are required.",
-            }
-        ]
+def test_zacsettings_db_uri_extra(config: models.Settings):
+    """Parse a PostgreSQL connection string with all args + extra args."""
+    settings = _get_zac_settings(
+        config,
+        "dbname='zac' user='zabbix' host='localhost' password='secret' port=5432 connect_timeout=2",
+    )
+
+    assert settings.db.model_dump(mode="json") == snapshot(
+        {
+            "user": "zabbix",
+            "password": "secret",
+            "dbname": "zac",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 2,
+            "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+            "init": {"db": True, "tables": True},
+        }
+    )
+
+    assert settings.db.get_connect_kwargs() == snapshot(
+        {
+            "dbname": "zac",
+            "user": "zabbix",
+            "password": "secret",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 2,
+        }
+    )
+
+
+def test_zacsettings_db_uri_empty_values_and_extras(config: models.Settings):
+    """Parse a PostgreSQL connection string with some empty values and extra kwargs."""
+    settings = _get_zac_settings(
+        config,
+        "user='zabbix' password='' sslmode='require' passfile='/path/to/passfile'",
+    )
+
+    assert settings.db.model_dump(mode="json") == snapshot(
+        {
+            "user": "zabbix",
+            "password": "",
+            "dbname": "zac",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 5,
+            "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+            "init": {"db": True, "tables": True},
+            "sslmode": "require",
+            "passfile": "/path/to/passfile",
+        }
+    )
+
+    assert settings.db.get_connect_kwargs() == snapshot(
+        {
+            "dbname": "zac",
+            "user": "zabbix",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 5,
+            "sslmode": "require",
+            "passfile": "/path/to/passfile",
+        }
     )
 
 
 def test_zacsettings_db_uri_missing_all(config: models.Settings):
-    """Parse a PostgreSQL connection string with missing required args."""
-    with pytest.raises(ValidationError) as excinfo:
-        _get_zac_settings(
-            config,
-            "",
-        )
+    """Parse a PostgreSQL connection string with no args."""
+    settings = _get_zac_settings(
+        config,
+        "",
+    )
 
-    assert excinfo.value.errors(
-        include_url=False, include_context=False, include_input=False
-    ) == snapshot(
-        [
-            {
-                "type": "value_error",
-                "loc": (),
-                "msg": "Value error, `zac.db.user` and `zac.db.password` are required.",
-            }
-        ]
+    assert settings.db.model_dump(mode="json") == snapshot(
+        {
+            "user": "",
+            "password": "",
+            "dbname": "zac",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 2,
+            "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+            "init": {"db": True, "tables": True},
+        }
+    )
+
+    assert settings.db.get_connect_kwargs() == snapshot(
+        {"dbname": "zac", "host": "localhost", "port": 5432, "connect_timeout": 2}
     )

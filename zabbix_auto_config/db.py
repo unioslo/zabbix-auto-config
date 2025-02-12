@@ -15,14 +15,13 @@ logger = logging.getLogger(__name__)
 def get_connection(
     settings: DBSettings, dbname: Optional[str] = None
 ) -> psycopg2.extensions.connection:
-    return psycopg2.connect(
-        dbname=dbname or settings.dbname,  # can override dbname
-        user=settings.user,
-        password=settings.password,
-        host=settings.host,
-        port=settings.port,
-        connect_timeout=settings.connect_timeout,
-    )
+    """Get a connection to the Postgres database.
+
+    Optionally specify a different database name to connect to."""
+    kwargs = settings.get_connect_kwargs()
+    if dbname:  # HACK: we need to connect to 'postgres' to create a new database
+        kwargs["dbname"] = dbname
+    return psycopg2.connect(**kwargs)
 
 
 class PostgresDBInitializer:
@@ -32,24 +31,12 @@ class PostgresDBInitializer:
     def init_db(self) -> None:
         """Initialize database and tables idempotently."""
         # Create the database if it doesn't exist
-        if self.config.zac.db.init_db:
+        if self.config.zac.db.init.db:
             self._init_db()
 
         # Create tables if they don't exist
-        if self.config.zac.db.init_tables:
+        if self.config.zac.db.init.tables:
             self._init_tables()
-
-    def _get_connection(
-        self, dbname: Optional[str] = None
-    ) -> psycopg2.extensions.connection:
-        return psycopg2.connect(
-            dbname=dbname or self.config.zac.db.dbname,
-            user=self.config.zac.db.user,
-            password=self.config.zac.db.password,
-            host=self.config.zac.db.host,
-            port=self.config.zac.db.port,
-            connect_timeout=self.config.zac.db.connect_timeout,
-        )
 
     def _init_db(self) -> None:
         """Create the database if it doesn't exist."""

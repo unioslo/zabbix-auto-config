@@ -46,12 +46,33 @@ For automatic linking in templates you could create the templates:
 
 ### Database
 
-The application requires a PostgreSQL database to store the state of the collected hosts. The database and tables are created automatically on the first run of the application provided that the database connection is configured correctly in `config.toml`.
+The application requires a PostgreSQL database to store the state of the collected hosts. The database and tables are created automatically on the first run of the application provided that the database connection is configured correctly in `config.toml`:
 
 ```toml
-[zac]
-db_uri = "dbname='zac' user='zabbix' host='localhost' password='secret' port=5432 connect_timeout=2"
+[zac.db]
+user = "zabbix"
+password = "secret"
+dbname = "zac"
+host = "localhost"
+port = 5432
+connect_timeout = 2
+
+# Extra kwargs are passed to psycopg2.connect.
+# See: https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS
+# passfile = "/path/to/.pgpass" # Use a password file for authentication
+# sslmode = "require" # Require SSL connection
+# etc.
+
+[zac.db.init]
+db = true
+tables = true
+
+[zac.db.tables]
+hosts = "hosts"
+hosts_source = "hosts_source"
 ```
+
+Creation of the `zac` database requires superuser privileges. If the ZAC user does not have superuser privileges, the `zac` database must be created manually.
 
 ### Application
 
