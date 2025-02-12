@@ -419,3 +419,28 @@ def test_zacsettings_dbsettings(config: models.Settings) -> None:
             "passfile": "/path/to/passfile",
         }
     )
+
+
+def test_dbsettings_extra_kwargs() -> None:
+    """Test DBSettings with extra kwargs."""
+    db = models.DBSettings(
+        user="zac",
+        password="secret",
+        dbname="zac",
+        host="localhost",
+        port=5432,
+        connect_timeout=2,
+        # Extra kwargs (included)
+        sslmode="require",
+        passfile="/path/to/passfile",
+        # Extra kwargs (ignored)
+        dict_kwarg={"extra": "value"},
+        list_kwarg=["extra", "value"],
+        tuple_kwarg=("extra", "value"),
+        set_kwarg={"extra", "value"},
+        none_kwarg=None,
+    )
+
+    assert db.extra_kwargs() == snapshot(
+        {"sslmode": "require", "passfile": "/path/to/passfile"}
+    )

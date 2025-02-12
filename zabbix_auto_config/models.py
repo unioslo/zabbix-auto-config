@@ -198,7 +198,7 @@ class DBSettings(ConfigBaseModel):
         if not self.model_extra:
             return extra
         for k, v in self.model_extra.items():
-            # Only support top-level [zac.db] keys, no nesting, no containers
+            # Only support top-level [zac.db] keys, no nesting, no containers, no None
             if not isinstance(v, (str, int, float, bool)):
                 continue
             # Should not contain any of the model fields
