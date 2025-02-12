@@ -64,25 +64,26 @@ class PostgresDBInitializer:
         with get_connection(self.config.zac.db) as conn:
             with conn.cursor() as cur:
                 # Create hosts table
+                logger.info(
+                    "Creating table '%s' if it doesn't exist",
+                    self.config.zac.db.tables.hosts,
+                )
                 cur.execute(f"""
                     CREATE TABLE IF NOT EXISTS {self.config.zac.db.tables.hosts} (
                         data jsonb
                     )
                 """)
-                if cur.statusmessage == "CREATE TABLE":
-                    logger.info("Created table %s", self.config.zac.db.tables.hosts)
 
                 # Create hosts_source table
+                logger.info(
+                    "Creating table '%s' if it doesn't exist",
+                    self.config.zac.db.tables.hosts_source,
+                )
                 cur.execute(f"""
                     CREATE TABLE IF NOT EXISTS {self.config.zac.db.tables.hosts_source} (
                         data jsonb
                     )
                 """)
-                if cur.statusmessage == "CREATE TABLE":
-                    logger.info(
-                        "Created table %s", self.config.zac.db.tables.hosts_source
-                    )
-
                 conn.commit()
 
 

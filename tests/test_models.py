@@ -253,7 +253,7 @@ def test_zacsettings_db_uri_all(config: models.Settings):
             "port": 5432,
             "connect_timeout": 2,
             "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
-            "init": {"db": True, "tables": True},
+            "init": {"db": False, "tables": True},
         }
     )
 
@@ -285,7 +285,7 @@ def test_zacsettings_db_uri_only_required(config: models.Settings):
             "port": 5432,
             "connect_timeout": 5,
             "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
-            "init": {"db": True, "tables": True},
+            "init": {"db": False, "tables": True},
         }
     )
 
@@ -317,7 +317,7 @@ def test_zacsettings_db_uri_extra(config: models.Settings):
             "port": 5432,
             "connect_timeout": 2,
             "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
-            "init": {"db": True, "tables": True},
+            "init": {"db": False, "tables": True},
         }
     )
 
@@ -349,7 +349,7 @@ def test_zacsettings_db_uri_empty_values_and_extras(config: models.Settings):
             "port": 5432,
             "connect_timeout": 5,
             "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
-            "init": {"db": True, "tables": True},
+            "init": {"db": False, "tables": True},
             "sslmode": "require",
             "passfile": "/path/to/passfile",
         }
@@ -384,10 +384,38 @@ def test_zacsettings_db_uri_missing_all(config: models.Settings):
             "port": 5432,
             "connect_timeout": 2,
             "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
-            "init": {"db": True, "tables": True},
+            "init": {"db": False, "tables": True},
         }
     )
 
     assert settings.db.get_connect_kwargs() == snapshot(
         {"dbname": "zac", "host": "localhost", "port": 5432, "connect_timeout": 2}
+    )
+
+
+def test_zacsettings_dbsettings(config: models.Settings) -> None:
+    """Test ZacSettings with DBSettings."""
+    config.zac.db = models.DBSettings(
+        user="zac",
+        password="secret",
+        dbname="zac",
+        host="localhost",
+        port=5432,
+        connect_timeout=2,
+        # Extra kwargs
+        sslmode="require",
+        passfile="/path/to/passfile",
+    )
+
+    assert config.zac.db.get_connect_kwargs() == snapshot(
+        {
+            "dbname": "zac",
+            "user": "zac",
+            "password": "secret",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 2,
+            "sslmode": "require",
+            "passfile": "/path/to/passfile",
+        }
     )
