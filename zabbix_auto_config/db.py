@@ -55,7 +55,7 @@ class PostgresDBInitializer:
                 exists = cur.fetchone()
 
                 if not exists:
-                    logger.info("Creating database %s", self.config.zac.db.dbname)
+                    logger.debug("Creating database %s", self.config.zac.db.dbname)
                     cur.execute(f"CREATE DATABASE {self.config.zac.db.dbname}")
         finally:
             conn.close()
@@ -64,7 +64,7 @@ class PostgresDBInitializer:
         with get_connection(self.config.zac.db) as conn:
             with conn.cursor() as cur:
                 # Create hosts table
-                logger.info(
+                logger.debug(
                     "Creating table '%s' if it doesn't exist",
                     self.config.zac.db.tables.hosts,
                 )
@@ -75,7 +75,7 @@ class PostgresDBInitializer:
                 """)
 
                 # Create hosts_source table
-                logger.info(
+                logger.debug(
                     "Creating table '%s' if it doesn't exist",
                     self.config.zac.db.tables.hosts_source,
                 )
