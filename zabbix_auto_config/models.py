@@ -150,7 +150,7 @@ class DBTableSettings(ConfigBaseModel):
 
 
 class DBInitSettings(ConfigBaseModel):
-    db: bool = Field(default=True)
+    db: bool = Field(default=False)
     tables: bool = Field(default=True)
 
 
