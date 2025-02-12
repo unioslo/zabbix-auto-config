@@ -6,6 +6,7 @@ import time
 import pytest
 from inline_snapshot import snapshot
 from zabbix_auto_config.exceptions import ZACException
+from zabbix_auto_config.models import Settings
 from zabbix_auto_config.processing import BaseProcess
 from zabbix_auto_config.state import State
 from zabbix_auto_config.state import StateProxy
@@ -77,6 +78,7 @@ def test_state_set_error(use_manager: bool):
     assert state.ok is False
     assert state.error == "Test error"
     assert state.error_type == "TimeoutError"
+    assert state.error_time is not None
     assert state.error_time < time.time()
     assert state.error_count == 1
 
@@ -93,11 +95,12 @@ class ZACExceptionProcess(BaseProcess):
 
 
 @pytest.mark.timeout(10)
-def test_state_in_other_process() -> None:
+def test_state_in_other_process(config: Settings) -> None:
     state = get_manager().State()
     process = ZACExceptionProcess(
         name="test",
         state=state,
+        config=config,
     )
 
     process.start()
@@ -123,6 +126,7 @@ def test_state_in_other_process() -> None:
     process2 = BaseProcess(
         name="test",
         state=state2,
+        config=config,
     )
 
     # Start and stop process, then check state

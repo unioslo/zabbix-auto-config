@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import re
+import warnings
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -142,16 +144,103 @@ class ProcessesSettings(ConfigBaseModel):
     )
 
 
+class DBTableSettings(ConfigBaseModel):
+    hosts: str = Field(default="hosts")
+    hosts_source: str = Field(default="hosts_source")
+
+
+class DBSettings(ConfigBaseModel):
+    """Settings for the database connection."""
+
+    user: str = Field(default="")
+    password: str = Field(default="")
+    dbname: str = Field(default="zac")
+    host: str = Field(default="localhost")
+    port: int = Field(default=5432)
+    connect_timeout: int = Field(default=2)
+
+    # DB initialization settings
+    init_db: bool = Field(default=True)
+    init_tables: bool = Field(default=True)
+
+    # Table names
+    tables: DBTableSettings = Field(default_factory=DBTableSettings)
+
+    # ZacSettings Validator mutates model, check assigned values
+    model_config = ConfigDict(validate_assignment=True)  # NOTE: DO NOT CHANGE
+
+    @property
+    def valid(self) -> bool:
+        """DB config is valid to use for authentication"""
+        return bool(self.user and self.password)
+
+
 class ZacSettings(ConfigBaseModel):
     source_collector_dir: str
     host_modifier_dir: str
-    db_uri: str
     log_level: int = Field(logging.INFO, description="The log level to use.")
     health_file: Optional[Path] = None
     failsafe_file: Optional[Path] = None
     failsafe_ok_file: Optional[Path] = None
     failsafe_ok_file_strict: bool = True
+    db: DBSettings = DBSettings()
     process: ProcessesSettings = ProcessesSettings()
+
+    # Deprecated options
+    db_uri: str = Field(default="", deprecated=True)
+
+    def _db_uri_to_db_settings(self, uri: str) -> None:
+        """Parse a PostgreSQL libpq connection string into structured parameters.
+
+        Args:
+            uri: A PostgreSQL connection string in libpq format
+                (e.g., "dbname='mydb' user='user' host='localhost'")
+
+        Returns:
+            PostgresConnectionParams containing the parsed connection parameters
+
+        Example:
+            >>> # NOTE: For illustration only, should not be called directly.
+            >>> self._db_uri_to_db_settings(
+            ...     "dbname='mydb' user='user' host='localhost'"
+            ... )
+            >>> self.db.user
+            'user'
+            >>> self.db.password
+            'password'
+        """
+        # Pattern matches key='value' or key=value pairs
+        pattern = r"(\w+)\s*=\s*(?:'([^']*)'|(\d+))"
+        matches = re.findall(pattern, uri)
+
+        # Combine quoted and unquoted values, preferring quoted
+        params = {match[0]: match[1] or match[2] for match in matches}
+
+        self.db.user = params.get("user", "")
+        self.db.password = params.get("password", "")
+        self.db.dbname = params.get("dbname", "zac")
+        self.db.host = params.get("host", "localhost")
+        self.db.port = params.get("port", 5432)
+        self.db.connect_timeout = params.get("connect_timeout", 5)
+
+    # NOTE: remove this validator when db_uri is removed
+    #       and make user/password required
+    @model_validator(mode="after")
+    def _require_db_or_db_uri(self) -> Self:
+        """Require either `db` settings or `db_uri`.
+
+        Compatibility layer for supporting legacy `db_uri` setting."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # ignore warnings in this block
+            if self.db_uri:
+                self._db_uri_to_db_settings(self.db_uri)
+
+        # Since we support both `db` and `db_uri`, we need to make
+        # the required fields in `DBSettings` optional, convert `db_uri`
+        # to `DBSettings`, and then validate the required fields here.
+        if not self.db.valid:
+            raise ValueError("`zac.db.user` and `zac.db.password` are required.")
+        return self
 
     @field_validator("health_file", "failsafe_file", "failsafe_ok_file", mode="after")
     @classmethod

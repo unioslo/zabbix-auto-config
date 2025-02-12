@@ -6,6 +6,7 @@ from typing import List
 
 import pytest
 from zabbix_auto_config.models import Host
+from zabbix_auto_config.models import Settings
 from zabbix_auto_config.models import SourceCollectorSettings
 from zabbix_auto_config.processing import SourceCollectorProcess
 from zabbix_auto_config.state import get_manager
@@ -22,12 +23,13 @@ class SourceCollector:
 
 
 @pytest.mark.timeout(5)
-def test_source_collector_process():
+def test_source_collector_process(config: Settings):
     process = SourceCollectorProcess(
         name="test-source",
         state=get_manager().State(),
+        config=config,
         module=SourceCollector,
-        config=SourceCollectorSettings(
+        settings=SourceCollectorSettings(
             module_name="source_collector",
             update_interval=1,
             disable_duration=2,
@@ -57,12 +59,13 @@ class FaultySourceCollector:
 
 
 @pytest.mark.timeout(5)
-def test_source_collector_disable_on_failure():
+def test_source_collector_disable_on_failure(config: Settings):
     process = SourceCollectorProcess(
         name="test-source",
         state=get_manager().State(),
+        config=config,
         module=FaultySourceCollector,
-        config=SourceCollectorSettings(
+        settings=SourceCollectorSettings(
             module_name="faulty_source_collector",
             update_interval=1,
             disable_duration=3600,

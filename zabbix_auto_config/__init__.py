@@ -132,7 +132,7 @@ def main() -> None:
     state_manager = get_manager()
 
     # Ensure database and tables exist
-    init_db(uri=config.zac.db_uri)
+    init_db(config)
 
     # Import host modifier and source collector modules
     host_modifiers = get_host_modifiers(config.zac.host_modifier_dir)
@@ -148,6 +148,7 @@ def main() -> None:
         process: processing.BaseProcess = processing.SourceCollectorProcess(
             source_collector.name,
             state_manager.State(),
+            config,
             source_collector.module,
             source_collector.config,
             source_hosts_queue,
@@ -159,31 +160,28 @@ def main() -> None:
         processing.SourceHandlerProcess(
             "source-handler",
             state_manager.State(),
-            config.zac.db_uri,
+            config,
             source_hosts_queues,
         ),
         processing.SourceMergerProcess(
             "source-merger",
             state_manager.State(),
-            config.zac.db_uri,
+            config,
             host_modifiers,
         ),
         processing.ZabbixHostUpdater(
             "zabbix-host-updater",
             state_manager.State(),
-            config.zac.db_uri,
             config,
         ),
         processing.ZabbixHostgroupUpdater(
             "zabbix-hostgroup-updater",
             state_manager.State(),
-            config.zac.db_uri,
             config,
         ),
         processing.ZabbixTemplateUpdater(
             "zabbix-template-updater",
             state_manager.State(),
-            config.zac.db_uri,
             config,
         ),
     ]
@@ -194,7 +192,6 @@ def main() -> None:
             processing.ZabbixGarbageCollector(
                 "zabbix-garbage-collector",
                 state_manager.State(),
-                config.zac.db_uri,
                 config,
             )
         )
@@ -208,7 +205,7 @@ def main() -> None:
             pr.start()
         except Exception as e:
             logging.error("Unable to start process %s: %s", pr.name, e)
-            stop_event.set()  # Stop other proceses immediately
+            stop_event.set()  # Stop other processes immediately
             break
 
     with processing.SignalHandler(stop_event):

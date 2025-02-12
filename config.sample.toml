@@ -5,9 +5,6 @@ source_collector_dir = "path/to/source_collector_dir/"
 # Directory containing the host modifier modules.
 host_modifier_dir = "path/to/host_modifier_dir/"
 
-# URI used to connect to the Postgres database.
-db_uri = "dbname='zac' user='zabbix' host='localhost' password='secret' port=5432 connect_timeout=2"
-
 # Log level for the application.
 log_level = "INFO"
 
@@ -26,6 +23,32 @@ failsafe_ok_file = "/tmp/zac_failsafe_ok"
 # If false, the application will make changes even if it fails to delete the file.
 # It is then up to the administrator to manually delete the file afterwards.
 failsafe_ok_file_strict = true
+
+
+# Postgres DB settings
+[zac.db]
+# User credentials (postgres user)
+user = "zabbix"
+password = "secret"
+
+# Database name (created if not exists)
+dbname = "zac"
+
+# Connection info
+host = "localhost"
+port = 5432
+
+# Connection timeout in seconds
+connect_timeout = 2
+
+
+[zac.db.tables]
+# Merged host data table
+hosts = "hosts"
+
+# Source host data table
+hosts_source = "hosts_source"
+
 
 # Configuration for ZAC processes.
 [zac.process.source_merger]
@@ -67,6 +90,10 @@ failsafe = 20
 
 # Zabbix API timeout in seconds (0 = no timeout)
 timeout = 60
+
+# Verify SSL certificates when connecting to Zabbix.
+# Can be True/False or the path to a CA bundle file.
+verify_ssl = true
 
 # Prefix for managed tags
 tags_prefix = "zac_"
