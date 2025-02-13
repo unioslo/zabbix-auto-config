@@ -16,11 +16,32 @@ This is a crash course in how to quickly get this application up and running in 
 
 ### Zabbix test instance
 
-Setup a Zabbix test instance with [podman](https://podman.io/) and [podman-compose](https://github.com/containers/podman-compose/).
+Zabbix-auto-config requires a Linux environment to run. The easiest way to set up a development environment is to use the provided Visual Studio Code Development Container[^1][^2] configuration.
+We use [uv](https://docs.astral.sh/uv/getting-started/installation/) to manage the development environment.
+
+The dev container configuration starts up the following containers:
+
+* Zabbix server
+* Zabbix web server
+* PostgreSQL database
+* Development container with Zabbix-auto-config installed
+
+[^1]: <https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers>
+[^2]: <https://code.visualstudio.com/docs/devcontainers/containers>
+
+The development environment can be started via the [Visual Studio Code Remote - Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension. The extension will automatically detect the `.devcontainer` directory and prompt you to open the project in a container.
+
+The Zabbix version to target, as well as other settings, can be configured in the [`.env`](./.env) file.
+
+#### Non-containerized development
+
+If you are on a Linux machine and prefer not to develop inside a container, you can start the required services with Docker/Podman Compose:
 
 ```bash
-TAG=7.0-ubuntu-latest ZABBIX_PASSWORD=secret podman-compose up -d
+podman-compose up -d
 ```
+
+See [Development](#development) for more information on how to set up a local development environment beyond starting the required services.
 
 ### Zabbix prerequisites
 
@@ -404,6 +425,10 @@ update_interval = 3600 # Run every hour
 
 ### Development
 
+Following the instructions in [Quick start](#quick-start) will get you up and running with a local development environment where all dependencies are installed and ready to use. If you choose not to use the provided Visual Studio Code Development Container, you can set up the development environment manually. Here's how.
+
+#### Local development environment
+
 We use [uv](https://docs.astral.sh/uv/getting-started/installation/) to manage the development environment. The following instructions assume that you have uv installed.
 
 Install the development dependencies:
@@ -412,7 +437,7 @@ Install the development dependencies:
 uv sync
 ```
 
-Optionally also activate the virtual environment:
+Activate the virtual environment:
 
 ```bash
 . .venv/bin/activate
@@ -423,13 +448,13 @@ Optionally also activate the virtual environment:
 Run unit tests with:
 
 ```bash
-uv run pytest
+pytest
 ```
 
 In order to update snapshots, run:
 
 ```bash
-uv run pytest --inline-snapshot=review
+pytest --inline-snapshot=review
 ```
 
 #### Pre-commit

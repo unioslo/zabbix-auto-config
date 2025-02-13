@@ -1,37 +1,42 @@
-version: "3.9"
 services:
-
   db:
-    image: "docker.io/library/postgres:latest"
+    image: "docker.io/library/postgres:16"
+    hostname: "db-${TAG:?Need env: TAG}"
     environment:
-      - "POSTGRES_DB=zabbix"
-      - "POSTGRES_PASSWORD=${ZABBIX_PASSWORD:?Need env: ZABBIX_PASSWORD}"
-      - "POSTGRES_USER=zabbix"
+      POSTGRES_DB: "zabbix"
+      POSTGRES_PASSWORD: "${ZABBIX_PASSWORD:?Need env: ZABBIX_PASSWORD}"
+      POSTGRES_USER: "zabbix"
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
 
   zabbix-web-nginx:
     image: "docker.io/zabbix/zabbix-web-nginx-pgsql:${TAG:?Need env: TAG}"
     depends_on:
       - "db"
     environment:
-      - "DB_SERVER_HOST=db"
-      - "PHP_TZ=Europe/Oslo"
-      - "POSTGRES_DB=zabbix"
-      - "POSTGRES_PASSWORD=${ZABBIX_PASSWORD:?Need env: ZABBIX_PASSWORD}"
-      - "POSTGRES_USER=zabbix"
-      - "ZBX_SERVER_HOST=zabbix-server"
+      DB_SERVER_HOST: "db-${TAG:?Need env: TAG}"
+      PHP_TZ: "Europe/Oslo"
+      POSTGRES_DB: "zabbix"
+      POSTGRES_PASSWORD: "${ZABBIX_PASSWORD:?Need env: ZABBIX_PASSWORD}"
+      POSTGRES_USER: "zabbix"
+      ZBX_SERVER_HOST: "zabbix-server-${TAG:?Need env: TAG}"
     ports:
-      - "8080:8080"
+      - "${ZABBIX_WEB_PORT:-8080}:8080"
 
   zabbix-server:
     image: "docker.io/zabbix/zabbix-server-pgsql:${TAG:?Need env: TAG}"
+    hostname: "zabbix-server-${TAG:?Need env: TAG}"
     depends_on:
       - "db"
     environment:
-      - "DB_SERVER_HOST=db"
-      - "POSTGRES_DB=zabbix"
-      - "POSTGRES_PASSWORD=${ZABBIX_PASSWORD:?Need env: ZABBIX_PASSWORD}"
-      - "POSTGRES_USER=zabbix"
+      DB_SERVER_HOST: "db-${TAG:?Need env: TAG}"
+      POSTGRES_DB: "zabbix"
+      POSTGRES_PASSWORD: "${ZABBIX_PASSWORD:?Need env: ZABBIX_PASSWORD}"
+      POSTGRES_USER: "zabbix"
     ports:
-      - "10051:10051"
+      - "${ZABBIX_SERVER_PORT:-10051}:10051"
+
+networks:
+  default:
+    name: "zabbix_auto_config"
+    external: true
