@@ -444,3 +444,21 @@ def test_dbsettings_extra_kwargs() -> None:
     assert db.extra_kwargs() == snapshot(
         {"sslmode": "require", "passfile": "/path/to/passfile"}
     )
+
+
+def test_dbtablesettings_duplicate_names() -> None:
+    """Test DBTableSettings with duplicate names."""
+    with pytest.raises(ValueError, match="Duplicate table name: hosts"):
+        models.DBTableSettings(
+            hosts="hosts",
+            hosts_source="hosts",
+        )
+
+
+def test_dbtablesettings_empty_name() -> None:
+    """Test DBTableSettings with empty name."""
+    with pytest.raises(ValueError, match="empty"):
+        models.DBTableSettings(
+            hosts="",
+            hosts_source="hosts_source",
+        )

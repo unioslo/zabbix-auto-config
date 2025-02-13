@@ -148,6 +148,21 @@ class DBTableSettings(ConfigBaseModel):
     hosts: str = Field(default="hosts")
     hosts_source: str = Field(default="hosts_source")
 
+    @model_validator(mode="after")
+    def _validate_table_names(self) -> Self:
+        """Ensure table names are not empty."""
+        names: Set[str] = set()
+        for field in self.model_fields:
+            name = getattr(self, field)
+            if not name:
+                raise ValueError(
+                    f"Config option `zac.db.tables.{field}` cannot be empty"
+                )
+            if name in names:
+                raise ValueError(f"Duplicate table name: {name!r}")
+            names.add(name)
+        return self
+
 
 class DBInitSettings(ConfigBaseModel):
     db: bool = Field(default=False)
