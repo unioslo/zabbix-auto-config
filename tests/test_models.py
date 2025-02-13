@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 
 import pytest
+from inline_snapshot import snapshot
 from pydantic import ValidationError
 from zabbix_auto_config import models
 
@@ -118,6 +119,9 @@ def test_host_merge_invalid(full_hosts):
         h1.merge(object())
 
 
+DEFAULT_DB_SETTINGS = models.DBSettings(user="zabbix", password="secret")
+
+
 @pytest.mark.parametrize(
     "level,expect",
     [
@@ -134,9 +138,9 @@ def test_host_merge_invalid(full_hosts):
 @pytest.mark.parametrize("upper", [True, False])
 def test_zacsettings_log_level_str(level: str, expect: int, upper: bool) -> None:
     settings = models.ZacSettings(
-        db_uri="",
         source_collector_dir="",
         host_modifier_dir="",
+        db=DEFAULT_DB_SETTINGS,
         log_level=level.upper() if upper else level.lower(),
     )
     assert settings.log_level == expect
@@ -157,9 +161,9 @@ def test_zacsettings_log_level_str(level: str, expect: int, upper: bool) -> None
 )
 def test_zacsettings_log_level_int(level: str, expect: int) -> None:
     settings = models.ZacSettings(
-        db_uri="",
         source_collector_dir="",
         host_modifier_dir="",
+        db=DEFAULT_DB_SETTINGS,
         log_level=level,
     )
     assert settings.log_level == expect
@@ -167,7 +171,10 @@ def test_zacsettings_log_level_int(level: str, expect: int) -> None:
 
 def test_zacsettings_log_level_serialize() -> None:
     settings = models.ZacSettings(
-        db_uri="", source_collector_dir="", host_modifier_dir="", log_level=logging.INFO
+        source_collector_dir="",
+        host_modifier_dir="",
+        db=DEFAULT_DB_SETTINGS,
+        log_level=logging.INFO,
     )
     assert settings.log_level == logging.INFO == 20  # sanity check
 
@@ -218,3 +225,240 @@ def test_failure_strategy_supports_error_tolerance() -> None:
             assert strategy.supports_error_tolerance()
         else:
             assert not strategy.supports_error_tolerance()
+
+
+def _get_zac_settings(config: models.Settings, db_uri: str) -> models.ZacSettings:
+    return models.ZacSettings(
+        source_collector_dir=config.zac.source_collector_dir,
+        host_modifier_dir=config.zac.host_modifier_dir,
+        log_level=config.zac.log_level,
+        db_uri=db_uri,
+        # Omit DBSettings
+    )
+
+
+def test_zacsettings_db_uri_all(config: models.Settings):
+    """Parse a PostgreSQL connection string with all args."""
+    settings = _get_zac_settings(
+        config,
+        "dbname='zac' user='zabbix' host='localhost' password='secret' port=5432 connect_timeout=2",
+    )
+
+    assert settings.db.model_dump(mode="json") == snapshot(
+        {
+            "user": "zabbix",
+            "password": "secret",
+            "dbname": "zac",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 2,
+            "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+            "init": {"db": True, "tables": True},
+        }
+    )
+
+    assert settings.db.get_connect_kwargs() == snapshot(
+        {
+            "dbname": "zac",
+            "user": "zabbix",
+            "password": "secret",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 2,
+        }
+    )
+
+
+def test_zacsettings_db_uri_only_required(config: models.Settings):
+    """Parse a PostgreSQL connection string with only required args."""
+    settings = _get_zac_settings(
+        config,
+        "user='zabbix' password='secret'",
+    )
+
+    assert settings.db.model_dump(mode="json") == snapshot(
+        {
+            "user": "zabbix",
+            "password": "secret",
+            "dbname": "zac",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 5,
+            "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+            "init": {"db": True, "tables": True},
+        }
+    )
+
+    assert settings.db.get_connect_kwargs() == snapshot(
+        {
+            "dbname": "zac",
+            "user": "zabbix",
+            "password": "secret",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 5,
+        }
+    )
+
+
+def test_zacsettings_db_uri_extra(config: models.Settings):
+    """Parse a PostgreSQL connection string with all args + extra args."""
+    settings = _get_zac_settings(
+        config,
+        "dbname='zac' user='zabbix' host='localhost' password='secret' port=5432 connect_timeout=2",
+    )
+
+    assert settings.db.model_dump(mode="json") == snapshot(
+        {
+            "user": "zabbix",
+            "password": "secret",
+            "dbname": "zac",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 2,
+            "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+            "init": {"db": True, "tables": True},
+        }
+    )
+
+    assert settings.db.get_connect_kwargs() == snapshot(
+        {
+            "dbname": "zac",
+            "user": "zabbix",
+            "password": "secret",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 2,
+        }
+    )
+
+
+def test_zacsettings_db_uri_empty_values_and_extras(config: models.Settings):
+    """Parse a PostgreSQL connection string with some empty values and extra kwargs."""
+    settings = _get_zac_settings(
+        config,
+        "user='zabbix' password='' sslmode='require' passfile='/path/to/passfile'",
+    )
+
+    assert settings.db.model_dump(mode="json") == snapshot(
+        {
+            "user": "zabbix",
+            "password": "",
+            "dbname": "zac",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 5,
+            "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+            "init": {"db": True, "tables": True},
+            "sslmode": "require",
+            "passfile": "/path/to/passfile",
+        }
+    )
+
+    assert settings.db.get_connect_kwargs() == snapshot(
+        {
+            "dbname": "zac",
+            "user": "zabbix",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 5,
+            "sslmode": "require",
+            "passfile": "/path/to/passfile",
+        }
+    )
+
+
+def test_zacsettings_db_uri_missing_all(config: models.Settings):
+    """Parse a PostgreSQL connection string with no args."""
+    settings = _get_zac_settings(
+        config,
+        "",
+    )
+
+    assert settings.db.model_dump(mode="json") == snapshot(
+        {
+            "user": "",
+            "password": "",
+            "dbname": "zac",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 2,
+            "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+            "init": {"db": True, "tables": True},
+        }
+    )
+
+    assert settings.db.get_connect_kwargs() == snapshot(
+        {"dbname": "zac", "host": "localhost", "port": 5432, "connect_timeout": 2}
+    )
+
+
+def test_zacsettings_dbsettings(config: models.Settings) -> None:
+    """Test ZacSettings with DBSettings."""
+    config.zac.db = models.DBSettings(
+        user="zac",
+        password="secret",
+        dbname="zac",
+        host="localhost",
+        port=5432,
+        connect_timeout=2,
+        # Extra kwargs
+        sslmode="require",
+        passfile="/path/to/passfile",
+    )
+
+    assert config.zac.db.get_connect_kwargs() == snapshot(
+        {
+            "dbname": "zac",
+            "user": "zac",
+            "password": "secret",
+            "host": "localhost",
+            "port": 5432,
+            "connect_timeout": 2,
+            "sslmode": "require",
+            "passfile": "/path/to/passfile",
+        }
+    )
+
+
+def test_dbsettings_extra_kwargs() -> None:
+    """Test DBSettings with extra kwargs."""
+    db = models.DBSettings(
+        user="zac",
+        password="secret",
+        dbname="zac",
+        host="localhost",
+        port=5432,
+        connect_timeout=2,
+        # Extra kwargs (included)
+        sslmode="require",
+        passfile="/path/to/passfile",
+        # Extra kwargs (ignored)
+        dict_kwarg={"extra": "value"},
+        list_kwarg=["extra", "value"],
+        tuple_kwarg=("extra", "value"),
+        set_kwarg={"extra", "value"},
+        none_kwarg=None,
+    )
+
+    assert db.extra_kwargs() == snapshot(
+        {"sslmode": "require", "passfile": "/path/to/passfile"}
+    )
+
+
+def test_dbtablesettings_duplicate_names() -> None:
+    """Test DBTableSettings with duplicate names."""
+    with pytest.raises(ValueError, match="Duplicate table name: 'hosts'"):
+        models.DBTableSettings(
+            hosts="hosts",
+            hosts_source="hosts",
+        )
+
+
+def test_dbtablesettings_empty_name() -> None:
+    """Test DBTableSettings with empty name."""
+    with pytest.raises(ValueError, match="empty"):
+        models.DBTableSettings(
+            hosts="",
+            hosts_source="hosts_source",
+        )

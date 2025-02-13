@@ -46,9 +46,8 @@ def test_zabbixupdater_connect_timeout(
     with pytest.raises(exceptions.ZACException) as exc_info:
         ZabbixUpdater(
             name="connect-timeout",
-            db_uri="",
             state=get_manager().State(),
-            settings=config,
+            config=config,
         )
     assert "connect timeout" in exc_info.exconly()
 
@@ -72,9 +71,8 @@ def test_zabbixupdater_read_timeout(
     )
     process = TimeoutUpdater(
         name="read-timeout",
-        db_uri="",
         state=get_manager().State(),
-        settings=config,
+        config=config,
     )
 
     # Start the process and wait for it to be marked as unhealthy

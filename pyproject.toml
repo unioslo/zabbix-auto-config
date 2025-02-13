@@ -65,6 +65,8 @@ exclude = ["/.github", "/tests", "/path"]
 [tool.hatch.build.targets.wheel]
 packages = ["zabbix_auto_config"]
 
+[tool.inline-snapshot]
+format-command = "ruff format --stdin-filename {filename}"
 
 [tool.pyright]
 pythonVersion = "3.9"
@@ -73,7 +75,6 @@ pythonVersion = "3.9"
 # Same as Black.
 line-length = 88
 src = ["zabbix_auto_config"]
-extend-exclude = ["zabbix_auto_config/__init__.py"]
 extend-include = [
     "pyproject.toml",
     "zabbix_auto_config/**/*.py",

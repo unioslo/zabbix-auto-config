@@ -21,6 +21,7 @@ from zabbix_auto_config._types import HostModifier
 from zabbix_auto_config._types import HostModifierModule
 from zabbix_auto_config._types import SourceCollector
 from zabbix_auto_config._types import SourceCollectorModule
+from zabbix_auto_config.db import init_db
 from zabbix_auto_config.health import write_health
 from zabbix_auto_config.state import get_manager
 
@@ -130,6 +131,9 @@ def main() -> None:
     stop_event = multiprocessing.Event()
     state_manager = get_manager()
 
+    # Ensure database and tables exist
+    init_db(config)
+
     # Import host modifier and source collector modules
     host_modifiers = get_host_modifiers(config.zac.host_modifier_dir)
     source_collectors = get_source_collectors(config)
@@ -144,6 +148,7 @@ def main() -> None:
         process: processing.BaseProcess = processing.SourceCollectorProcess(
             source_collector.name,
             state_manager.State(),
+            config,
             source_collector.module,
             source_collector.config,
             source_hosts_queue,
@@ -155,31 +160,28 @@ def main() -> None:
         processing.SourceHandlerProcess(
             "source-handler",
             state_manager.State(),
-            config.zac.db_uri,
+            config,
             source_hosts_queues,
         ),
         processing.SourceMergerProcess(
             "source-merger",
             state_manager.State(),
-            config.zac.db_uri,
+            config,
             host_modifiers,
         ),
         processing.ZabbixHostUpdater(
             "zabbix-host-updater",
             state_manager.State(),
-            config.zac.db_uri,
             config,
         ),
         processing.ZabbixHostgroupUpdater(
             "zabbix-hostgroup-updater",
             state_manager.State(),
-            config.zac.db_uri,
             config,
         ),
         processing.ZabbixTemplateUpdater(
             "zabbix-template-updater",
             state_manager.State(),
-            config.zac.db_uri,
             config,
         ),
     ]
@@ -190,7 +192,6 @@ def main() -> None:
             processing.ZabbixGarbageCollector(
                 "zabbix-garbage-collector",
                 state_manager.State(),
-                config.zac.db_uri,
                 config,
             )
         )
@@ -204,7 +205,7 @@ def main() -> None:
             pr.start()
         except Exception as e:
             logging.error("Unable to start process %s: %s", pr.name, e)
-            stop_event.set()  # Stop other proceses immediately
+            stop_event.set()  # Stop other processes immediately
             break
 
     with processing.SignalHandler(stop_event):
