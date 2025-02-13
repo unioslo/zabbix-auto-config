@@ -41,6 +41,20 @@ port = 5432
 # Connection timeout in seconds
 connect_timeout = 2
 
+# Extra kwargs are passed to psycopg2.connect.
+# See: https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS
+# passfile = "/path/to/.pgpass" # Use a password file for authentication
+# sslmode = "require" # Require SSL connection
+# etc.
+
+# Database initialization settings
+[zac.db.init]
+# Create `dbname` database if it does not exist (requires superuser privileges)
+db = true
+
+# Create tables if they do not exist
+tables = true
+
 
 [zac.db.tables]
 # Merged host data table
