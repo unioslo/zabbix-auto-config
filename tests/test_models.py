@@ -253,7 +253,7 @@ def test_zacsettings_db_uri_all(config: models.Settings):
             "port": 5432,
             "connect_timeout": 2,
             "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
-            "init": {"db": False, "tables": True},
+            "init": {"db": True, "tables": True},
         }
     )
 
@@ -285,7 +285,7 @@ def test_zacsettings_db_uri_only_required(config: models.Settings):
             "port": 5432,
             "connect_timeout": 5,
             "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
-            "init": {"db": False, "tables": True},
+            "init": {"db": True, "tables": True},
         }
     )
 
@@ -317,7 +317,7 @@ def test_zacsettings_db_uri_extra(config: models.Settings):
             "port": 5432,
             "connect_timeout": 2,
             "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
-            "init": {"db": False, "tables": True},
+            "init": {"db": True, "tables": True},
         }
     )
 
@@ -349,7 +349,7 @@ def test_zacsettings_db_uri_empty_values_and_extras(config: models.Settings):
             "port": 5432,
             "connect_timeout": 5,
             "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
-            "init": {"db": False, "tables": True},
+            "init": {"db": True, "tables": True},
             "sslmode": "require",
             "passfile": "/path/to/passfile",
         }
@@ -384,7 +384,7 @@ def test_zacsettings_db_uri_missing_all(config: models.Settings):
             "port": 5432,
             "connect_timeout": 2,
             "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
-            "init": {"db": False, "tables": True},
+            "init": {"db": True, "tables": True},
         }
     )
 
@@ -448,7 +448,7 @@ def test_dbsettings_extra_kwargs() -> None:
 
 def test_dbtablesettings_duplicate_names() -> None:
     """Test DBTableSettings with duplicate names."""
-    with pytest.raises(ValueError, match="Duplicate table name: hosts"):
+    with pytest.raises(ValueError, match="Duplicate table name: 'hosts'"):
         models.DBTableSettings(
             hosts="hosts",
             hosts_source="hosts",
