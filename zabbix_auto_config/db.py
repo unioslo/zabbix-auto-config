@@ -29,14 +29,15 @@ def get_connection(
 
 
 @contextmanager
-def guard_init(
+def init_resource(
     resource: str, exc_type: Type[Exception] = psycopg2.Error
 ) -> Generator[None, None, None]:
-    """Guard a block of code that initializes a resource from propagating exception."""
+    """Initialize a resource, optionally guarding it from propagating exception."""
     try:
         yield
     except exc_type as e:
         logger.error("Failed to initialize %s: %s", resource, e)
+        raise ZACException(f"Failed to initialize {resource}: {e}") from e
 
 
 class PostgresDBInitializer:
@@ -47,12 +48,12 @@ class PostgresDBInitializer:
         """Initialize database and tables idempotently."""
         # Create the database if it doesn't exist
         if self.config.zac.db.init.db:
-            with guard_init("database"):
+            with init_resource("database"):
                 self._init_db()
 
         # Create tables if they don't exist
         if self.config.zac.db.init.tables:
-            with guard_init("tables"):
+            with init_resource("tables"):
                 self._init_tables()
 
     def _zac_db_exists(self) -> bool:
