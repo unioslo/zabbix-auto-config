@@ -165,8 +165,13 @@ class DBTableSettings(ConfigBaseModel):
 
 
 class DBInitSettings(ConfigBaseModel):
-    db: bool = Field(default=False)
+    """Settings for controlling database initialization."""
+
+    db: bool = Field(default=True)
+    """Create the database if it doesn't exist."""
+
     tables: bool = Field(default=True)
+    """Create tables if they don't exist."""
 
 
 class DBSettings(ConfigBaseModel):
@@ -248,7 +253,7 @@ class ZacSettings(ConfigBaseModel):
             PostgresConnectionParams containing the parsed connection parameters
 
         Example:
-            >>> # NOTE: For illustration only, should not be called directly.
+            >>> # NOTE: For illustration only, should not be called outside of validator.
             >>> self._db_uri_to_db_settings(
             ...     "dbname='mydb' user='user' host='localhost'"
             ... )

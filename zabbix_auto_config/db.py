@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
+from typing import Generator
 from typing import Optional
+from typing import Type
 
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
@@ -25,22 +28,51 @@ def get_connection(
     return psycopg2.connect(**kwargs)
 
 
+@contextmanager
+def guard_init(
+    resource: str, exc_type: Type[Exception] = psycopg2.Error
+) -> Generator[None, None, None]:
+    """Guard a block of code that initializes a resource from propagating exception."""
+    try:
+        yield
+    except exc_type as e:
+        logger.error("Failed to initialize %s: %s", resource, e)
+
+
 class PostgresDBInitializer:
     def __init__(self, config: Settings) -> None:
         self.config = config
 
-    def init_db(self) -> None:
+    def init(self) -> None:
         """Initialize database and tables idempotently."""
         # Create the database if it doesn't exist
         if self.config.zac.db.init.db:
-            self._init_db()
+            with guard_init("database"):
+                self._init_db()
 
         # Create tables if they don't exist
         if self.config.zac.db.init.tables:
-            self._init_tables()
+            with guard_init("tables"):
+                self._init_tables()
+
+    def _zac_db_exists(self) -> bool:
+        try:
+            with get_connection(self.config.zac.db):
+                logger.debug("ZAC database '%s' exists", self.config.zac.db.dbname)
+        except psycopg2.Error as e:
+            logger.debug(
+                "Failed to connect to database '%s', will try to create. Error: %s",
+                self.config.zac.db.dbname,
+                e,
+            )
+            return False
+        return True
 
     def _init_db(self) -> None:
         """Create the database if it doesn't exist."""
+        if self._zac_db_exists():
+            return
+
         # Cannot create a database inside a transaction block (no with statement)
         conn = get_connection(self.config.zac.db, dbname="postgres")
         try:
@@ -54,7 +86,7 @@ class PostgresDBInitializer:
                 )
                 exists = cur.fetchone()
 
-                if not exists:
+                if not exists:  # should exist given _zac_db_exists()
                     logger.debug("Creating database %s", self.config.zac.db.dbname)
                     cur.execute(f"CREATE DATABASE {self.config.zac.db.dbname}")
         finally:
@@ -95,6 +127,6 @@ def init_db(config: Settings) -> None:
     """
     initializer = PostgresDBInitializer(config)
     try:
-        initializer.init_db()
+        initializer.init()
     except psycopg2.Error as e:
         raise ZACException(f"Error initializing database: {e}") from e

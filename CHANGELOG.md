@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `host`: Database hostname. Defaults to `localhost`
   - `port`: Database port. Defaults to `5432`
   - `connect_timeout`: Connection timeout in seconds. Defaults to `5`
+- `[zac.db.init]` section to configure automatic database initialization. This section has the following fields:
+  - `db`: Initialize the database. Defaults to `true`
+  - `tables`: Initialize the tables. Defaults to `true`
+- `[zac.db.tables]` section to configure the table names. This section has the following fields:
+  - `hosts`: Merged hosts table. Defaults to `hosts`
+  - `hosts_source`: Source hosts table. Defaults to `hosts_source`
 
 ### Changed
 
