@@ -16,11 +16,32 @@ This is a crash course in how to quickly get this application up and running in 
 
 ### Zabbix test instance
 
-Setup a Zabbix test instance with [podman](https://podman.io/) and [podman-compose](https://github.com/containers/podman-compose/).
+Zabbix-auto-config requires a Linux environment to run. The easiest way to set up a development environment is to use the provided Visual Studio Code Development Container[^1][^2] configuration.
+We use [uv](https://docs.astral.sh/uv/getting-started/installation/) to manage the development environment.
+
+The dev container configuration starts up the following containers:
+
+* Zabbix server
+* Zabbix web server
+* PostgreSQL database
+* Development container with Zabbix-auto-config installed
+
+[^1]: <https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers>
+[^2]: <https://code.visualstudio.com/docs/devcontainers/containers>
+
+The development environment can be started via the [Visual Studio Code Remote - Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension. The extension will automatically detect the `.devcontainer` directory and prompt you to open the project in a container.
+
+The Zabbix version to target, as well as other settings, can be configured in the [`.env`](./.env) file.
+
+#### Non-containerized development
+
+If you are on a Linux machine and prefer not to develop inside a container, you can start the required services with Docker/Podman Compose:
 
 ```bash
-TAG=7.0-ubuntu-latest ZABBIX_PASSWORD=secret podman-compose up -d
+podman-compose up -d
 ```
+
+See [Development](#development) for more information on how to set up a local development environment beyond starting the required services.
 
 ### Zabbix prerequisites
 
@@ -46,24 +67,33 @@ For automatic linking in templates you could create the templates:
 
 ### Database
 
-The application requires a PostgreSQL database to store the state of the collected hosts. The database can be created with the following command from your local machine:
+The application requires a PostgreSQL database to store the state of the collected hosts. The database and tables are created automatically on the first run of the application provided that the database connection is configured correctly in `config.toml`:
 
-```bash
-PGPASSWORD=secret psql -h localhost -U postgres -p 5432 -U zabbix << EOF
-CREATE DATABASE zac;
-\c zac
-CREATE TABLE hosts (
-    data jsonb
-);
-CREATE TABLE hosts_source (
-    data jsonb
-);
-EOF
+```toml
+[zac.db]
+user = "zabbix"
+password = "secret"
+dbname = "zac"
+host = "localhost"
+port = 5432
+connect_timeout = 2
+
+# Extra kwargs are passed to psycopg2.connect.
+# See: https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS
+# passfile = "/path/to/.pgpass" # Use a password file for authentication
+# sslmode = "require" # Require SSL connection
+# etc.
+
+[zac.db.init]
+db = true
+tables = true
+
+[zac.db.tables]
+hosts = "hosts"
+hosts_source = "hosts_source"
 ```
 
-If running from inside a dev container, replace the host (`-h`) with the container name of the database container (default: `db`).
-
-This is a one-time procedure per environment.
+Creation of the `zac` database requires superuser privileges. If the ZAC user does not have superuser privileges, the `zac` database must be created manually.
 
 ### Application
 
@@ -75,7 +105,9 @@ Clone the repository:
 git clone https://github.com/unioslo/zabbix-auto-config.git
 ```
 
-#### uv
+Thereafter, the application can be installed with `uv` or `pip`
+
+#### uv (recommended)
 
 In order to get the exact dependencies from the lock file, it's recommended to install the application with `uv sync`:
 
@@ -393,6 +425,10 @@ update_interval = 3600 # Run every hour
 
 ### Development
 
+Following the instructions in [Quick start](#quick-start) will get you up and running with a local development environment where all dependencies are installed and ready to use. If you choose not to use the provided Visual Studio Code Development Container, you can set up the development environment manually. Here's how.
+
+#### Local development environment
+
 We use [uv](https://docs.astral.sh/uv/getting-started/installation/) to manage the development environment. The following instructions assume that you have uv installed.
 
 Install the development dependencies:
@@ -401,7 +437,7 @@ Install the development dependencies:
 uv sync
 ```
 
-Optionally also activate the virtual environment:
+Activate the virtual environment:
 
 ```bash
 . .venv/bin/activate
@@ -412,13 +448,13 @@ Optionally also activate the virtual environment:
 Run unit tests with:
 
 ```bash
-uv run pytest
+pytest
 ```
 
 In order to update snapshots, run:
 
 ```bash
-uv run pytest --inline-snapshot=review
+pytest --inline-snapshot=review
 ```
 
 #### Pre-commit

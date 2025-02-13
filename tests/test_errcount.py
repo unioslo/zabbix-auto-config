@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import operator
 import time
-from typing import Callable
+from typing import Any
 
 import pytest
 from zabbix_auto_config.errcount import Error
@@ -121,22 +121,29 @@ def test_error_comparison():
     assert err1 == err1
     assert err2 == err2
 
-    def test_type_error(
-        op: Callable[[object, object], bool], obj1: object, obj2: object
-    ):
-        # Test inside function so we get better introspection on failure
-        with pytest.raises(TypeError) as exc_info:
-            op(obj1, obj2)
-        assert "Can't compare Error" in str(exc_info.value)
 
-    operators = [
-        operator.lt,
-        operator.le,
-        operator.eq,
-        operator.ne,
-        operator.ge,
-        operator.gt,
-    ]
-    # Comparison of Error with non-Error
-    for op in operators:
-        test_type_error(op, err1, "foo")
+@pytest.mark.parametrize(
+    "op",
+    [
+        pytest.param(operator.eq, id="eq"),
+        pytest.param(operator.ne, id="ne"),
+        pytest.param(
+            operator.lt, marks=pytest.mark.xfail(raises=TypeError, strict=True), id="lt"
+        ),
+        pytest.param(
+            operator.le, marks=pytest.mark.xfail(raises=TypeError, strict=True), id="le"
+        ),
+        pytest.param(
+            operator.ge, marks=pytest.mark.xfail(raises=TypeError, strict=True), id="ge"
+        ),
+        pytest.param(
+            operator.gt, marks=pytest.mark.xfail(raises=TypeError, strict=True), id="gt"
+        ),
+    ],
+)
+def test_error_comparison_non_error(op: Any) -> None:
+    """Comparison of Error with non-Error."""
+    e = Error(timestamp=datetime.datetime(2020, 1, 1, 0, 0, 0))
+
+    op(e, "foo")
+    op(e, 1)

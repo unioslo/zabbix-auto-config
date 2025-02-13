@@ -15,11 +15,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `disable_duration > 0`: Disable the source collector for a set duration.
   - `disable_duration < 0`: Never disable, never increase the update interval.
   - `exit_on_error` takes precedence over `disable_duration`. If `exit_on_error` is set to `true`, the source collector will exit on error regardless of the `disable_duration` setting.
+- `zabbix.verify_ssl` option to control SSL certificate verification for Zabbix API connections. Can be a boolean or a path to a CA bundle. Defaults to `true`.
+- Automatic DB and table creation on startup if they do not exist.
+- `zac.db` section for configuring the database connection. This section replaces the deprecated `zac.db_uri` option. If the `zac.db` section is required if no legacy `zac.db_uri` option is set. If both are set, the `zac.db` section takes precedence. Its fields are:
+  - `dbname`: Database name. Defaults to `zac`
+  - `user`: User to authenticate as. Required
+  - `password`: Password to authenticate with. Required
+  - `host`: Database hostname. Defaults to `localhost`
+  - `port`: Database port. Defaults to `5432`
+  - `connect_timeout`: Connection timeout in seconds. Defaults to `5`
+- `[zac.db.init]` section to configure automatic database initialization. This section has the following fields:
+  - `db`: Initialize the database. Defaults to `true`
+  - `tables`: Initialize the tables. Defaults to `true`
+- `[zac.db.tables]` section to configure the table names. This section has the following fields:
+  - `hosts`: Merged hosts table. Defaults to `hosts`
+  - `hosts_source`: Source hosts table. Defaults to `hosts_source`
 
 ### Changed
 
 - The default value of `exit_on_error` for source collectors is now `false`.
 - The default value of `disable_duration` for source collectors is now `0`. This means that the source collector will use exponential backoff to increase the update interval on error.
+
+### Fixed
+
+- `zabbix.timeout` option now correctly disables timeout when set to `0` instead of setting a timeout of 0 seconds, thereby causing instant connection timeouts.
+
+### Deprecated
+
+- `zac.db_uri` option. Prefer to use the new `zac.db` section instead.
 
 ## [0.2.0](https://github.com/unioslo/zabbix-auto-config/releases/tag/zac-v0.2.0)
 

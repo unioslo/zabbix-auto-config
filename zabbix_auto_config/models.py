@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import re
+import warnings
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -62,6 +64,8 @@ class ZabbixSettings(ConfigBaseModel):
         description="The timeout in seconds for HTTP requests to Zabbix.",
         ge=0,
     )
+    verify_ssl: Union[bool, Path] = True
+    """Path to a CA bundle file or `True` to use the system's CA bundle. False to disable SSL verification."""
 
     tags_prefix: str = "zac_"
     managed_inventory: List[str] = []
@@ -140,16 +144,152 @@ class ProcessesSettings(ConfigBaseModel):
     )
 
 
+class DBTableSettings(ConfigBaseModel):
+    hosts: str = Field(default="hosts")
+    hosts_source: str = Field(default="hosts_source")
+
+    @model_validator(mode="after")
+    def _validate_table_names(self) -> Self:
+        """Ensure table names are not empty."""
+        names: Set[str] = set()
+        for field in self.model_fields:
+            name = getattr(self, field)
+            if not name:
+                raise ValueError(
+                    f"Config option `zac.db.tables.{field}` cannot be empty"
+                )
+            if name in names:
+                raise ValueError(f"Duplicate table name: {name!r}")
+            names.add(name)
+        return self
+
+
+class DBInitSettings(ConfigBaseModel):
+    """Settings for controlling database initialization."""
+
+    db: bool = Field(default=True)
+    """Create the database if it doesn't exist."""
+
+    tables: bool = Field(default=True)
+    """Create tables if they don't exist."""
+
+
+class DBSettings(ConfigBaseModel):
+    """Settings for the database connection."""
+
+    user: str = Field(default="")
+    password: str = Field(default="")
+    dbname: str = Field(default="zac")
+    host: str = Field(default="localhost")
+    port: int = Field(default=5432)
+    connect_timeout: int = Field(default=2)
+
+    # Table names
+    tables: DBTableSettings = Field(default_factory=DBTableSettings)
+    # Initialization settings
+    init: DBInitSettings = Field(default_factory=DBInitSettings)
+
+    # ZacSettings Validator mutates model, check assigned values
+    model_config = ConfigDict(
+        # Validate values assigned by ZacSettings validator
+        validate_assignment=True,
+        # Pass extra keys to psycopg2.connect as kwargs
+        extra="allow",
+    )
+
+    def get_connect_kwargs(self) -> Dict[str, Any]:
+        """Return kwargs for psycopg2.connect.
+
+        Only include non-empty values."""
+        kwargs = {
+            "dbname": self.dbname,
+            "user": self.user,
+            "password": self.password,
+            "host": self.host,
+            "port": self.port,
+            "connect_timeout": self.connect_timeout,
+            **self.extra_kwargs(),
+        }
+        return {k: v for k, v in kwargs.items() if v}
+
+    def extra_kwargs(self) -> Dict[str, Any]:
+        """Return extra kwargs for psycopg2.connect."""
+        extra: Dict[str, Any] = {}
+        if not self.model_extra:
+            return extra
+        for k, v in self.model_extra.items():
+            # Only support top-level [zac.db] keys, no nesting, no containers, no None
+            if not isinstance(v, (str, int, float, bool)):
+                continue
+            # Should not contain any of the model fields
+            if k in self.model_fields:
+                continue
+            extra[k] = v
+        return extra
+
+
 class ZacSettings(ConfigBaseModel):
     source_collector_dir: str
     host_modifier_dir: str
-    db_uri: str
     log_level: int = Field(logging.INFO, description="The log level to use.")
     health_file: Optional[Path] = None
     failsafe_file: Optional[Path] = None
     failsafe_ok_file: Optional[Path] = None
     failsafe_ok_file_strict: bool = True
+    db: DBSettings = DBSettings()
     process: ProcessesSettings = ProcessesSettings()
+
+    # Deprecated options
+    db_uri: str = Field(default="", deprecated=True)
+
+    def _db_uri_to_db_settings(self, uri: str) -> None:
+        """Parse a PostgreSQL libpq connection string into structured parameters.
+
+        Args:
+            uri: A PostgreSQL connection string in libpq format
+                (e.g., "dbname='mydb' user='user' host='localhost'")
+
+        Returns:
+            PostgresConnectionParams containing the parsed connection parameters
+
+        Example:
+            >>> # NOTE: For illustration only, should not be called outside of validator.
+            >>> self._db_uri_to_db_settings(
+            ...     "dbname='mydb' user='user' host='localhost'"
+            ... )
+            >>> self.db.user
+            'user'
+            >>> self.db.password
+            'password'
+        """
+        # Pattern matches key='value' or key=value pairs
+        pattern = r"(\w+)\s*=\s*(?:'([^']*)'|(\d+))"
+        matches = re.findall(pattern, uri)
+
+        # Combine quoted and unquoted values, preferring quoted
+        params = {match[0]: match[1] or match[2] for match in matches}
+
+        self.db.user = params.pop("user", "")
+        self.db.password = params.pop("password", "")
+        self.db.dbname = params.pop("dbname", "zac")
+        self.db.host = params.pop("host", "localhost")
+        self.db.port = params.pop("port", 5432)
+        self.db.connect_timeout = params.pop("connect_timeout", 5)
+
+        if params:
+            for key, value in params.items():
+                # Set any remaining parameters as attributes on the DBSettings object
+                setattr(self.db, key, value)
+
+    # NOTE: remove this validator when db_uri is removed
+    @model_validator(mode="after")
+    def _require_db_or_db_uri(self) -> Self:
+        """Compatibility layer for supporting legacy `db_uri` setting."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # ignore warnings in this block
+            if self.db_uri:
+                self._db_uri_to_db_settings(self.db_uri)
+        return self
 
     @field_validator("health_file", "failsafe_file", "failsafe_ok_file", mode="after")
     @classmethod
