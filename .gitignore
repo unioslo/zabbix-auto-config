@@ -20,6 +20,9 @@ _venv/
 .ruff_cache/
 .hypothesis/
 
+# Dev files
+.dev/
+
 # Old example files (before #105)
 path/to/
 
