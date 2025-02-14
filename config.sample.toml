@@ -1,9 +1,9 @@
 [zac]
 # Directory containing the source collector modules.
-source_collector_dir = "path/to/source_collector_dir/"
+source_collector_dir = "example/source_collectors/"
 
 # Directory containing the host modifier modules.
-host_modifier_dir = "path/to/host_modifier_dir/"
+host_modifier_dir = "example/host_modifiers/"
 
 # Log level for the application.
 log_level = "INFO"
@@ -35,7 +35,7 @@ password = "secret"
 dbname = "zac"
 
 # Connection info
-host = "localhost"
+host = "db"
 port = 5432
 
 # Connection timeout in seconds
@@ -89,9 +89,9 @@ update_interval = 86400 # every 24 hours
 
 [zabbix]
 # Directory containing mapping files.
-map_dir = "path/to/map_dir/"
+map_dir = "example/mapping_files/"
 
-url = "http://localhost:8080"
+url = "http://zabbix-web-nginx:8080"
 username = "Admin"
 password = "zabbix"
 

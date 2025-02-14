@@ -31,7 +31,7 @@ def test_config_extra_field_allowed(
     config["foo"] = "bar"
 
     # Allow extra fields for this test
-    original_extra = models.Settings.model_config["extra"]
+    original_extra = models.Settings.model_config["extra"]  # pyright: ignore[reportTypedDictNotRequiredAccess]
     try:
         models.Settings.model_config["extra"] = "allow"
         models.Settings(**config)

@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-import zabbix_auto_config.models
+from zabbix_auto_config.models import Host
 
 HOSTS = [
     {
         "hostname": "foo.example.com",
+        "siteadmins": ["alice@example.com"],
     },
     {
         "hostname": "bar.example.com",
+        "siteadmins": ["bob@example.com"],
+    },
+    {
+        "hostname": "baz.example.com",
+        "siteadmins": ["charlie@example.com", "david@example.com"],
     },
 ]
 
@@ -16,10 +22,18 @@ def collect(*args, **kwargs):
     hosts = []
     for host in HOSTS:
         host["enabled"] = True
-        host["siteadmins"] = ["bob@example.com"]
         host["properties"] = ["pizza"]
-        source = kwargs.get("source")
-        if source:
-            host["properties"].append(source)
-        hosts.append(zabbix_auto_config.models.Host(**host))
+
+        # We can access arbitrary extra options from the config
+        # via the `kwargs` dict
+        kwarg_from_config = kwargs.get("kwarg_from_config")
+        if kwarg_from_config:
+            host["properties"].append(kwarg_from_config)
+
+        # Mark collected hosts as coming from "mysource"
+        host["source"] = "mysource"
+
+        # Only hostname and enabled are required.
+        # See `zabbix_auto_config.models.Host` for all available fields.
+        hosts.append(Host(**host))
     return hosts

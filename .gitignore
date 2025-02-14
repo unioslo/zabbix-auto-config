@@ -1,12 +1,30 @@
+
+# Dist and build
 *.egg-info/
+build/
+dist/
+
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
+
+# Venv
 .venv/
 venv/
-.vscode/
-.hypothesis/
-build/
+_venv/
 
+# IDE and Cache
+.vscode/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Dev files
+.dev/
+
+# Old example files (before #105)
 path/to/
+
+# Config file
 config.toml
-zabbix.yaml

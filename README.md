@@ -4,6 +4,14 @@ Zabbix-auto-config is a utility that aims to automatically configure hosts, host
 
 Note: Primarily tested with Zabbix 7.0 and 6.4, but should work with 6.0 and 5.2.
 
+## Features
+
+* Create and update hosts from various data sources
+* Link templates and add hosts to groups using mapping files
+* Manage host inventories, tags, and proxy assignments
+* Handle host lifecycle (disable inactive hosts)
+* Maintain and clean up host maintenance schedules
+
 ## Requirements
 
 * Python >=3.9
@@ -111,13 +119,13 @@ Thereafter, the application can be installed with `uv` or `pip`
 
 In order to get the exact dependencies from the lock file, it's recommended to install the application with `uv sync`:
 
-```
+```bash
 uv sync --no-dev
 ```
 
 #### pip
 
-```
+```bash
 pip install -e .
 ```
 
@@ -125,66 +133,18 @@ When installing from source, installing in editable mode is recommended, as it a
 
 #### Configuration (mock environment)
 
-A ZAC environment with a set of mock source collectors, host modifiers, and mapping files can be set up with the following commands:
+A ZAC environment with a set of mock source collectors, host modifiers, and mapping files is included in the [examples](./examples) directory. The [sample config file](./config.sample.toml) comes pre-configured with these source collectors, host modifiers and mapping files for the mock environment.
+
+Rename the sample config file to `config.toml` to use it:
 
 ```bash
 cp config.sample.toml config.toml
-sed -i 's/^dryrun = true$/dryrun = false/g' config.toml
-mkdir -p path/to/source_collector_dir/ path/to/host_modifier_dir/ path/to/map_dir/
-cat > path/to/source_collector_dir/mysource.py << EOF
-from typing import Any, List
-from zabbix_auto_config.models import Host
-
-HOSTS = [
-    {
-        "hostname": "foo.example.com",
-    },
-    {
-        "hostname": "bar.example.com",
-    },
-]
-
-
-def collect(*args: Any, **kwargs: Any) -> List[Host]:
-    hosts = []
-    for host in HOSTS:
-        host["enabled"] = True
-        host["siteadmins"] = ["bob@example.com"]
-        host["properties"] = ["pizza"]
-        source = kwargs.get("source")
-        if source:
-            host["properties"].append(source)
-        hosts.append(Host(**host))
-
-    return hosts
-
-
-if __name__ == "__main__":
-    # Print hosts as a JSON array when running standalone
-    from zabbix_auto_config.models import print_hosts
-    print_hosts(collect())
-EOF
-cat > path/to/host_modifier_dir/mod.py << EOF
-from zabbix_auto_config.models import Host
-
-def modify(host: Host) -> Host:
-    if host.hostname == "bar.example.com":
-        host.properties.add("barry")
-    return host
-EOF
-cat > path/to/map_dir/property_template_map.txt << EOF
-pizza:Template-pizza
-barry:Template-barry
-EOF
-cat > path/to/map_dir/property_hostgroup_map.txt << EOF
-other:Hostgroup-other-hosts
-EOF
-cat > path/to/map_dir/siteadmin_hostgroup_map.txt << EOF
-bob@example.com:Hostgroup-bob-hosts
-EOF
 ```
 
-This will create a new config file, set up a source collector, and create mapping files for siteadmins and properties to host groups and templates.
+> [!IMPORTANT]
+> Use copy instead of move to avoid local git repo changes.
+
+ZAC automatically sources `config.toml` from the current working directory when starting up.
 
 #### Running
 
@@ -243,7 +203,7 @@ A source collector module contains a function named `collect()` that returns a l
 Here's an example of a source collector module that reads hosts from a file:
 
 ```python
-# path/to/source_collector_dir/load_from_json.py
+# example/source_collectors/json_file_source.py
 
 import json
 from typing import Any, Dict, List
@@ -258,47 +218,34 @@ def collect(*args: Any, **kwargs: Any) -> List[Host]:
         return [Host(**host) for host in json.load(f)]
 ```
 
-A module is recognized as a source collector if it contains a `collect()` function that accepts an arbitrary number of arguments and keyword arguments and returns a list of `Host` objects. Type annotations are optional but recommended.
-
-We can also provide a `if __name__ == "__main__"` block to run the collector standalone. This is useful for testing the collector module without running the entire application.
-
-```py
-if __name__ == "__main__":
-    # Print hosts as a JSON array when running standalone
-    from zabbix_auto_config.models import print_hosts
-    print_hosts(collect())
-```
-
-If you wish to collect just the JSON output and write it to a file or otherwise manipulate it, you can import the `hosts_to_json` function from `zabbix_auto_config.models` and use it like this:
-
-```py
-if __name__ == "__main__":
-    from zabbix_auto_config.models import hosts_to_json
-    with open("output.json", "w") as f:
-        f.write(hosts_to_json(collect()))
-```
+A module is recognized by ZAC as a source collector if it contains a `collect()` function that accepts an arbitrary number of arguments and keyword arguments and returns a list of `Host` objects. Type annotations are optional but recommended.
 
 #### Configuration
 
-The configuration entry for loading a source collector module, like the `load_from_json.py` module above, includes both mandatory and optional fields. Here's how it can be configured:
+The configuration for loading a source collector module, like the `json_file_source.py` module above, includes both required and optional fields:
 
 ```toml
-[source_collectors.load_from_json]
-module_name = "load_from_json"
+[source_collectors.json_file_source]
+# Required
+module_name = "json_file_source"
 update_interval = 60
+
+# Optional
 error_tolerance = 5
 error_duration = 360
 exit_on_error = false
 disable_duration = 3600
-# Extra keyword arguments to pass to the collect function:
+
+# Extra keyword arguments to pass to the collect() function
 filename = "hosts.json"
+foo = "bar"
 ```
 
 Only the extra `filename` option is passed in as a kwarg to the `collect()` function.
 
 The following configurations options are available:
 
-#### Mandatory configuration
+#### Required configuration
 
 ##### module_name
 
@@ -366,12 +313,45 @@ Any extra config options specified in the configuration file will be passed to t
 
 Host modifiers are Python modules (files) that are placed in a directory defined by the option `host_modifier_dir` in the `[zac]` table of the config file. A host modifier is a module that contains a function named `modify` that takes a `Host` object as its only argument, modifies it, and returns it. Zabbix-auto-config will attempt to load all modules in the given directory.
 
+#### Running source collectors manually
+
+> [!NOTE]
+> Optional section - not required for basic operation
+
+A collector can optionally also provide a `if __name__ == "__main__"` block to provide an interface for running the collector in a standalone fashion. This is useful if you want to test the collector module without running the entire application, debug it, or use it in a different context.
+
+> [!IMPORTANT]
+> Running collectors standalone requires passing configuration manually as keyword arguments to the `collect()` function.
+
+```py
+if __name__ == "__main__":
+    # Print hosts as a JSON array when running standalone
+    from zabbix_auto_config.models import print_hosts
+    print_hosts(collect())
+```
+
+#### Collecting JSON output
+
+> [!NOTE]
+> Optional section - not required for basic operation
+
+If you wish to collect just the JSON output from a source collector and write it to a file or otherwise manipulate it, you can import `zabbix_auto_config.models.hosts_to_json` and use it like this:
+
+```py
+if __name__ == "__main__":
+    from zabbix_auto_config.models import hosts_to_json
+    with open("output.json", "w") as f:
+        f.write(hosts_to_json(collect()))
+```
+
+`hosts_to_json` takes a list of `Host` objects and returns a JSON string.
+
 #### Writing a host modifier
 
 A host modifier module that adds a given siteadmin to all hosts could look like this:
 
 ```py
-# path/to/host_modifier_dir/add_siteadmin.py
+# example/host_modifiers/add_siteadmin.py
 
 from zabbix_auto_config.models import Host
 
