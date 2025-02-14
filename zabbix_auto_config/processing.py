@@ -281,23 +281,32 @@ class SourceCollectorProcess(BaseProcess):
         logging.error("Collect exception: %s", str(e))
         self.error_counter.add(exception=e)
 
+        strat_handlers = {
+            models.FailureStrategy.BACKOFF: self.increase_update_interval,
+            models.FailureStrategy.EXIT: self.stop,
+            models.FailureStrategy.DISABLE: self.disable,
+        }
         strat = self.settings.failure_strategy
 
-        # Handle immediate strategies (no tolerance check needed)
-        if strat == models.FailureStrategy.BACKOFF:
-            self.increase_update_interval()
-        # Handle tolerance-based strategies
-        elif strat.supports_error_tolerance():
-            if self.error_counter.tolerance_exceeded():
-                if strat == models.FailureStrategy.EXIT:
-                    self.stop()
-                elif strat == models.FailureStrategy.DISABLE:
-                    self.disable()
+        if handler := strat_handlers.get(strat):
+            if (
+                not strat.supports_error_tolerance()
+                or self.error_counter.tolerance_exceeded()
+            ):
+                handler()
+            else:
+                logging.debug(
+                    "Source '%s' has not reached error tolerance of %d (current: %d) Keeping it enabled...",
+                    self.name,
+                    self.settings.error_tolerance,
+                    self.error_counter.count(),
+                )
         else:
             logging.info(
                 "Source '%s' has no failure handling strategy. Keeping it enabled...",
                 self.name,
             )
+
         raise ZACException(f"Failed to collect from source {self.name!r}: {e}") from e
 
     def disable(self) -> None:
