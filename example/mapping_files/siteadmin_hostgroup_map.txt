@@ -1,0 +1,6 @@
+alice@example.com:Hostgroup-alice-hosts
+bob@example.com:Hostgroup-bob-hosts
+charlie@example.com:Hostgroup-charlie-hosts
+david@example.com:Hostgroup-david-hosts
+erin@example.com:Hostgroup-erin-hosts
+frank@example.com:Hostgroup-frank-hosts

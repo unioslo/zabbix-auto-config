@@ -1,9 +1,9 @@
 [zac]
 # Directory containing the source collector modules.
-source_collector_dir = "path/to/source_collector_dir/"
+source_collector_dir = "example/source_collectors/"
 
 # Directory containing the host modifier modules.
-host_modifier_dir = "path/to/host_modifier_dir/"
+host_modifier_dir = "example/host_modifiers/"
 
 # Log level for the application.
 log_level = "INFO"
@@ -89,7 +89,7 @@ update_interval = 86400 # every 24 hours
 
 [zabbix]
 # Directory containing mapping files.
-map_dir = "path/to/map_dir/"
+map_dir = "example/mapping_files/"
 
 url = "http://localhost:8080"
 username = "Admin"
