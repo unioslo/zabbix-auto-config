@@ -35,7 +35,7 @@ password = "secret"
 dbname = "zac"
 
 # Connection info
-host = "localhost"
+host = "db"
 port = 5432
 
 # Connection timeout in seconds
@@ -91,7 +91,7 @@ update_interval = 86400 # every 24 hours
 # Directory containing mapping files.
 map_dir = "example/mapping_files/"
 
-url = "http://localhost:8080"
+url = "http://zabbix-web-nginx:8080"
 username = "Admin"
 password = "zabbix"
 
