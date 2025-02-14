@@ -298,7 +298,7 @@ class SourceCollectorProcess(BaseProcess):
                 logging.debug(
                     "Source '%s' has not reached error tolerance of %d (current: %d) Keeping it enabled...",
                     self.name,
-                    self.config.error_tolerance,
+                    self.settings.error_tolerance,
                     self.error_counter.count(),
                 )
         else:
