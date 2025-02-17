@@ -4,59 +4,63 @@ Zabbix-auto-config is a utility that aims to automatically configure hosts, host
 
 Note: Primarily tested with Zabbix 7.0 and 6.4, but should work with 6.0 and 5.2.
 
+<!-- ToC created with `markdown-toc -i README.md --maxdepth 3` -->
+
+<!-- toc -->
+
+- [Features](#features)
+- [Requirements](#requirements)
+  - [Environment](#environment)
+  - [Zabbix](#zabbix)
+  - [Database](#database)
+- [Installation](#installation)
+  - [uv (recommended)](#uv-recommended)
+  - [pip](#pip)
+- [Configuration](#configuration)
+  - [Mock environment](#mock-environment)
+- [Running](#running)
+  - [Systemd unit](#systemd-unit)
+- [Concepts](#concepts)
+  - [Source collectors](#source-collectors)
+  - [Host modifiers](#host-modifiers)
+  - [Host inventory](#host-inventory)
+  - [Garbage Collection](#garbage-collection)
+- [Development](#development)
+  - [Testing](#testing)
+  - [Pre-commit](#pre-commit)
+
+<!-- tocstop -->
+
 ## Features
 
-* Create and update hosts from various data sources
-* Link templates and add hosts to groups using mapping files
-* Manage host inventories, tags, and proxy assignments
-* Handle host lifecycle (disable inactive hosts)
-* Maintain and clean up host maintenance schedules
+- Create and update hosts from various data sources
+- Link templates and add hosts to groups using mapping files
+- Manage host inventories, tags, and proxy assignments
+- Handle host lifecycle (disable inactive hosts)
+- Maintain and clean up host maintenance schedules
 
 ## Requirements
 
-* Python >=3.9
-* pip >=21.3 or [uv](https://docs.astral.sh/uv/getting-started/installation/) >= 0.5.0
-* Zabbix >=6.4
+- Python >=3.9
+- pip >=21.3 or [uv](https://docs.astral.sh/uv/getting-started/installation/) >= 0.5.0
+- Zabbix >=6.4
 
-## Quick start
+### Environment
 
-This is a crash course in how to quickly get this application up and running in a local test environment:
+A Zabbix environment with the following components is required:
 
-### Zabbix test instance
+- Zabbix server
+- Zabbix web interface
+- PostgreSQL database
 
-Zabbix-auto-config requires a Linux environment to run. The easiest way to set up a development environment is to use the provided Visual Studio Code Development Container[^1][^2] configuration.
-We use [uv](https://docs.astral.sh/uv/getting-started/installation/) to manage the development environment.
+Instructions on how to set up a development environment can be found in the [Development](#development) section.
 
-The dev container configuration starts up the following containers:
-
-* Zabbix server
-* Zabbix web server
-* PostgreSQL database
-* Development container with Zabbix-auto-config installed
-
-[^1]: <https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers>
-[^2]: <https://code.visualstudio.com/docs/devcontainers/containers>
-
-The development environment can be started via the [Visual Studio Code Remote - Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension. The extension will automatically detect the `.devcontainer` directory and prompt you to open the project in a container.
-
-The Zabbix version to target, as well as other settings, can be configured in the [`.env`](./.env) file.
-
-#### Non-containerized development
-
-If you are on a Linux machine and prefer not to develop inside a container, you can start the required services with Docker/Podman Compose:
-
-```bash
-podman-compose up -d
-```
-
-See [Development](#development) for more information on how to set up a local development environment beyond starting the required services.
-
-### Zabbix prerequisites
+### Zabbix
 
 The following host groups are created in Zabbix if they do not exist:
 
-* All-auto-disabled-hosts
-* All-hosts
+- All-hosts
+- All-auto-disabled-hosts
 
 The name of these groups can be configured in `config.toml`:
 
@@ -70,12 +74,12 @@ These groups contain enabled and disabled hosts respectively.
 
 For automatic linking in templates you could create the templates:
 
-* Template-barry
-* Template-pizza
+- Template-barry
+- Template-pizza
 
 ### Database
 
-The application requires a PostgreSQL database to store the state of the collected hosts. The database and tables are created automatically on the first run of the application provided that the database connection is configured correctly in `config.toml`:
+The application requires a PostgreSQL database to store the state of the collected hosts. The database and tables are created automatically on the first run of the application provided that the database connection is configured in `config.toml`:
 
 ```toml
 [zac.db]
@@ -103,9 +107,7 @@ hosts_source = "hosts_source"
 
 Creation of the `zac` database requires superuser privileges. If the ZAC user does not have superuser privileges, the `zac` database must be created manually.
 
-### Application
-
-#### Installation
+## Installation
 
 Clone the repository:
 
@@ -115,7 +117,7 @@ git clone https://github.com/unioslo/zabbix-auto-config.git
 
 Thereafter, the application can be installed with `uv` or `pip`
 
-#### uv (recommended)
+### uv (recommended)
 
 In order to get the exact dependencies from the lock file, it's recommended to install the application with `uv sync`:
 
@@ -123,7 +125,7 @@ In order to get the exact dependencies from the lock file, it's recommended to i
 uv sync --no-dev
 ```
 
-#### pip
+### pip
 
 ```bash
 pip install -e .
@@ -131,22 +133,21 @@ pip install -e .
 
 When installing from source, installing in editable mode is recommended, as it allows for pulling in changes from git without having to reinstall the package.
 
-#### Configuration (mock environment)
+## Configuration
 
-A ZAC environment with a set of mock source collectors, host modifiers, and mapping files is included in the [examples](./examples) directory. The [sample config file](./config.sample.toml) comes pre-configured with these source collectors, host modifiers and mapping files for the mock environment.
+ZAC automatically sources `config.toml` from the current working directory when starting up. A sample configuration file is provided in the repository: [config.sample.toml](./config.sample.toml).
+
+### Mock environment
+
+A ZAC environment with a set of mock source collectors, host modifiers, and mapping files is included in the [examples](./examples) directory. The [sample config file](./config.sample.toml) comes pre-configured with these activated.
 
 Rename the sample config file to `config.toml` to use it:
 
 ```bash
-cp config.sample.toml config.toml
+mv config.sample.toml config.toml
 ```
 
-> [!IMPORTANT]
-> Use copy instead of move to avoid local git repo changes.
-
-ZAC automatically sources `config.toml` from the current working directory when starting up.
-
-#### Running
+## Running
 
 Installing the application adds the `zac` command to your path. After activating your virtual environment, you can run the application with:
 
@@ -187,6 +188,8 @@ systemctl start zabbix-auto-config
 ```
 
 This will start the application on boot and restart it if it crashes.
+
+## Concepts
 
 ### Source collectors
 
@@ -283,9 +286,9 @@ If `error_tolerance` is set, but `error_duration` is not, the application will s
 
 `disable_duration` (default: 3600) is the duration in seconds to disable collector for. The following disable modes are supported:
 
-* `disable_duration` > 0: Hard disable for `disable_duration` seconds after `error_tolerance` failures
-* `disable_duration` = 0: Increase collection interval using exponential backoff after each failure instead of disabling source.
-* `disable_duration` < 0: No disable mechanism (always try at fixed interval)
+- `disable_duration` > 0: Hard disable for `disable_duration` seconds after `error_tolerance` failures
+- `disable_duration` = 0: Increase collection interval using exponential backoff after each failure instead of disabling source.
+- `disable_duration` < 0: No disable mechanism (always try at fixed interval)
 
 They are described in more detail below:
 
@@ -381,8 +384,8 @@ ZAC provides an optional Zabbix garbage collection module that cleans up stale d
 
 The garbage collector currently does the following:
 
-* Removes disabled hosts from maintenances.
-* Deletes maintenances that only contain disabled hosts.
+- Removes disabled hosts from maintenances.
+- Deletes maintenances that only contain disabled hosts.
 
 Under normal usage, hosts are removed from maintenances when being disabled by ZAC, but if hosts are disabled outside of ZAC, they will not be removed from maintenances. The GC module will remove these hosts, and optionally delete the maintenance altogether if it only contains disabled hosts.
 
@@ -403,15 +406,34 @@ update_interval = 3600 # Run every hour
 
 ----
 
-### Development
+## Development
 
-Following the instructions in [Quick start](#quick-start) will get you up and running with a local development environment where all dependencies are installed and ready to use. If you choose not to use the provided Visual Studio Code Development Container, you can set up the development environment manually. Here's how.
+Zabbix-auto-config requires a Linux environment, as well as Zabbix and a PostgreSQL database. The easiest way to set up a development environment is to use the provided Visual Studio Code Development Container[^1][^2] configuration.
+We use [uv](https://docs.astral.sh/uv/getting-started/installation/) to manage the development environment inside the container.
 
-#### Local development environment
+The dev container configuration starts up the following containers:
 
-We use [uv](https://docs.astral.sh/uv/getting-started/installation/) to manage the development environment. The following instructions assume that you have uv installed.
+- Zabbix server
+- Zabbix web server
+- PostgreSQL database
+- Development container with Zabbix-auto-config installed
 
-Install the development dependencies:
+[^1]: <https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers>
+[^2]: <https://code.visualstudio.com/docs/devcontainers/containers>
+
+The development environment can be started via the [Visual Studio Code Remote - Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension. The extension will automatically detect the `.devcontainer` directory and prompt you to open the project in a container.
+
+The Zabbix version to target, as well as other settings, can be configured in the [`.env`](./.env) file.
+
+#### Non-containerized development
+
+If you are on a Linux machine and prefer not to develop inside a container, you can start the required services with Docker/Podman Compose:
+
+```bash
+podman-compose up -d
+```
+
+Running locally requires you to set up a virtual environment and install development dependencies on your host machine:
 
 ```bash
 uv sync
@@ -423,7 +445,27 @@ Activate the virtual environment:
 . .venv/bin/activate
 ```
 
-#### Testing
+Activating the environment will add the `zac` command to your path. You can now run the application with:
+
+```bash
+zac
+```
+
+#### Visual Studio Code Debug Configuration
+
+Add this configuration to your `.vscode/launch.json` to debug the application:
+
+```json
+{
+    "name": "Python: Module",
+    "type": "debugpy",
+    "request": "launch",
+    "module": "zabbix_auto_config.__init__",
+    "justMyCode": true
+}
+```
+
+### Testing
 
 Run unit tests with:
 
@@ -437,7 +479,7 @@ In order to update snapshots, run:
 pytest --inline-snapshot=review
 ```
 
-#### Pre-commit
+### Pre-commit
 
 We use [pre-commit](https://pre-commit.com/) to manage pre-commit hooks. Install the hooks with:
 
