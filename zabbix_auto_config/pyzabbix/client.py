@@ -34,6 +34,7 @@ from pydantic import ValidationError
 from zabbix_auto_config.__about__ import __version__
 from zabbix_auto_config.exceptions import ZabbixAPICallError
 from zabbix_auto_config.exceptions import ZabbixAPIException
+from zabbix_auto_config.exceptions import ZabbixAPIReadOnlyError
 from zabbix_auto_config.exceptions import ZabbixAPIRequestError
 from zabbix_auto_config.exceptions import ZabbixAPIResponseParsingError
 from zabbix_auto_config.exceptions import ZabbixAPISessionExpired
@@ -2221,7 +2222,7 @@ class ZabbixAPIObjectClass:
 
         if attr in WRITE_OPERATIONS:
             if object.__getattribute__(self, "parent").read_only:
-                raise ZabbixAPIException(
+                raise ZabbixAPIReadOnlyError(
                     "Cannot perform API write operations in read-only mode"
                 )
         return object.__getattribute__(self, attr)

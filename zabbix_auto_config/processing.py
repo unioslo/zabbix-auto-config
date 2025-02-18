@@ -115,14 +115,14 @@ class BaseProcess(multiprocessing.Process):
                     elif isinstance(e, ZACException):
                         logging.error("Work exception: %s", str(e))
                     elif isinstance(e, ZabbixAPISessionExpired):
-                        logging.error("API Session expired: %s", str(e))
+                        logging.error("Zabbix API session expired: %s", str(e))
                         if isinstance(self, ZabbixUpdater):
                             logging.info(
                                 "Reconnecting to Zabbix API and retrying update"
                             )
                             self.login()
                     elif isinstance(e, ZabbixAPIException):
-                        logging.error("API exception: %s", str(e))
+                        logging.error("Zabbix API exception: %s", str(e))
                     else:
                         raise e  # all other exceptions are fatal
                     self.state.set_error(e)
@@ -802,6 +802,20 @@ class ZabbixUpdater(BaseProcess):
             raise ZACException("Error when fetching hostgroups: %s", e) from e
         return hostgroups
 
+    def create_hostgroup(self, hostgroup_name: str) -> Optional[str]:
+        if self.zabbix_config.dryrun:
+            logging.info("DRYRUN: Creating hostgroup: '%s'", hostgroup_name)
+            return None
+
+        logging.debug("Creating hostgroup: '%s'", hostgroup_name)
+        try:
+            groupid = self.api.create_hostgroup(hostgroup_name)
+            logging.info("Created host group '%s' (%s)", hostgroup_name, groupid)
+            return groupid
+        except ZabbixAPIException as e:
+            logging.error("Error when creating hostgroups '%s': %s", hostgroup_name, e)
+            return None
+
 
 class ZabbixGarbageCollector(ZabbixUpdater):
     """Cleans up disabled hosts from maintenances in Zabbix."""
@@ -903,8 +917,12 @@ class ZabbixHostUpdater(ZabbixUpdater):
         try:
             return self.api.get_hostgroup(hostgroup)
         except ZabbixNotFoundError:
-            logging.info("Hostgroup '%s' not found. Creating it.", hostgroup)
-            self.api.create_hostgroup(hostgroup)
+            self.create_hostgroup(hostgroup)
+
+        # DRYRUN: return mock group instead of re-fetching
+        if self.config.zabbix.dryrun:
+            return HostGroup(groupid="0", name=hostgroup)
+        else:
             return self.api.get_hostgroup(hostgroup)
 
     def get_maintenances(self, zabbix_host: Host) -> List[Maintenance]:
@@ -1680,20 +1698,6 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             logging.error("Error when setting hostgroups on host %s: %s", host, e)
         else:
             logging.info("Set hostgroups %s on host: %s", to_add, host)
-
-    def create_hostgroup(self, hostgroup_name: str) -> Optional[str]:
-        if self.zabbix_config.dryrun:
-            logging.info("DRYRUN: Creating hostgroup: '%s'", hostgroup_name)
-            return None
-
-        logging.debug("Creating hostgroup: '%s'", hostgroup_name)
-        try:
-            groupid = self.api.create_hostgroup(hostgroup_name)
-            logging.info("Created host group '%s' (%s)", hostgroup_name, groupid)
-            return groupid
-        except ZabbixAPIException as e:
-            logging.error("Error when creating hostgroups '%s': %s", hostgroup_name, e)
-            return None
 
     def create_extra_hostgroups(self, existing_hostgroups: List[HostGroup]) -> None:
         """Creates additonal host groups based on the prefixes specified
