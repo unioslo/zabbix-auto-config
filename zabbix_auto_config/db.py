@@ -7,6 +7,7 @@ from typing import Optional
 from typing import Type
 
 import psycopg2
+from psycopg2 import sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from zabbix_auto_config.exceptions import ZACException
@@ -62,7 +63,7 @@ class PostgresDBInitializer:
                 logger.debug("ZAC database '%s' exists", self.config.zac.db.dbname)
         except psycopg2.Error as e:
             logger.debug(
-                "Failed to connect to database '%s', will try to create. Error: %s",
+                "Failed to connect to database '%s'. Assuming it doesn't exist. Error: %s",
                 self.config.zac.db.dbname,
                 e,
             )
@@ -83,13 +84,18 @@ class PostgresDBInitializer:
             with conn.cursor() as cur:
                 # Check if database exists
                 cur.execute(
-                    f"SELECT 1 FROM pg_database WHERE datname = '{self.config.zac.db.dbname}'"
+                    sql.SQL("SELECT 1 FROM pg_database WHERE datname = %s"),
+                    [self.config.zac.db.dbname],
                 )
                 exists = cur.fetchone()
 
                 if not exists:  # should exist given _zac_db_exists()
                     logger.debug("Creating database %s", self.config.zac.db.dbname)
-                    cur.execute(f"CREATE DATABASE {self.config.zac.db.dbname}")
+                    cur.execute(
+                        sql.SQL("CREATE DATABASE {}").format(
+                            sql.Identifier(self.config.zac.db.dbname)
+                        )
+                    )
         finally:
             conn.close()
 
@@ -101,22 +107,26 @@ class PostgresDBInitializer:
                     "Creating table '%s' if it doesn't exist",
                     self.config.zac.db.tables.hosts,
                 )
-                cur.execute(f"""
-                    CREATE TABLE IF NOT EXISTS {self.config.zac.db.tables.hosts} (
+                cur.execute(
+                    sql.SQL("""
+                    CREATE TABLE IF NOT EXISTS {} (
                         data jsonb
                     )
-                """)
+                """).format(sql.Identifier(self.config.zac.db.tables.hosts))
+                )
 
                 # Create hosts_source table
                 logger.debug(
                     "Creating table '%s' if it doesn't exist",
                     self.config.zac.db.tables.hosts_source,
                 )
-                cur.execute(f"""
-                    CREATE TABLE IF NOT EXISTS {self.config.zac.db.tables.hosts_source} (
+                cur.execute(
+                    sql.SQL("""
+                    CREATE TABLE IF NOT EXISTS {} (
                         data jsonb
                     )
-                """)
+                """).format(sql.Identifier(self.config.zac.db.tables.hosts_source))
+                )
                 conn.commit()
 
 

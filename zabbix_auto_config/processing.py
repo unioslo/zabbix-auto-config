@@ -29,6 +29,7 @@ from typing import TypeVar
 import httpx
 import psycopg2
 from packaging.version import Version
+from psycopg2 import sql
 from pydantic import ValidationError
 
 from zabbix_auto_config import compat
@@ -386,14 +387,13 @@ class SourceHandlerProcess(BaseProcess):
     ) -> None:
         super().__init__(name, state, config)
 
-        self.db_source_table = self.config.zac.db.tables.hosts_source
-
         # NOTE: This interval should not be changed!
         # A low value here makes it possible to constantly poll the
         # source host queues for new hosts.
         self.update_interval = 1
 
         self.db_connection = self.get_db_connection()
+        self.db_source_table = sql.Identifier(self.config.zac.db.tables.hosts_source)
 
         self.source_hosts_queues = source_hosts_queues
         for source_hosts_queue in self.source_hosts_queues:
@@ -434,13 +434,17 @@ class SourceHandlerProcess(BaseProcess):
                 return HostAction.NO_CHANGE
             else:
                 cursor.execute(
-                    f"UPDATE {self.db_source_table} SET data = %s WHERE data->>'hostname' = %s AND data->'sources' ? %s",
+                    sql.SQL(
+                        "UPDATE {} SET data = %s WHERE data->>'hostname' = %s AND data->'sources' ? %s"
+                    ).format(self.db_source_table),
                     [host.model_dump_json(), host.hostname, source],
                 )
                 return HostAction.UPDATE
         else:
             cursor.execute(
-                f"INSERT INTO {self.db_source_table} (data) VALUES (%s)",
+                sql.SQL("INSERT INTO {} (data) VALUES (%s)").format(
+                    self.db_source_table
+                ),
                 [host.model_dump_json()],
             )
             return HostAction.INSERT
@@ -450,7 +454,9 @@ class SourceHandlerProcess(BaseProcess):
     ) -> Dict[str, models.Host]:
         hosts = {}  # type: Dict[str, models.Host]
         cursor.execute(
-            f"SELECT data FROM {self.db_source_table} WHERE data->'sources' ? %s",
+            sql.SQL("SELECT data FROM {} WHERE data->'sources' ? %s").format(
+                self.db_source_table
+            ),
             [source],
         )
         for result in cursor.fetchall():
@@ -475,7 +481,9 @@ class SourceHandlerProcess(BaseProcess):
         source_hostnames = {host.hostname for host in hosts}
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(
-                f"SELECT DISTINCT data->>'hostname' FROM {self.db_source_table} WHERE data->'sources' ? %s",
+                sql.SQL(
+                    "SELECT DISTINCT data->>'hostname' FROM {} WHERE data->'sources' ? %s"
+                ).format(self.db_source_table),
                 [source],
             )
             current_hostnames = {t[0] for t in db_cursor.fetchall()}
@@ -484,7 +492,9 @@ class SourceHandlerProcess(BaseProcess):
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             for removed_hostname in removed_hostnames:
                 db_cursor.execute(
-                    f"DELETE FROM {self.db_source_table} WHERE data->>'hostname' = %s AND data->'sources' ? %s",
+                    sql.SQL(
+                        "DELETE FROM {} WHERE data->>'hostname' = %s AND data->'sources' ? %s",
+                    ).format(self.db_source_table),
                     [removed_hostname, source],
                 )
                 actions[HostAction.DELETE] += 1
@@ -523,8 +533,8 @@ class SourceMergerProcess(BaseProcess):
     ) -> None:
         super().__init__(name, state, config)
 
-        self.db_source_table = self.config.zac.db.tables.hosts_source
-        self.db_hosts_table = self.config.zac.db.tables.hosts
+        self.db_source_table = sql.Identifier(self.config.zac.db.tables.hosts_source)
+        self.db_hosts_table = sql.Identifier(self.config.zac.db.tables.hosts)
         self.host_modifiers = host_modifiers
 
         self.db_connection = self.get_db_connection()
@@ -585,19 +595,23 @@ class SourceMergerProcess(BaseProcess):
                 return HostAction.NO_CHANGE
             else:
                 cursor.execute(
-                    f"UPDATE {self.db_hosts_table} SET data = %s WHERE data->>'hostname' = %s",
+                    sql.SQL(
+                        "UPDATE {} SET data = %s WHERE data->>'hostname' = %s"
+                    ).format(self.db_hosts_table),
                     [host.model_dump_json(), host.hostname],
                 )
                 return HostAction.UPDATE
         else:
             cursor.execute(
-                f"INSERT INTO {self.db_hosts_table} (data) VALUES (%s)",
+                sql.SQL("INSERT INTO {} (data) VALUES (%s)").format(
+                    self.db_hosts_table
+                ),
                 [host.model_dump_json()],
             )
             return HostAction.INSERT
 
     def get_source_hosts(self, cursor: "Cursor") -> Dict[str, List[models.Host]]:
-        cursor.execute(f"SELECT data FROM {self.db_source_table}")
+        cursor.execute(sql.SQL("SELECT data FROM {}").format(self.db_source_table))
         source_hosts = defaultdict(list)  # type: Dict[str, List[models.Host]]
         for host in cursor.fetchall():
             try:
@@ -614,7 +628,7 @@ class SourceMergerProcess(BaseProcess):
         return source_hosts
 
     def get_hosts(self, cursor: "Cursor") -> Dict[str, models.Host]:
-        cursor.execute(f"SELECT data FROM {self.db_hosts_table}")
+        cursor.execute(sql.SQL("SELECT data FROM {}").format(self.db_hosts_table))
         hosts = {}  # type: Dict[str, models.Host]
         for host in cursor.fetchall():
             try:
@@ -635,11 +649,15 @@ class SourceMergerProcess(BaseProcess):
 
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(
-                f"SELECT DISTINCT data->>'hostname' FROM {self.db_source_table}"
+                sql.SQL("SELECT DISTINCT data->>'hostname' FROM {}").format(
+                    self.db_source_table
+                )
             )
             source_hostnames = {t[0] for t in db_cursor.fetchall()}
             db_cursor.execute(
-                f"SELECT DISTINCT data->>'hostname' FROM {self.db_hosts_table}"
+                sql.SQL("SELECT DISTINCT data->>'hostname' FROM {}").format(
+                    self.db_hosts_table
+                )
             )
             current_hostnames = {t[0] for t in db_cursor.fetchall()}
 
@@ -651,7 +669,9 @@ class SourceMergerProcess(BaseProcess):
                     logging.debug("Told to stop. Breaking")
                     break
                 db_cursor.execute(
-                    f"DELETE FROM {self.db_hosts_table} WHERE data->>'hostname' = %s",
+                    sql.SQL("DELETE FROM {} WHERE data->>'hostname' = %s").format(
+                        self.db_hosts_table
+                    ),
                     [removed_hostname],
                 )
                 actions[HostAction.DELETE] += 1
@@ -692,7 +712,7 @@ class ZabbixUpdater(BaseProcess):
     def __init__(self, name: str, state: State, config: models.Settings) -> None:
         super().__init__(name, state, config)
 
-        self.db_hosts_table = self.config.zac.db.tables.hosts
+        self.db_hosts_table = sql.Identifier(self.config.zac.db.tables.hosts)
         self.db_connection = self.get_db_connection()
 
         self.zabbix_config = config.zabbix
@@ -757,7 +777,9 @@ class ZabbixUpdater(BaseProcess):
     def get_db_hosts(self) -> Dict[str, models.Host]:
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(
-                f"SELECT data FROM {self.db_hosts_table} WHERE data->>'enabled' = 'true'"
+                sql.SQL("SELECT data FROM {} WHERE data->>'enabled' = 'true'").format(
+                    self.db_hosts_table
+                )
             )
             db_hosts = {}  # type: Dict[str, models.Host]
             for res in db_cursor.fetchall():
