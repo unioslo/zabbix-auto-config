@@ -23,6 +23,10 @@ class ZabbixAPIException(PyZabbixError):
         return ""
 
 
+class ZabbixAPIReadOnlyError(ZabbixAPIException):
+    """Zabbix API read-only error."""
+
+
 class ZabbixAPIRequestError(ZabbixAPIException):
     """Zabbix API response error."""
 
