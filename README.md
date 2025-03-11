@@ -206,7 +206,7 @@ A source collector module contains a function named `collect()` that returns a l
 Here's an example of a source collector module that reads hosts from a file:
 
 ```python
-# example/source_collectors/json_file_source_basic.py
+# example/source_collectors/jsonsource_basic.py
 
 import json
 from typing import Any, Dict, List
@@ -225,12 +225,12 @@ A module is recognized by ZAC as a source collector if it contains a `collect()`
 
 #### Configuration
 
-The configuration for loading a source collector module, like the `json_file_source.py` module above, includes both required and optional fields:
+The configuration for loading a source collector module, like the `jsonsource_basic.py` module above, includes both required and optional fields:
 
 ```toml
-[source_collectors.json_file_source]
+[source_collectors.jsonsource]
 # Required
-module_name = "json_file_source"
+module_name = "jsonsource_basic"
 update_interval = 60
 
 # Optional
@@ -317,7 +317,7 @@ Any extra config options specified in the configuration file will be passed to t
 One can choose to define a config class for a source collector's configuration to validate the config before running the collector. `zabbix_auto_config.sourcecollectors` defines a base class `CollectorConfig` that can be subclassed to define a config class for a source collector. The config class defines the class method `from_kwargs` that can be used to validate kwargs and instantiate a config object:
 
 ```py
-# example/source_collectors/json_file_source.py
+# example/source_collectors/jsonsource_collectorconfig.py
 from zabbix_auto_config.sourcecollectors import CollectorConfig
 
 class JsonFileSourceConfig(CollectorConfig):

@@ -41,3 +41,10 @@ def collect(*args: Any, **kwargs: Any) -> List[Host]:
         # See `zabbix_auto_config.models.Host` for all available fields.
         hosts.append(Host(**host))
     return hosts
+
+
+if __name__ == "__main__":
+    # When run as a script, print the collected hosts
+    from zabbix_auto_config.models import print_hosts
+
+    print_hosts(collect())
