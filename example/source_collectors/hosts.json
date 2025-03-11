@@ -1,0 +1,24 @@
+[
+    {
+        "enabled": true,
+        "hostname": "foo.example.com",
+        "siteadmins": [
+            "alice@example.com"
+        ]
+    },
+    {
+        "enabled": false,
+        "hostname": "bar.example.com",
+        "siteadmins": [
+            "bob@example.com"
+        ]
+    },
+    {
+        "enabled": true,
+        "hostname": "baz.example.com",
+        "siteadmins": [
+            "charlie@example.com",
+            "david@example.com"
+        ]
+    }
+]

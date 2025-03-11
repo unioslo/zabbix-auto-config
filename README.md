@@ -62,7 +62,7 @@ The following host groups are created in Zabbix if they do not exist:
 - All-hosts
 - All-auto-disabled-hosts
 
-The name of these groups can be configured in `config.toml`:
+The name of these groups can be configured in the config file to match your Zabbix environment:
 
 ```toml
 [zabbix]
@@ -79,7 +79,7 @@ For automatic linking in templates you could create the templates:
 
 ### Database
 
-The application requires a PostgreSQL database to store the state of the collected hosts. The database and tables are created automatically on the first run of the application provided that the database connection is configured in `config.toml`:
+The application requires a PostgreSQL database to store the state of the collected hosts. The database and tables are created automatically the first time the application runs, provided that the database connection is configured in `config.toml`:
 
 ```toml
 [zac.db]
@@ -105,7 +105,7 @@ hosts = "hosts"
 hosts_source = "hosts_source"
 ```
 
-Creation of the `zac` database requires superuser privileges. If the ZAC user does not have superuser privileges, the `zac` database must be created manually.
+Creation of the `zac` database requires superuser privileges. If the configured ZAC user does not have superuser privileges, the `zac` database must be created manually before running the application, and the `zac.db.init.db` option must be set to `false` in the configuration file.
 
 ## Installation
 
@@ -206,7 +206,7 @@ A source collector module contains a function named `collect()` that returns a l
 Here's an example of a source collector module that reads hosts from a file:
 
 ```python
-# example/source_collectors/json_file_source.py
+# example/source_collectors/json_file_source_basic.py
 
 import json
 from typing import Any, Dict, List
@@ -311,6 +311,39 @@ When `disable_duration` is less than 0, the collector will not be disabled, and 
 #### Keyword arguments
 
 Any extra config options specified in the configuration file will be passed to the `collect()` function as keyword arguments. In the example above, the `filename` option is passed to the `collect()` function, and then accessed via `kwargs["filename"]`.
+
+#### Source collector config validation
+
+One can choose to define a config class for a source collector's configuration to validate the config before running the collector. `zabbix_auto_config.sourcecollectors` defines a base class `CollectorConfig` that can be subclassed to define a config class for a source collector. The config class defines the class method `from_kwargs` that can be used to validate kwargs and instantiate a config object:
+
+```py
+# example/source_collectors/json_file_source.py
+from zabbix_auto_config.sourcecollectors import CollectorConfig
+
+class JsonFileSourceConfig(CollectorConfig):
+    __collector_name__ = "JSON file source"
+
+    filename: Path
+    opt_optional: Optional[str] = None
+    opt_default: str = "default"
+
+
+def collect(**kwargs):
+    config = JsonFileSourceConfig.from_kwargs(kwargs)
+    # ...
+```
+
+> [!NOTE]
+> The collector config should _not_ validate `module_name` and `update_interval` as these are required fields and are validated by the application itself, and are not passed to the collector's `collect()` function.
+
+In the example above, we stipulate that the collector config _must_ specify a `filename` value, and that it _may_ specify `opt_optional` and `opt_default` values. The collector config also specifies a name with `__collector_name__`, so that the collector can more easily be identified in error messages:
+
+```plaintext
+zabbix_auto_config.exceptions.ZACException: Invalid configuration for source collector 'JSON file source': 1 validation error for JsonFileSourceConfig
+required_option
+  Field required [type=missing, input_value={}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.10/v/missing
+```
 
 ### Host modifiers
 
