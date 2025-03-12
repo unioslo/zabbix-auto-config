@@ -45,4 +45,4 @@ class CollectorConfig(BaseModel):
         except ValidationError as e:
             raise ZACException(
                 f"Invalid configuration for source collector {_get_collector_name(cls)!r}: {e}"
-            ) from e
+            ) from None
