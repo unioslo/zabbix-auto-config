@@ -663,17 +663,15 @@ class SourceMergerProcess(BaseProcess):
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             # Get all hostnames from source hosts and current (merged) hosts
             db_cursor.execute(
-                sql.SQL("SELECT DISTINCT data->>'hostname' FROM {}").format(
-                    self.db_source_table
-                )
+                sql.SQL("SELECT data->>'hostname' FROM {}").format(self.db_source_table)
             )
+            # deduplicate hostnames by converting to a set
             source_hostnames = {t[0] for t in db_cursor.fetchall()}
 
             # Fetch all current hosts from the merged hosts table
             # and lock them so other processes can't modify them
             db_cursor.execute(
-                # NOTE: do we actually need a DISTINCT here? One would assume all merged hosts are unique
-                sql.SQL("SELECT DISTINCT data->>'hostname' FROM {} FOR UPDATE").format(
+                sql.SQL("SELECT data->>'hostname' FROM {} FOR UPDATE").format(
                     self.db_hosts_table
                 )
             )
