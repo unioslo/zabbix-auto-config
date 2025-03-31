@@ -12,7 +12,6 @@ import time
 from typing import List
 
 import multiprocessing_logging
-import tomli
 
 from zabbix_auto_config import models
 from zabbix_auto_config import processing
@@ -21,6 +20,7 @@ from zabbix_auto_config._types import HostModifier
 from zabbix_auto_config._types import HostModifierModule
 from zabbix_auto_config._types import SourceCollector
 from zabbix_auto_config._types import SourceCollectorModule
+from zabbix_auto_config.config import get_config
 from zabbix_auto_config.db import init_db
 from zabbix_auto_config.health import write_health
 from zabbix_auto_config.state import get_manager
@@ -92,16 +92,6 @@ def get_host_modifiers(modifier_dir: str) -> List[HostModifier]:
         ", ".join([repr(modifier.name) for modifier in host_modifiers]),
     )
     return host_modifiers
-
-
-def get_config() -> models.Settings:
-    cwd = os.getcwd()
-    config_file = os.path.join(cwd, "config.toml")
-    with open(config_file) as f:
-        content = f.read()
-    config_dict = tomli.loads(content)
-    config = models.Settings(**config_dict)
-    return config
 
 
 def log_process_status(processes: List[processing.BaseProcess]) -> None:
