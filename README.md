@@ -79,7 +79,7 @@ For automatic linking in templates you could create the templates:
 
 ### Database
 
-The application requires a PostgreSQL database to store the state of the collected hosts. The database and tables are created automatically the first time the application runs, provided that the database connection is configured in `config.toml`:
+The application requires a PostgreSQL database to store the state of the collected hosts. The database and tables are created automatically the first time the application runs, provided that the database connection is configured in the config file:
 
 ```toml
 [zac.db]
@@ -104,6 +104,9 @@ tables = true
 hosts = "hosts"
 hosts_source = "hosts_source"
 ```
+
+> [!TIP]
+> See [Configuration](#configuration) for more info on the config file.
 
 Creation of the `zac` database requires superuser privileges. If the configured ZAC user does not have superuser privileges, the `zac` database must be created manually before running the application, and the `zac.db.init.db` option must be set to `false` in the configuration file.
 
@@ -135,16 +138,22 @@ When installing from source, installing in editable mode is recommended, as it a
 
 ## Configuration
 
-ZAC automatically sources `config.toml` from the current working directory when starting up. A sample configuration file is provided in the repository: [config.sample.toml](./config.sample.toml).
+ZAC tries to load a config file on startup in the following order:
+
+1. `./config.toml`
+2. `XDG_CONFIG_HOME` or `~/.config/zabbix-auto-config/config.toml`
+
+A sample configuration file is provided in the repository: [config.sample.toml](./config.sample.toml). Move this file to one of the locations above and modify it to suit your environment.
 
 ### Mock environment
 
 A ZAC environment with a set of mock source collectors, host modifiers, and mapping files is included in the [examples](./examples) directory. The [sample config file](./config.sample.toml) comes pre-configured with these activated.
 
-Rename the sample config file to `config.toml` to use it:
+Rename the sample config file to `config.toml` (and optionally move it to the configuration directory) to use it:
 
 ```bash
-mv config.sample.toml config.toml
+mkdir -p ~/.config/zabbix-auto-config
+mv config.sample.toml ~/.config/zabbix-auto-config/config.toml
 ```
 
 ## Running
