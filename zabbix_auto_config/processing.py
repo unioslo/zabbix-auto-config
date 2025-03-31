@@ -663,7 +663,9 @@ class SourceMergerProcess(BaseProcess):
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             # Get all hostnames from source hosts and current (merged) hosts
             db_cursor.execute(
-                sql.SQL("SELECT data->>'hostname' FROM {}").format(self.db_source_table)
+                sql.SQL("SELECT data->>'hostname' FROM {}").format(
+                    self.db_source_table,
+                )
             )
             # deduplicate hostnames by converting to a set
             source_hostnames = {t[0] for t in db_cursor.fetchall()}
