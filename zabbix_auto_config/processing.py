@@ -545,6 +545,7 @@ class SourceMergerProcess(BaseProcess):
         self.merge_sources()
 
     def merge_hosts(self, hosts: List[models.Host]) -> models.Host:
+        """Merge a list of hosts from different sources into a single host."""
         # merge_sources() guarantees the list is not empty
         # however, that could change without this method being updated.
         # Do an assert here so it's easier to debug if that happens.
@@ -561,6 +562,18 @@ class SourceMergerProcess(BaseProcess):
         current_host: Optional[models.Host],
         source_hosts: List[models.Host],
     ) -> HostAction:
+        """Merge host and apply host modifiers. Updates DB if changed
+
+        If host already exists (signalled by `current_host` arg), the host is updated
+        in the database if it has changed in the source(s) or a modifier has changed it.
+
+        If the host does not exist, it is inserted into the database.
+
+        Args:
+            cursor: Database cursor
+            current_host: Host from the database, if it exists
+            source_hosts: All versions of the host from different sources
+        """
         host = self.merge_hosts(source_hosts)
 
         for host_modifier in self.host_modifiers:
@@ -648,36 +661,38 @@ class SourceMergerProcess(BaseProcess):
         actions = Counter()  # type: Counter[HostAction]
 
         with self.db_connection, self.db_connection.cursor() as db_cursor:
+            # Get all hostnames from source hosts and current (merged) hosts
             db_cursor.execute(
-                sql.SQL("SELECT DISTINCT data->>'hostname' FROM {}").format(
-                    self.db_source_table
+                sql.SQL("SELECT data->>'hostname' FROM {}").format(
+                    self.db_source_table,
                 )
             )
+            # deduplicate hostnames by converting to a set
             source_hostnames = {t[0] for t in db_cursor.fetchall()}
+
+            # Fetch all current hosts from the merged hosts table
+            # and lock them so other processes can't modify them
             db_cursor.execute(
-                sql.SQL("SELECT DISTINCT data->>'hostname' FROM {}").format(
+                sql.SQL("SELECT data->>'hostname' FROM {} FOR UPDATE").format(
                     self.db_hosts_table
                 )
             )
             current_hostnames = {t[0] for t in db_cursor.fetchall()}
 
-        # TODO: refactor to bulk delete
-        removed_hostnames = current_hostnames - source_hostnames
-        with self.db_connection, self.db_connection.cursor() as db_cursor:
-            for removed_hostname in removed_hostnames:
-                if self.stop_event.is_set():
-                    logging.debug("Told to stop. Breaking")
-                    break
+            # Remove hosts that are no longer in the source hosts table
+            removed_hostnames = current_hostnames - source_hostnames
+            if removed_hostnames and not self.stop_event.is_set():
+                # Construct and execute a single DELETE query with WHERE IN clause
                 db_cursor.execute(
-                    sql.SQL("DELETE FROM {} WHERE data->>'hostname' = %s").format(
+                    sql.SQL("DELETE FROM {} WHERE data->>'hostname' = ANY(%s)").format(
                         self.db_hosts_table
                     ),
-                    [removed_hostname],
+                    [list(removed_hostnames)],
                 )
-                actions[HostAction.DELETE] += 1
+                # Update the delete action count
+                actions[HostAction.DELETE] += len(removed_hostnames)
 
-        # Update all hosts in a single transaction for performance
-        with self.db_connection, self.db_connection.cursor() as db_cursor:
+            # Merge source hosts and insert/update hosts table
             source_hosts_map = self.get_source_hosts(db_cursor)
             hosts = self.get_hosts(db_cursor)
             for hostname in source_hostnames:
