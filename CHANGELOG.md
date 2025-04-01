@@ -10,13 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - XDG Base Directory support for application files (config, logs, data, etc.). The following directories are supported:
-  - `XDG_CONFIG_HOME` or `~/.config/zabbix-auto-config` for configuration files.
+  - `$XDG_CONFIG_HOME` or `~/.config/zabbix-auto-config` for configuration files.
 
 ### Changed
 
 - The application now looks in all valid config file locations for the config file. In order of preference:
   - Current working directory (`./config.toml`)
-  - `XDG_CONFIG_HOME` or `~/.config/zabbix-auto-config/config.toml`
+  - `$XDG_CONFIG_HOME` or `~/.config/zabbix-auto-config/config.toml`
 
 ## 0.3.0
 

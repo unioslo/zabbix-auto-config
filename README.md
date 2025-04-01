@@ -141,7 +141,7 @@ When installing from source, installing in editable mode is recommended, as it a
 ZAC tries to load a config file on startup in the following order:
 
 1. `./config.toml`
-2. `XDG_CONFIG_HOME` or `~/.config/zabbix-auto-config/config.toml`
+2. `$XDG_CONFIG_HOME` or `~/.config/zabbix-auto-config/config.toml`
 
 A sample configuration file is provided in the repository: [config.sample.toml](./config.sample.toml). Move this file to one of the locations above and modify it to suit your environment.
 
