@@ -14,6 +14,8 @@ from zabbix_auto_config.failsafe import write_failsafe_hosts
 from zabbix_auto_config.models import HostActions
 from zabbix_auto_config.models import Settings
 
+from tests.utils import disable_assignment_validation
+
 
 @pytest.fixture()
 def failsafe_ok_file(tmp_path: Path) -> Iterable[Path]:
@@ -138,18 +140,21 @@ def test_check_failsafe_ok_file_unable_to_delete(
     # so we instead mock the Path object with a MagicMock.
     # An alternative would be to add a function we can pass Path objects
     # to for deletion, then mock that function.
-    mock_file = MagicMock(spec=Path)
-    mock_file.exists.return_value = True
-    mock_file.unlink.side_effect = OSError("Unable to delete file")
 
-    assert mock_file.exists() is True
-    config.zac.failsafe_ok_file = mock_file
-    config.zac.failsafe_ok_file_strict = strict
-    # Fails in strict mode - must be able to delete the file
-    if strict:
-        assert check_failsafe_ok_file(config.zac) is False
-    else:
-        assert check_failsafe_ok_file(config.zac) is True
+    with disable_assignment_validation(config.zac) as zac_config:
+        mock_file = MagicMock(spec=Path)
+        mock_file.exists.return_value = True
+        mock_file.is_dir.return_value = False
+        mock_file.unlink.side_effect = OSError("Unable to delete file")
+
+        assert mock_file.exists() is True
+        zac_config.failsafe_ok_file = mock_file
+        zac_config.failsafe_ok_file_strict = strict
+        # Fails in strict mode - must be able to delete the file
+        if strict:
+            assert check_failsafe_ok_file(zac_config) is False
+        else:
+            assert check_failsafe_ok_file(zac_config) is True
 
 
 @pytest.mark.parametrize(

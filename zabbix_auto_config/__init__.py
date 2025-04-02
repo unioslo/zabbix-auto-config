@@ -9,9 +9,12 @@ import os
 import os.path
 import sys
 import time
+from typing import Annotated
 from typing import List
+from typing import Optional
 
 import multiprocessing_logging
+import typer
 
 from zabbix_auto_config import models
 from zabbix_auto_config import processing
@@ -105,7 +108,20 @@ def log_process_status(processes: List[processing.BaseProcess]) -> None:
     logging.info("Process status: %s", ", ".join(process_statuses))
 
 
-def main() -> None:
+def main(
+    failsafe: Annotated[
+        Optional[int],
+        typer.Option(
+            "--failsafe",
+            "-F",
+            help="Maximum number of hosts to change.",
+            show_default=False,
+        ),
+    ] = None,
+    dryrun: Annotated[
+        Optional[bool], typer.Option("--dryrun", "-D", help="Dry run mode.")
+    ] = None,
+) -> None:
     multiprocessing_logging.install_mp_handler()
     logging.basicConfig(
         format="%(asctime)s %(levelname)s [%(processName)s %(process)d] [%(name)s] %(message)s",
@@ -113,6 +129,12 @@ def main() -> None:
         level=logging.DEBUG,
     )
     config = get_config()
+
+    if failsafe is not None:
+        config.zabbix.failsafe = failsafe
+    if dryrun is not None:
+        config.zabbix.dryrun = dryrun
+
     logging.getLogger().setLevel(config.zac.log_level)
     logging.getLogger("httpcore").setLevel(logging.ERROR)
     logging.getLogger("httpx").setLevel(logging.ERROR)
@@ -256,5 +278,9 @@ def main() -> None:
     logging.info("Main exit")
 
 
+def run() -> None:
+    typer.run(main)
+
+
 if __name__ == "__main__":
-    main()
+    run()
