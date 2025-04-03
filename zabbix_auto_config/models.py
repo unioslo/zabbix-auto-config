@@ -162,7 +162,7 @@ class DBTableSettings(ConfigBaseModel):
     def _validate_table_names(self) -> Self:
         """Ensure table names are not empty."""
         names: Set[str] = set()
-        for field in self.model_fields:
+        for field in self.__class__.model_fields:
             name = getattr(self, field)
             if not name:
                 raise ValueError(
@@ -232,7 +232,7 @@ class DBSettings(ConfigBaseModel):
             if not isinstance(v, (str, int, float, bool)):
                 continue
             # Should not contain any of the model fields
-            if k in self.model_fields:
+            if k in self.__class__.model_fields:
                 continue
             extra[k] = v
         return extra
@@ -485,6 +485,11 @@ class SourceCollectorSettings(ConfigBaseModel):
         self._validate_error_duration_is_greater()
         self._validate_backoff_settings()
         return self
+
+    def extra_kwargs(self) -> Dict[str, Any]:
+        """Return all extra keys as kwargs to pass to a source collector's `collect()` function."""
+        # Just return BaseModel.model_extra as-is for now
+        return self.model_extra or {}
 
 
 class Settings(ConfigBaseModel):

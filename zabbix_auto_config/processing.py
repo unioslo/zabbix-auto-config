@@ -207,11 +207,8 @@ class SourceCollectorProcess(BaseProcess):
 
         self.update_interval = self.settings.update_interval
 
-        # Pop off the config fields from the config we pass to the module
-        # Leaves only the custom options defined for the collector in the config
-        self.collector_config = settings.model_dump()
-        for key in self.settings.model_fields:
-            self.collector_config.pop(key, None)
+        # All extra fields in the collector config are passed as kwargs to the collector
+        self.collector_config = settings.extra_kwargs()
 
         # Repeated errors will disable the source
         self.disabled = False
