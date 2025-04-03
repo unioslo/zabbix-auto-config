@@ -30,10 +30,20 @@ from zabbix_auto_config import utils
 # TODO: Models aren't validated when making changes to a set/list. Why? How to handle?
 
 
-class ConfigBaseModel(PydanticBaseModel, extra="ignore"):
+class ConfigBaseModel(PydanticBaseModel):
     """Base class for all config models. Warns if unknown fields are passed in."""
 
     # https://pydantic-docs.helpmanual.io/usage/model_config/#change-behaviour-globally
+
+    model_config = ConfigDict(
+        # We support overriding values via CLI args, so we want to be able
+        # to validate them using the same validation logic we use for config
+        # values loaded from files.
+        validate_assignment=True,
+        # Ignore extra values by default and emit warning if present.
+        # Subclasses may override this to allow extra values.
+        extra="ignore",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -354,7 +364,7 @@ class FailureStrategy(str, Enum):
         return self in {FailureStrategy.EXIT, FailureStrategy.DISABLE}
 
 
-class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
+class SourceCollectorSettings(ConfigBaseModel):
     module_name: str
     update_interval: int = Field(..., ge=0)
     error_tolerance: int = Field(
@@ -388,6 +398,13 @@ class SourceCollectorSettings(ConfigBaseModel, extra="allow"):
         default=3600,
         description="Maximum backoff duration in seconds.",
         ge=0,
+    )
+
+    model_config = ConfigDict(
+        # Validators cause infinte recursion if assignment validation is enabled.
+        # TODO: fix
+        validate_assignment=False,
+        extra="allow",
     )
 
     @property
@@ -474,6 +491,10 @@ class Settings(ConfigBaseModel):
     zac: ZacSettings
     zabbix: ZabbixSettings
     source_collectors: Dict[str, SourceCollectorSettings]
+
+    config_path: Optional[Path] = Field(
+        default=None, description="Path the config was loaded from.", exclude=True
+    )
 
 
 class Interface(BaseModel):

@@ -33,6 +33,7 @@ dependencies = [
     "packaging>=23.2",
     "typing_extensions>=4.12.0",
     "platformdirs>=4.3.7",
+    "typer>=0.15.2",
 ]
 
 
@@ -49,7 +50,7 @@ test = [
 Source = "https://github.com/unioslo/zabbix-auto-config"
 
 [project.scripts]
-zac = "zabbix_auto_config:main"
+zac = "zabbix_auto_config.__main__:main"
 
 [tool.hatch.version]
 path = "zabbix_auto_config/__about__.py"

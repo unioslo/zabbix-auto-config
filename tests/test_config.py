@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
+from unittest.mock import patch
+
 import pytest
 import tomli
 import zabbix_auto_config.models as models
@@ -8,6 +11,8 @@ from hypothesis import settings
 from hypothesis import strategies as st
 from inline_snapshot import snapshot
 from pydantic import ValidationError
+from zabbix_auto_config.config import get_config
+from zabbix_auto_config.config import load_config
 
 
 def test_sample_config(sample_config: str):
@@ -167,3 +172,149 @@ def test_sourcecollectorsettings_duration_negative():
             "input": -1,
         }
     )
+
+
+def test_load_config_from_path(sample_config_path: Path) -> None:
+    """Test that we can load the sample config file from a path."""
+    # Load config and dump in JSON mode (only primitive types)
+    assert load_config(sample_config_path).model_dump(mode="json") == snapshot(
+        {
+            "zac": {
+                "source_collector_dir": "example/source_collectors/",
+                "host_modifier_dir": "example/host_modifiers/",
+                "log_level": "INFO",
+                "health_file": "/tmp/zac_health.json",
+                "failsafe_file": "/tmp/zac_failsafe.json",
+                "failsafe_ok_file": "/tmp/zac_failsafe_ok",
+                "failsafe_ok_file_strict": True,
+                "db": {
+                    "user": "zabbix",
+                    "password": "secret",
+                    "dbname": "zac",
+                    "host": "db",
+                    "port": 5432,
+                    "connect_timeout": 2,
+                    "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+                    "init": {"db": True, "tables": True},
+                },
+                "process": {
+                    "source_merger": {"update_interval": 60},
+                    "host_updater": {"update_interval": 60},
+                    "hostgroup_updater": {"update_interval": 60},
+                    "template_updater": {"update_interval": 60},
+                    "garbage_collector": {
+                        "update_interval": 86400,
+                        "enabled": False,
+                        "delete_empty_maintenance": False,
+                    },
+                },
+                "db_uri": "",
+            },
+            "zabbix": {
+                "map_dir": "example/mapping_files/",
+                "url": "http://zabbix-web-nginx:8080",
+                "username": "Admin",
+                "password": "zabbix",
+                "dryrun": True,
+                "timeout": 60,
+                "verify_ssl": True,
+                "tags_prefix": "zac_",
+                "managed_inventory": ["location"],
+                "failsafe": 20,
+                "hostgroup_all": "All-hosts",
+                "hostgroup_manual": "All-manual-hosts",
+                "hostgroup_disabled": "All-auto-disabled-hosts",
+                "hostgroup_source_prefix": "Source-",
+                "hostgroup_importance_prefix": "Importance-",
+                "create_templategroups": True,
+                "templategroup_prefix": "Templates-",
+                "extra_siteadmin_hostgroup_prefixes": [],
+                "prefix_separator": "-",
+            },
+            "source_collectors": {
+                "mysource": {
+                    "module_name": "mysource",
+                    "update_interval": 60,
+                    "error_tolerance": 0,
+                    "error_duration": 9999,
+                    "exit_on_error": False,
+                    "disable_duration": 0,
+                    "backoff_factor": 1.5,
+                    "max_backoff": 3600.0,
+                    "kwarg_passed_to_source": "value",
+                    "another_kwarg": "value2",
+                },
+                "othersource": {
+                    "module_name": "mysource",
+                    "update_interval": 60,
+                    "error_tolerance": 0,
+                    "error_duration": 9999,
+                    "exit_on_error": False,
+                    "disable_duration": 0,
+                    "backoff_factor": 2.0,
+                    "max_backoff": 3600.0,
+                },
+                "error_tolerance_source": {
+                    "module_name": "mysource",
+                    "update_interval": 60,
+                    "error_tolerance": 5,
+                    "error_duration": 600,
+                    "exit_on_error": False,
+                    "disable_duration": 3600,
+                    "backoff_factor": 1.5,
+                    "max_backoff": 3600.0,
+                },
+                "no_error_handling_source": {
+                    "module_name": "mysource",
+                    "update_interval": 60,
+                    "error_tolerance": 0,
+                    "error_duration": 9999,
+                    "exit_on_error": False,
+                    "disable_duration": -1,
+                    "backoff_factor": 1.5,
+                    "max_backoff": 3600.0,
+                },
+            },
+        }
+    )
+
+
+def test_get_config_with_path_is_load_config(sample_config_path: Path) -> None:
+    """Test that calling `get_config(path)` is equivalent to calling `load_config(path)`."""
+    assert load_config(sample_config_path) == get_config(sample_config_path)
+
+
+def test_get_config_find_config(sample_config_path: Path, tmp_path: Path) -> None:
+    """Test that get_config() finds the sample config file."""
+    # Copy the sample config file to a temporary location
+
+    # Create a path that exists and is populated with the sample config
+    temp_config_path = tmp_path / "exists" / "config.toml"
+    temp_config_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_config_path.write_text(sample_config_path.read_text())
+    assert temp_config_path.exists()
+
+    # Create a path that does not exist
+    non_existent_config_path = tmp_path / "nonexistent" / "config.toml"
+    non_existent_config_path.parent.mkdir(parents=True, exist_ok=True)
+    assert not non_existent_config_path.exists()
+
+    test_paths = [
+        # Use non-existent config path first
+        non_existent_config_path,
+        temp_config_path,
+    ]
+
+    # Patch the CONFIG_PATHS to search in test paths
+    with patch("zabbix_auto_config.config.CONFIG_PATHS", test_paths):
+        # No arg should now search in test paths
+        config = get_config()
+        sample_config = load_config(sample_config_path)
+
+        # Test that configs are loaded from different paths
+        assert config.config_path == temp_config_path
+        assert config.config_path != sample_config_path
+
+        # Test that the loaded config matches the sample config
+        # (compare in dumped JSON mode to remove excluded fields)
+        assert config.model_dump(mode="json") == sample_config.model_dump(mode="json")

@@ -9,9 +9,13 @@ import os
 import os.path
 import sys
 import time
+from pathlib import Path
+from typing import Annotated
 from typing import List
+from typing import Optional
 
 import multiprocessing_logging
+import typer
 
 from zabbix_auto_config import models
 from zabbix_auto_config import processing
@@ -24,6 +28,8 @@ from zabbix_auto_config.config import get_config
 from zabbix_auto_config.db import init_db
 from zabbix_auto_config.health import write_health
 from zabbix_auto_config.state import get_manager
+
+app = typer.Typer(add_completion=False, pretty_exceptions_enable=False)
 
 
 def get_source_collectors(config: models.Settings) -> List[SourceCollector]:
@@ -105,14 +111,49 @@ def log_process_status(processes: List[processing.BaseProcess]) -> None:
     logging.info("Process status: %s", ", ".join(process_statuses))
 
 
-def main() -> None:
+@app.command()
+def main(
+    failsafe: Annotated[
+        Optional[int],
+        typer.Option(
+            "--failsafe",
+            "-F",
+            help="Maximum number of hosts to change.",
+            show_default=False,
+        ),
+    ] = None,
+    dryrun: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--dryrun",
+            "-D",
+            help="Dry run mode.",
+        ),
+    ] = None,
+    config_path: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--config",
+            "-C",
+            help="Path to config file.",
+            show_default=False,
+        ),
+    ] = None,
+) -> None:
+    """Run Zabbix-auto-config."""
     multiprocessing_logging.install_mp_handler()
     logging.basicConfig(
         format="%(asctime)s %(levelname)s [%(processName)s %(process)d] [%(name)s] %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%S%z",
         level=logging.DEBUG,
     )
-    config = get_config()
+    config = get_config(config_path)
+
+    if failsafe is not None:
+        config.zabbix.failsafe = failsafe
+    if dryrun is not None:
+        config.zabbix.dryrun = dryrun
+
     logging.getLogger().setLevel(config.zac.log_level)
     logging.getLogger("httpcore").setLevel(logging.ERROR)
     logging.getLogger("httpx").setLevel(logging.ERROR)
@@ -256,5 +297,9 @@ def main() -> None:
     logging.info("Main exit")
 
 
+def run() -> None:
+    app()
+
+
 if __name__ == "__main__":
-    main()
+    run()

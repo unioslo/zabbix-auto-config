@@ -101,11 +101,20 @@ def invalid_hosts():
 
 
 @pytest.fixture(scope="function")
-def sample_config():
-    with open(
-        os.path.dirname(os.path.dirname(__file__)) + "/config.sample.toml"
-    ) as config:
-        yield config.read()
+def sample_config_path(tmp_path: Path):
+    """Creates a sample config file for testing."""
+    # Read from the sample config file in the repo root
+    sample_config_path = Path(__file__).parent.parent / "config.sample.toml"
+
+    # Create a temp file with the contents of the sample config
+    p = tmp_path / "config.toml"
+    p.write_text(sample_config_path.read_text())
+    yield p
+
+
+@pytest.fixture(scope="function")
+def sample_config(sample_config_path: Path):
+    yield sample_config_path.read_text()
 
 
 @pytest.fixture(name="config")

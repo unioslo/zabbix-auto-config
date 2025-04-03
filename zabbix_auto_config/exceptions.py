@@ -89,3 +89,15 @@ class SourceCollectorError(ZACException):
 
 class SourceCollectorTypeError(SourceCollectorError):
     """Source collector function returned wrong type."""
+
+
+class ConfigError(ZACException):
+    """Exceptions related to configuration."""
+
+
+class ConfigFileNotFoundError(ConfigError):
+    """Configuration file not found."""
+
+
+class ConfigValidationError(ConfigError):
+    """Configuration validation error."""
