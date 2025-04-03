@@ -492,6 +492,10 @@ class Settings(ConfigBaseModel):
     zabbix: ZabbixSettings
     source_collectors: Dict[str, SourceCollectorSettings]
 
+    config_path: Optional[Path] = Field(
+        default=None, description="Path the config was loaded from.", exclude=True
+    )
+
 
 class Interface(BaseModel):
     details: Optional[Dict[str, Union[int, str]]] = {}
