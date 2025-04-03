@@ -29,7 +29,7 @@ from zabbix_auto_config.db import init_db
 from zabbix_auto_config.health import write_health
 from zabbix_auto_config.state import get_manager
 
-app = typer.Typer(add_completion=False)
+app = typer.Typer(add_completion=False, pretty_exceptions_enable=False)
 
 
 def get_source_collectors(config: models.Settings) -> List[SourceCollector]:
