@@ -33,7 +33,7 @@ def get_source_collectors(config: models.Settings) -> list[SourceCollector]:
     source_collector_dir = config.zac.source_collector_dir
     sys.path.append(source_collector_dir)
 
-    source_collectors = []  # type: List[SourceCollector]
+    source_collectors: list[SourceCollector] = []
     for (
         source_collector_name,
         source_collector_config,
@@ -74,7 +74,7 @@ def get_host_modifiers(modifier_dir: str) -> list[HostModifier]:
     except FileNotFoundError:
         logging.error("Host modififier directory %s does not exist.", modifier_dir)
         sys.exit(1)
-    host_modifiers = []  # type: List[HostModifier]
+    host_modifiers: list[HostModifier] = []
     for module_name in module_names:
         module = importlib.import_module(module_name)
         if not isinstance(module, HostModifierModule):

@@ -400,7 +400,7 @@ class ZabbixAPI:
             ZabbixNotFoundError: Group is not found.
 
         Returns:
-            List[HostGroup]: List of host groups.
+            list[HostGroup]: List of host groups.
         """
         # TODO: refactor this along with other methods that take names or ids (or wildcards)
         params: ParamsType = {"output": "extend"}
@@ -557,7 +557,7 @@ class ZabbixAPI:
             ZabbixNotFoundError: Group is not found.
 
         Returns:
-            List[TemplateGroup]: List of template groups.
+            list[TemplateGroup]: List of template groups.
         """
         # FIXME: ensure we use searching correctly here
         # TODO: refactor this along with other methods that take names or ids (or wildcards)
@@ -706,7 +706,7 @@ class ZabbixAPI:
             ZabbixAPIException: _description_
 
         Returns:
-            List[Host]: _description_
+            list[Host]: _description_
         """
         params: ParamsType = {
             "output": ["hostid", "host", "proxyid", "status", "inventory_mode"]
@@ -846,9 +846,9 @@ class ZabbixAPI:
             The host to update
         status : Optional[MonitoringStatus]
             New stauts for the host
-        groups : Optional[List[HostGroup]]
+        groups : Optional[list[HostGroup]]
             New host groups for the host. Replaces existing groups.
-        templates: Optional[List[Template]]
+        templates: Optional[list[Template]]
             New templates for the host. Replaces existing templates.
         """
         params: ParamsType = {"hostid": host.hostid}
@@ -1540,8 +1540,8 @@ class ZabbixAPI:
         """Link one or more templates to one or more hosts.
 
         Args:
-            templates (List[str]): A list of template names or IDs
-            hosts (List[str]): A list of host names or IDs
+            templates (list[str]): A list of template names or IDs
+            hosts (list[str]): A list of host names or IDs
         """
         if not templates:
             raise ZabbixAPIException(
@@ -1566,8 +1566,8 @@ class ZabbixAPI:
         """Unlink and clears one or more templates from one or more hosts.
 
         Args:
-            templates (List[Template]): A list of templates to unlink
-            hosts (List[Host]): A list of hosts to unlink templates from
+            templates (list[Template]): A list of templates to unlink
+            hosts (list[Host]): A list of hosts to unlink templates from
             clear (bool): Clear template from host when unlinking it.
         """
         if not templates:
@@ -1598,8 +1598,8 @@ class ZabbixAPI:
         items and triggers from the source templates.
 
         Args:
-            source (List[Template]): A list of templates to link from
-            destination (List[Template]): A list of templates to link to
+            source (list[Template]): A list of templates to link from
+            destination (list[Template]): A list of templates to link to
         """
         if not source:
             raise ZabbixAPIException("At least one source template is required")
@@ -1626,8 +1626,8 @@ class ZabbixAPI:
         items and triggers from the source templates.
 
         Args:
-            source (List[Template]): A list of templates to unlink
-            destination (List[Template]): A list of templates to unlink source templates from
+            source (list[Template]): A list of templates to unlink
+            destination (list[Template]): A list of templates to unlink source templates from
             clear (bool): Whether to clear the source templates from the destination templates. Defaults to True.
         """
         if not source:
@@ -1662,8 +1662,8 @@ class ZabbixAPI:
             * Template groups for Zabbix >= 6.2
 
         Args:
-            templates (List[str]): A list of template names or IDs
-            groups (Union[List[HostGroup], List[TemplateGroup]]): A list of host/template groups
+            templates (list[str]): A list of template names or IDs
+            groups (Union[list[HostGroup], list[TemplateGroup]]): A list of host/template groups
         """
         if not templates:
             raise ZabbixAPIException("At least one template is required")
@@ -1691,8 +1691,8 @@ class ZabbixAPI:
             * Template groups for Zabbix >= 6.2
 
         Args:
-            templates (List[str]): A list of template names or IDs
-            groups (Union[List[HostGroup], List[TemplateGroup]]): A list of host/template groups
+            templates (list[str]): A list of template names or IDs
+            groups (Union[list[HostGroup], list[TemplateGroup]]): A list of host/template groups
         """
         # NOTE: do we even want to enforce this?
         if not templates:

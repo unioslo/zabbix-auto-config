@@ -45,7 +45,7 @@ def zac_tags2zabbix_tags(zac_tags: ZacTags) -> list[HostTag]:
 
 
 def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
-    _map = {}  # type: Dict[str, List[str]]
+    _map: dict[str, list[str]] = {}
 
     with open(path) as f:
         for lineno, line in enumerate(f, start=1):

@@ -326,7 +326,7 @@ class SourceCollectorProcess(BaseProcess):
         except Exception as e:
             raise SourceCollectorError(e) from e
 
-        valid_hosts = []  # type: List[models.Host]
+        valid_hosts: list[models.Host] = []
         for host in hosts:
             if self.stop_event.is_set():
                 logging.debug("Told to stop. Breaking")
@@ -444,7 +444,7 @@ class SourceHandlerProcess(BaseProcess):
     def get_current_source_hosts(
         self, cursor: Cursor, source: str
     ) -> dict[str, models.Host]:
-        hosts = {}  # type: Dict[str, models.Host]
+        hosts: dict[str, models.Host] = {}
         cursor.execute(
             sql.SQL("SELECT data FROM {} WHERE data->'sources' ? %s").format(
                 self.db_source_table
@@ -468,7 +468,7 @@ class SourceHandlerProcess(BaseProcess):
     def handle_source_hosts(self, source: str, hosts: list[models.Host]) -> None:
         start_time = time.time()
 
-        actions = Counter()  # type: Counter[HostAction]
+        actions: Counter[HostAction] = Counter()
 
         source_hostnames = {host.hostname for host in hosts}
         with self.db_connection, self.db_connection.cursor() as db_cursor:
@@ -617,7 +617,7 @@ class SourceMergerProcess(BaseProcess):
 
     def get_source_hosts(self, cursor: Cursor) -> dict[str, list[models.Host]]:
         cursor.execute(sql.SQL("SELECT data FROM {}").format(self.db_source_table))
-        source_hosts = defaultdict(list)  # type: Dict[str, List[models.Host]]
+        source_hosts: defaultdict[str, list[models.Host]] = defaultdict(list)
         for host in cursor.fetchall():
             try:
                 host_model = models.Host(**host[0])
@@ -634,7 +634,7 @@ class SourceMergerProcess(BaseProcess):
 
     def get_hosts(self, cursor: Cursor) -> dict[str, models.Host]:
         cursor.execute(sql.SQL("SELECT data FROM {}").format(self.db_hosts_table))
-        hosts = {}  # type: Dict[str, models.Host]
+        hosts: dict[str, models.Host] = {}
         for host in cursor.fetchall():
             try:
                 host_model = models.Host(**host[0])
@@ -650,7 +650,7 @@ class SourceMergerProcess(BaseProcess):
     def merge_sources(self) -> None:
         start_time = time.time()
         logging.info("Merge starting")
-        actions = Counter()  # type: Counter[HostAction]
+        actions: Counter[HostAction] = Counter()
 
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             # Get all hostnames from source hosts and current (merged) hosts
@@ -788,7 +788,7 @@ class ZabbixUpdater(BaseProcess):
                     self.db_hosts_table
                 )
             )
-            db_hosts = {}  # type: Dict[str, models.Host]
+            db_hosts: dict[str, models.Host] = {}
             for res in db_cursor.fetchall():
                 try:
                     host = models.Host(**res[0])
@@ -1805,9 +1805,9 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             self.create_hostgroup(tgroup)
 
     def do_update(self) -> None:
-        managed_hostgroup_names = set(
+        managed_hostgroup_names: set[str] = set(
             itertools.chain.from_iterable(self.property_hostgroup_map.values())
-        )  # type: Set[str]
+        )
         managed_hostgroup_names.update(
             itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values())
         )
@@ -1822,7 +1822,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         if self.zabbix_config.create_templategroups:
             self.create_templategroups(existing_hostgroups)
 
-        zabbix_hostgroups: dict[str, HostGroup] = {}  # type: Dict[str, str]
+        zabbix_hostgroups: dict[str, HostGroup] = {}
         for zabbix_hostgroup in existing_hostgroups:
             zabbix_hostgroups[zabbix_hostgroup.name] = zabbix_hostgroup
             if zabbix_hostgroup.name.startswith(

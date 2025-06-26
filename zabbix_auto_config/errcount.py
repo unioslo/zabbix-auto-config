@@ -76,7 +76,7 @@ class RollingErrorCounter:
             raise ValueError("tolerance must be a positive integer")
         self.tolerance = tolerance
 
-        self.errors = []  # type: List[Error]
+        self.errors: list[Error] = []
 
     @property
     def last_error(self) -> Optional[Error]:

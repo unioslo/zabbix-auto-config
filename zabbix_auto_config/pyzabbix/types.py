@@ -517,7 +517,7 @@ class Trigger(ZabbixAPIBaseModel):
     uuid: str
     hosts: list[Host] = []
     # NYI:
-    # groups: List[HostGroup] = Field(
+    # groups: list[HostGroup] = Field(
     #     default_factory=list, validation_alias=AliasChoices("groups", "hostgroups")
     # )
     # items
