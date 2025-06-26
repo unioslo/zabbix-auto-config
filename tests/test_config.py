@@ -25,7 +25,7 @@ def test_config_extra_field(sample_config: str, caplog: pytest.LogCaptureFixture
     models.Settings(**config)
     assert len(caplog.records) == 1
     assert caplog.record_tuples == snapshot(
-        [("root", 30, "Settings: Got unknown config field 'foo'.")]
+        [("zabbix_auto_config.models", 30, "Settings: Got unknown config field 'foo'.")]
     )
 
 
