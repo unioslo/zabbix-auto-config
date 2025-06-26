@@ -10,6 +10,7 @@ from collections.abc import MutableMapping
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Any
 from typing import Optional
 from typing import Union
 
@@ -160,7 +161,7 @@ def mapping_values_with_prefix(
     return m
 
 
-def drain_queue(q: multiprocessing.Queue) -> None:
+def drain_queue(q: multiprocessing.Queue[Any]) -> None:
     """Drains a multiprocessing.Queue by calling `queue.get_nowait()` until the queue is empty."""
     while not q.empty():
         try:
