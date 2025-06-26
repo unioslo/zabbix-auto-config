@@ -32,7 +32,7 @@ from zabbix_auto_config.state import get_manager
 app = typer.Typer(add_completion=False, pretty_exceptions_enable=False)
 
 
-def get_source_collectors(config: models.Settings) -> List[SourceCollector]:
+def get_source_collectors(config: models.Settings) -> list[SourceCollector]:
     source_collector_dir = config.zac.source_collector_dir
     sys.path.append(source_collector_dir)
 
@@ -66,7 +66,7 @@ def get_source_collectors(config: models.Settings) -> List[SourceCollector]:
     return source_collectors
 
 
-def get_host_modifiers(modifier_dir: str) -> List[HostModifier]:
+def get_host_modifiers(modifier_dir: str) -> list[HostModifier]:
     sys.path.append(modifier_dir)
     try:
         module_names = [
@@ -100,7 +100,7 @@ def get_host_modifiers(modifier_dir: str) -> List[HostModifier]:
     return host_modifiers
 
 
-def log_process_status(processes: List[processing.BaseProcess]) -> None:
+def log_process_status(processes: list[processing.BaseProcess]) -> None:
     process_statuses = []
 
     for process in processes:
@@ -113,32 +113,26 @@ def log_process_status(processes: List[processing.BaseProcess]) -> None:
 
 @app.command()
 def main(
-    failsafe: Annotated[
-        Optional[int],
-        typer.Option(
-            "--failsafe",
-            "-F",
-            help="Maximum number of hosts to change.",
-            show_default=False,
-        ),
-    ] = None,
-    dryrun: Annotated[
-        Optional[bool],
-        typer.Option(
-            "--dryrun",
-            "-D",
-            help="Dry run mode.",
-        ),
-    ] = None,
-    config_path: Annotated[
-        Optional[Path],
-        typer.Option(
-            "--config",
-            "-C",
-            help="Path to config file.",
-            show_default=False,
-        ),
-    ] = None,
+    failsafe: Optional[int] = typer.Option(
+        None,
+        "--failsafe",
+        "-F",
+        help="Maximum number of hosts to change.",
+        show_default=False,
+    ),
+    dryrun: Optional[bool] = typer.Option(
+        None,
+        "--dryrun",
+        "-D",
+        help="Dry run mode.",
+    ),
+    config_path: Optional[Path] = typer.Option(
+        None,
+        "--config",
+        "-C",
+        help="Path to config file.",
+        show_default=False,
+    ),
 ) -> None:
     """Run Zabbix-auto-config."""
     multiprocessing_logging.install_mp_handler()
@@ -187,7 +181,7 @@ def main(
         src_processes.append(process)
 
     # Initialize the default processes
-    processes: List[processing.BaseProcess] = [
+    processes: list[processing.BaseProcess] = [
         processing.SourceHandlerProcess(
             "source-handler",
             state_manager.State(),

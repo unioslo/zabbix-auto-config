@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import multiprocessing
 import time
-from typing import List
 
 import pytest
 from zabbix_auto_config.models import Host
@@ -14,7 +13,7 @@ from zabbix_auto_config.state import get_manager
 
 class SourceCollector:
     @staticmethod
-    def collect(*args, **kwargs) -> List[Host]:
+    def collect(*args, **kwargs) -> list[Host]:
         host = Host(
             hostname="foo.example.com",
             enabled=True,
@@ -54,7 +53,7 @@ def test_source_collector_process(config: Settings):
 # NOTE: Has to be defined in the global scope to be pickleable by multiprocessing
 class FaultySourceCollector:
     @staticmethod
-    def collect(*args, **kwargs) -> List[Host]:
+    def collect(*args, **kwargs) -> list[Host]:
         raise Exception("Source collector error!!")
 
 

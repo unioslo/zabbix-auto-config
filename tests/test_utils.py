@@ -5,10 +5,6 @@ from datetime import timedelta
 from ipaddress import IPv4Address
 from ipaddress import IPv6Address
 from pathlib import Path
-from typing import Dict
-from typing import List
-from typing import Set
-from typing import Tuple
 from typing import Union
 
 import pytest
@@ -136,7 +132,7 @@ def test_read_map_file_fuzz(tmp_path: Path, text: str):
         ),
     ],
 )
-def test_zabbix_tags2zac_tags(tags: List[HostTag], expected: Set[Tuple[str, str]]):
+def test_zabbix_tags2zac_tags(tags: list[HostTag], expected: set[tuple[str, str]]):
     assert utils.zabbix_tags2zac_tags(tags) == expected
 
 
@@ -158,7 +154,7 @@ def test_zabbix_tags2zac_tags(tags: List[HostTag], expected: Set[Tuple[str, str]
     ],
 )
 def test_zac_tags2zabbix_tags(
-    tags: Set[Tuple[str, str]], expected: List[Dict[str, str]]
+    tags: set[tuple[str, str]], expected: list[dict[str, str]]
 ):
     zabbix_tags = utils.zac_tags2zabbix_tags(tags)
     for tag in expected:

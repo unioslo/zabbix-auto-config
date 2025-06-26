@@ -5,12 +5,9 @@ import re
 import warnings
 from enum import Enum
 from pathlib import Path
+from typing import Annotated
 from typing import Any
-from typing import Dict
-from typing import List
 from typing import Optional
-from typing import Set
-from typing import Tuple
 from typing import Union
 
 from pydantic import BaseModel
@@ -22,7 +19,6 @@ from pydantic import ValidationInfo
 from pydantic import field_serializer
 from pydantic import field_validator
 from pydantic import model_validator
-from typing_extensions import Annotated
 from typing_extensions import Self
 
 from zabbix_auto_config import utils
@@ -47,7 +43,7 @@ class ConfigBaseModel(PydanticBaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _check_unknown_fields(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+    def _check_unknown_fields(cls, values: dict[str, Any]) -> dict[str, Any]:
         """Checks for unknown fields and logs a warning if any are found.
         Does not log warnings if extra is set to `Extra.allow`.
         """
@@ -78,7 +74,7 @@ class ZabbixSettings(ConfigBaseModel):
     """Path to a CA bundle file or `True` to use the system's CA bundle. False to disable SSL verification."""
 
     tags_prefix: str = "zac_"
-    managed_inventory: List[str] = []
+    managed_inventory: list[str] = []
     failsafe: int = 20
 
     hostgroup_all: str = "All-hosts"
@@ -97,7 +93,7 @@ class ZabbixSettings(ConfigBaseModel):
     # The groups must have prefixes separated by a hyphen (-) in order
     # to replace them with any of these prefixes.
     # These groups are not managed by ZAC beyond their creation.
-    extra_siteadmin_hostgroup_prefixes: Set[str] = set()
+    extra_siteadmin_hostgroup_prefixes: set[str] = set()
 
     prefix_separator: str = "-"
 
@@ -161,7 +157,7 @@ class DBTableSettings(ConfigBaseModel):
     @model_validator(mode="after")
     def _validate_table_names(self) -> Self:
         """Ensure table names are not empty."""
-        names: Set[str] = set()
+        names: set[str] = set()
         for field in self.__class__.model_fields:
             name = getattr(self, field)
             if not name:
@@ -207,7 +203,7 @@ class DBSettings(ConfigBaseModel):
         extra="allow",
     )
 
-    def get_connect_kwargs(self) -> Dict[str, Any]:
+    def get_connect_kwargs(self) -> dict[str, Any]:
         """Return kwargs for psycopg2.connect.
 
         Only include non-empty values."""
@@ -222,9 +218,9 @@ class DBSettings(ConfigBaseModel):
         }
         return {k: v for k, v in kwargs.items() if v}
 
-    def extra_kwargs(self) -> Dict[str, Any]:
+    def extra_kwargs(self) -> dict[str, Any]:
         """Return extra kwargs for psycopg2.connect."""
-        extra: Dict[str, Any] = {}
+        extra: dict[str, Any] = {}
         if not self.model_extra:
             return extra
         for k, v in self.model_extra.items():
@@ -486,7 +482,7 @@ class SourceCollectorSettings(ConfigBaseModel):
         self._validate_backoff_settings()
         return self
 
-    def extra_kwargs(self) -> Dict[str, Any]:
+    def extra_kwargs(self) -> dict[str, Any]:
         """Return all extra keys as kwargs to pass to a source collector's `collect()` function."""
         # Just return BaseModel.model_extra as-is for now
         return self.model_extra or {}
@@ -495,7 +491,7 @@ class SourceCollectorSettings(ConfigBaseModel):
 class Settings(ConfigBaseModel):
     zac: ZacSettings
     zabbix: ZabbixSettings
-    source_collectors: Dict[str, SourceCollectorSettings]
+    source_collectors: dict[str, SourceCollectorSettings]
 
     config_path: Optional[Path] = Field(
         default=None, description="Path the config was loaded from.", exclude=True
@@ -503,7 +499,7 @@ class Settings(ConfigBaseModel):
 
 
 class Interface(BaseModel):
-    details: Optional[Dict[str, Union[int, str]]] = {}
+    details: Optional[dict[str, Union[int, str]]] = {}
     endpoint: str
     port: str  # Ports could be macros, i.e. strings
     type: int
@@ -529,14 +525,14 @@ class Host(BaseModel):
     hostname: str
     # Optional fields
     importance: Optional[Annotated[int, Field(ge=0)]] = None
-    interfaces: List[Interface] = []
-    inventory: Dict[str, str] = {}
+    interfaces: list[Interface] = []
+    inventory: dict[str, str] = {}
     macros: Optional[Any] = None
-    properties: Set[str] = set()
+    properties: set[str] = set()
     proxy_pattern: Optional[str] = None
-    siteadmins: Set[str] = set()
-    sources: Set[str] = set()
-    tags: Set[Tuple[str, str]] = set()
+    siteadmins: set[str] = set()
+    sources: set[str] = set()
+    tags: set[tuple[str, str]] = set()
 
     model_config = ConfigDict(validate_assignment=True, revalidate_instances="always")
 
@@ -558,7 +554,7 @@ class Host(BaseModel):
 
     @field_validator("interfaces")
     @classmethod
-    def no_duplicate_interface_types(cls, v: List[Interface]) -> List[Interface]:
+    def no_duplicate_interface_types(cls, v: list[Interface]) -> list[Interface]:
         types = [interface.type for interface in v]
         assert len(types) == len(set(types)), f"No duplicate interface types: {types}"
         return v
@@ -570,7 +566,7 @@ class Host(BaseModel):
             assert utils.is_valid_regexp(v), f"Must be valid regexp pattern: {v!r}"
         return v
 
-    def merge(self, other: "Host") -> None:
+    def merge(self, other: Host) -> None:
         """
         Merge other host into this one. The current hostname will be kept if they do not match.
         """
@@ -630,23 +626,23 @@ class Host(BaseModel):
 
 
 class HostActions(BaseModel):
-    add: List[str] = []
-    remove: List[str] = []
+    add: list[str] = []
+    remove: list[str] = []
 
     def write_json(self, path: Path) -> None:
         """Writes a JSON serialized representation of self to a file."""
         utils.write_file(path, self.model_dump_json(indent=2))
 
 
-class HostsSerializer(RootModel[List[Host]]):
-    root: List[Host]
+class HostsSerializer(RootModel[list[Host]]):
+    root: list[Host]
 
 
-def hosts_to_json(hosts: List[Host], indent: int = 2) -> str:
+def hosts_to_json(hosts: list[Host], indent: int = 2) -> str:
     """Convert a list of Host objects to a JSON string."""
     return HostsSerializer(root=hosts).model_dump_json(indent=indent)
 
 
-def print_hosts(hosts: List[Host], indent: int = 2) -> None:
+def print_hosts(hosts: list[Host], indent: int = 2) -> None:
     """Print a list of Host objects to stdout as JSON."""
     print(hosts_to_json(hosts, indent=indent))

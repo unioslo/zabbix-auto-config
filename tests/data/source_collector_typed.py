@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from typing import Any
-from typing import Dict
-from typing import List
 
 from zabbix_auto_config.models import Host
 
-HOSTS: List[Dict[str, Any]] = [
+HOSTS: list[dict[str, Any]] = [
     {
         "hostname": "foo.example.com",
         "siteadmins": ["alice@example.com"],
@@ -22,8 +20,8 @@ HOSTS: List[Dict[str, Any]] = [
 ]
 
 
-def collect(*args: Any, **kwargs: Any) -> List[Host]:
-    hosts: List[Host] = []
+def collect(*args: Any, **kwargs: Any) -> list[Host]:
+    hosts: list[Host] = []
     for host in HOSTS:
         host["enabled"] = True
         host["properties"] = ["pizza"]

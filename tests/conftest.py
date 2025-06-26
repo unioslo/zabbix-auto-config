@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
-from typing import Type
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -212,7 +211,7 @@ class MockZabbixAPI(PicklableMock):
 
 
 @pytest.fixture(autouse=True)
-def mock_zabbix_api() -> Iterable[Type[MockZabbixAPI]]:
+def mock_zabbix_api() -> Iterable[type[MockZabbixAPI]]:
     with mock.patch(
         "zabbix_auto_config.processing.ZabbixAPI", new=MockZabbixAPI
     ) as api_mock:

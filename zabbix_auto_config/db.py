@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 from typing import Optional
-from typing import Type
 
 import psycopg2
 from psycopg2 import sql
@@ -31,7 +30,7 @@ def get_connection(
 
 @contextmanager
 def init_resource(
-    resource: str, exc_type: Type[Exception] = psycopg2.Error
+    resource: str, exc_type: type[Exception] = psycopg2.Error
 ) -> Generator[None, None, None]:
     """Initialize a resource, optionally guarding it from propagating exception."""
     try:
