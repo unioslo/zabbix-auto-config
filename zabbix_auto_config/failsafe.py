@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import List
 
 from zabbix_auto_config import models
 from zabbix_auto_config.exceptions import ZACException
@@ -9,7 +8,7 @@ from zabbix_auto_config.models import Settings
 from zabbix_auto_config.models import ZacSettings
 
 
-def check_failsafe(config: Settings, to_add: List[str], to_remove: List[str]) -> None:
+def check_failsafe(config: Settings, to_add: list[str], to_remove: list[str]) -> None:
     """Check if number of hosts to add/remove exceeds the failsafe and handle appropriately."""
     failsafe = config.zabbix.failsafe
     if len(to_remove) <= failsafe and len(to_add) <= failsafe:
@@ -61,7 +60,7 @@ def check_failsafe_ok_file(config: ZacSettings) -> bool:
 
 
 def write_failsafe_hosts(
-    config: ZacSettings, to_add: List[str], to_remove: List[str]
+    config: ZacSettings, to_add: list[str], to_remove: list[str]
 ) -> None:
     """Write a list of hosts to add and remove to a file when the failsafe is reached.
 

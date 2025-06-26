@@ -218,13 +218,13 @@ Here's an example of a source collector module that reads hosts from a file:
 # example/source_collectors/jsonsource_basic.py
 
 import json
-from typing import Any, Dict, List
+from typing import Any
 
 from zabbix_auto_config.models import Host
 
 DEFAULT_FILE = "hosts.json"
 
-def collect(*args: Any, **kwargs: Any) -> List[Host]:
+def collect(*args: Any, **kwargs: Any) -> list[Host]:
     filename = kwargs.get("filename", DEFAULT_FILE)
     with open(filename, "r") as f:
         return [Host(**host) for host in json.load(f)]

@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from typing import List  # noqa: F401
 
 
-@lru_cache()
+@lru_cache
 def get_td(seconds: int) -> datetime.timedelta:
     """Return a datetime.timedelta object for a given number of seconds."""
     return datetime.timedelta(seconds=seconds)
@@ -36,7 +36,7 @@ class Error:
     exception: Optional[Exception] = None
 
     @compare
-    def __lt__(self, other: "Error") -> bool:
+    def __lt__(self, other: Error) -> bool:
         return self.timestamp < other.timestamp
 
     def __eq__(self, other: object) -> bool:
@@ -45,15 +45,15 @@ class Error:
         return self.timestamp == other.timestamp
 
     @compare
-    def __gt__(self, other: "Error") -> bool:
+    def __gt__(self, other: Error) -> bool:
         return self.timestamp > other.timestamp
 
     @compare
-    def __le__(self, other: "Error") -> bool:
+    def __le__(self, other: Error) -> bool:
         return self.timestamp <= other.timestamp
 
     @compare
-    def __ge__(self, other: "Error") -> bool:
+    def __ge__(self, other: Error) -> bool:
         return self.timestamp >= other.timestamp
 
     def __ne__(self, other: object) -> bool:
@@ -76,7 +76,7 @@ class RollingErrorCounter:
             raise ValueError("tolerance must be a positive integer")
         self.tolerance = tolerance
 
-        self.errors = []  # type: List[Error]
+        self.errors: list[Error] = []
 
     @property
     def last_error(self) -> Optional[Error]:

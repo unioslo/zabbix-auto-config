@@ -10,15 +10,14 @@ denoting the version they are introduced/removed in.
 
 from __future__ import annotations
 
+from collections.abc import MutableMapping
+from collections.abc import Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
+from typing import Annotated
 from typing import Any
-from typing import Dict
-from typing import List
-from typing import MutableMapping
 from typing import Optional
 from typing import Protocol
-from typing import Sequence
 from typing import Union
 
 from pydantic import AliasChoices
@@ -32,7 +31,6 @@ from pydantic import WrapValidator
 from pydantic import field_serializer
 from pydantic import field_validator
 from pydantic_core import PydanticCustomError
-from typing_extensions import Annotated
 from typing_extensions import Literal
 from typing_extensions import TypeAliasType
 from typing_extensions import TypedDict
@@ -91,7 +89,7 @@ class ModifyHostItem(TypedDict):
     hostid: Union[str, int]
 
 
-ModifyHostParams = List[ModifyHostItem]
+ModifyHostParams = list[ModifyHostItem]
 
 """A list of host IDs in an API request.
 
@@ -105,7 +103,7 @@ class ModifyGroupItem(TypedDict):
     groupid: Union[str, int]
 
 
-ModifyGroupParams = List[ModifyGroupItem]
+ModifyGroupParams = list[ModifyGroupItem]
 """A list of host/template group IDs in an API request.
 
 E.g. `[{"groupid": "123"}, {"groupid": "456"}]`
@@ -118,7 +116,7 @@ class ModifyTemplateItem(TypedDict):
     templateid: Union[str, int]
 
 
-ModifyTemplateParams = List[ModifyTemplateItem]
+ModifyTemplateParams = list[ModifyTemplateItem]
 """A list of template IDs in an API request.
 
 E.g. `[{"templateid": "123"}, {"templateid": "456"}]`
@@ -158,7 +156,7 @@ class ZabbixAPIBaseModel(BaseModel):
 
     model_config = ConfigDict(validate_assignment=True, extra="ignore")
 
-    def model_dump_api(self) -> Dict[str, Any]:
+    def model_dump_api(self) -> dict[str, Any]:
         """Dump the model as a JSON-serializable dict used in API calls
         where None values are removed."""
         return self.model_dump(mode="json", exclude_none=True)
@@ -169,7 +167,7 @@ class ZabbixRight(ZabbixAPIBaseModel):
     id: str
     name: Optional[str] = None  # name of group (injected by application)
 
-    def model_dump_api(self) -> Dict[str, Any]:
+    def model_dump_api(self) -> dict[str, Any]:
         return self.model_dump(
             mode="json", include={"permission", "id"}, exclude_none=True
         )
@@ -195,10 +193,10 @@ class Usergroup(ZabbixAPIBaseModel):
     usrgrpid: str
     gui_access: int
     users_status: int
-    rights: List[ZabbixRight] = []
-    hostgroup_rights: List[ZabbixRight] = []
-    templategroup_rights: List[ZabbixRight] = []
-    users: List[User] = []
+    rights: list[ZabbixRight] = []
+    hostgroup_rights: list[ZabbixRight] = []
+    templategroup_rights: list[ZabbixRight] = []
+    users: list[User] = []
 
 
 class Template(ZabbixAPIBaseModel):
@@ -206,11 +204,11 @@ class Template(ZabbixAPIBaseModel):
 
     templateid: str
     host: str
-    hosts: List[Host] = []
-    templates: List[Template] = []
+    hosts: list[Host] = []
+    templates: list[Template] = []
     """Child templates (templates inherited from this template)."""
 
-    parent_templates: List[Template] = Field(
+    parent_templates: list[Template] = Field(
         default_factory=list,
         validation_alias=AliasChoices("parentTemplates", "parent_templates"),
         serialization_alias="parentTemplates",  # match JSON output to API format
@@ -225,16 +223,16 @@ class TemplateGroup(ZabbixAPIBaseModel):
     groupid: str
     name: str
     uuid: str = ""
-    templates: List[Template] = []
+    templates: list[Template] = []
 
 
 class HostGroup(ZabbixAPIBaseModel):
     groupid: str
     name: str
-    hosts: List[Host] = []
+    hosts: list[Host] = []
     flags: int = 0
     internal: Optional[int] = None  # <6.2
-    templates: List[Template] = []  # <6.2
+    templates: list[Template] = []  # <6.2
 
 
 class HostTag(ZabbixAPIBaseModel):
@@ -250,18 +248,18 @@ class Host(ZabbixAPIBaseModel):
     hostid: str
     host: str = ""
     description: Optional[str] = None
-    groups: List[HostGroup] = Field(
+    groups: list[HostGroup] = Field(
         default_factory=list,
         # Compat for >= 6.2.0
         validation_alias=AliasChoices("groups", "hostgroups"),
     )
-    templates: List[Template] = Field(default_factory=list)
-    parent_templates: List[Template] = Field(
+    templates: list[Template] = Field(default_factory=list)
+    parent_templates: list[Template] = Field(
         default_factory=list,
         # Accept both casings
         validation_alias=AliasChoices("parentTemplates", "parent_templates"),
     )
-    inventory: Dict[str, Any] = Field(default_factory=dict)
+    inventory: dict[str, Any] = Field(default_factory=dict)
     proxyid: Optional[str] = Field(
         None,
         # Compat for <7.0.0
@@ -273,9 +271,9 @@ class Host(ZabbixAPIBaseModel):
         None, validation_alias=AliasChoices("available", "active_available")
     )
     status: Optional[MonitoringStatus] = None
-    macros: List[Macro] = Field(default_factory=list)
-    interfaces: List[HostInterface] = Field(default_factory=list)
-    tags: List[HostTag] = Field(default_factory=list)
+    macros: list[Macro] = Field(default_factory=list)
+    interfaces: list[HostInterface] = Field(default_factory=list)
+    tags: list[HostTag] = Field(default_factory=list)
     inventory_mode: InventoryMode = InventoryMode.AUTOMATIC
 
     def __str__(self) -> str:
@@ -303,7 +301,7 @@ class HostInterface(ZabbixAPIBaseModel):
     useip: bool  # this is an int in the API
     main: int
     # SNMP details
-    details: Dict[str, Any] = Field(default_factory=dict)
+    details: dict[str, Any] = Field(default_factory=dict)
     # Values not required for creation:
     interfaceid: Optional[str] = None
     available: Optional[int] = None
@@ -359,7 +357,7 @@ class UpdateHostInterfaceDetails(ZabbixAPIBaseModel):
 class Proxy(ZabbixAPIBaseModel):
     proxyid: str
     name: str = Field(..., validation_alias=AliasChoices("host", "name"))
-    hosts: List[Host] = Field(default_factory=list)
+    hosts: list[Host] = Field(default_factory=list)
     status: Optional[int] = None
     operating_mode: Optional[int] = None
     address: str = Field(
@@ -389,8 +387,8 @@ class Macro(MacroBase):
     hostid: str
     hostmacroid: str
     automatic: Optional[int] = None  # >= 7.0 only. 0 = user, 1 = discovery rule
-    hosts: List[Host] = Field(default_factory=list)
-    templates: List[Template] = Field(default_factory=list)
+    hosts: list[Host] = Field(default_factory=list)
+    templates: list[Template] = Field(default_factory=list)
 
 
 class GlobalMacro(MacroBase):
@@ -412,7 +410,7 @@ class Item(ZabbixAPIBaseModel):
     description: Optional[str] = None
     history: Optional[str] = None
     lastvalue: Optional[str] = None
-    hosts: List[Host] = []
+    hosts: list[Host] = []
 
 
 class Role(ZabbixAPIBaseModel):
@@ -465,10 +463,10 @@ class Maintenance(ZabbixAPIBaseModel):
     description: Optional[str] = None
     maintenance_type: Optional[int] = None
     tags_evaltype: Optional[int] = None
-    timeperiods: List[TimePeriod] = []
-    tags: List[ProblemTag] = []
-    hosts: List[Host] = []
-    hostgroups: List[HostGroup] = Field(
+    timeperiods: list[TimePeriod] = []
+    tags: list[ProblemTag] = []
+    hosts: list[Host] = []
+    hostgroups: list[HostGroup] = Field(
         default_factory=list, validation_alias=AliasChoices("groups", "hostgroups")
     )
 
@@ -517,9 +515,9 @@ class Trigger(ZabbixAPIBaseModel):
     correlation_tag: str
     manual_close: int
     uuid: str
-    hosts: List[Host] = []
+    hosts: list[Host] = []
     # NYI:
-    # groups: List[HostGroup] = Field(
+    # groups: list[HostGroup] = Field(
     #     default_factory=list, validation_alias=AliasChoices("groups", "hostgroups")
     # )
     # items
@@ -578,4 +576,4 @@ class ImportRules(ZabbixAPIBaseModel):
 
 
 class ModelWithHosts(Protocol):
-    hosts: List[Host]
+    hosts: list[Host]

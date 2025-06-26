@@ -18,12 +18,7 @@ from datetime import timedelta
 from enum import Enum
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Dict
-from typing import List
 from typing import Optional
-from typing import Set
-from typing import Tuple
-from typing import Type
 from typing import TypeVar
 
 import httpx
@@ -196,7 +191,7 @@ class SourceCollectorProcess(BaseProcess):
         config: models.Settings,
         module: SourceCollectorModule,
         settings: models.SourceCollectorSettings,
-        source_hosts_queue: multiprocessing.Queue,
+        source_hosts_queue: multiprocessing.Queue[models.Host],
     ) -> None:
         super().__init__(name, state, config)
         self.module = module
@@ -331,7 +326,7 @@ class SourceCollectorProcess(BaseProcess):
         except Exception as e:
             raise SourceCollectorError(e) from e
 
-        valid_hosts = []  # type: List[models.Host]
+        valid_hosts: list[models.Host] = []
         for host in hosts:
             if self.stop_event.is_set():
                 logging.debug("Told to stop. Breaking")
@@ -380,7 +375,7 @@ class SourceHandlerProcess(BaseProcess):
         name: str,
         state: State,
         config: models.Settings,
-        source_hosts_queues: List[multiprocessing.Queue],
+        source_hosts_queues: list[multiprocessing.Queue[models.Host]],
     ) -> None:
         super().__init__(name, state, config)
 
@@ -420,7 +415,7 @@ class SourceHandlerProcess(BaseProcess):
 
     def handle_source_host(
         self,
-        cursor: "Cursor",
+        cursor: Cursor,
         host: models.Host,
         current_host: Optional[models.Host],
         source: str,
@@ -447,9 +442,9 @@ class SourceHandlerProcess(BaseProcess):
             return HostAction.INSERT
 
     def get_current_source_hosts(
-        self, cursor: "Cursor", source: str
-    ) -> Dict[str, models.Host]:
-        hosts = {}  # type: Dict[str, models.Host]
+        self, cursor: Cursor, source: str
+    ) -> dict[str, models.Host]:
+        hosts: dict[str, models.Host] = {}
         cursor.execute(
             sql.SQL("SELECT data FROM {} WHERE data->'sources' ? %s").format(
                 self.db_source_table
@@ -470,10 +465,10 @@ class SourceHandlerProcess(BaseProcess):
                 hosts[host.hostname] = host
         return hosts
 
-    def handle_source_hosts(self, source: str, hosts: List[models.Host]) -> None:
+    def handle_source_hosts(self, source: str, hosts: list[models.Host]) -> None:
         start_time = time.time()
 
-        actions = Counter()  # type: Counter[HostAction]
+        actions: Counter[HostAction] = Counter()
 
         source_hostnames = {host.hostname for host in hosts}
         with self.db_connection, self.db_connection.cursor() as db_cursor:
@@ -526,7 +521,7 @@ class SourceMergerProcess(BaseProcess):
         name: str,
         state: State,
         config: models.Settings,
-        host_modifiers: List[HostModifier],
+        host_modifiers: list[HostModifier],
     ) -> None:
         super().__init__(name, state, config)
 
@@ -541,7 +536,7 @@ class SourceMergerProcess(BaseProcess):
     def work(self) -> None:
         self.merge_sources()
 
-    def merge_hosts(self, hosts: List[models.Host]) -> models.Host:
+    def merge_hosts(self, hosts: list[models.Host]) -> models.Host:
         """Merge a list of hosts from different sources into a single host."""
         # merge_sources() guarantees the list is not empty
         # however, that could change without this method being updated.
@@ -555,9 +550,9 @@ class SourceMergerProcess(BaseProcess):
 
     def handle_host(
         self,
-        cursor: "Cursor",
+        cursor: Cursor,
         current_host: Optional[models.Host],
-        source_hosts: List[models.Host],
+        source_hosts: list[models.Host],
     ) -> HostAction:
         """Merge host and apply host modifiers. Updates DB if changed
 
@@ -620,9 +615,9 @@ class SourceMergerProcess(BaseProcess):
             )
             return HostAction.INSERT
 
-    def get_source_hosts(self, cursor: "Cursor") -> Dict[str, List[models.Host]]:
+    def get_source_hosts(self, cursor: Cursor) -> dict[str, list[models.Host]]:
         cursor.execute(sql.SQL("SELECT data FROM {}").format(self.db_source_table))
-        source_hosts = defaultdict(list)  # type: Dict[str, List[models.Host]]
+        source_hosts: defaultdict[str, list[models.Host]] = defaultdict(list)
         for host in cursor.fetchall():
             try:
                 host_model = models.Host(**host[0])
@@ -637,9 +632,9 @@ class SourceMergerProcess(BaseProcess):
                 source_hosts[host_model.hostname].append(host_model)
         return source_hosts
 
-    def get_hosts(self, cursor: "Cursor") -> Dict[str, models.Host]:
+    def get_hosts(self, cursor: Cursor) -> dict[str, models.Host]:
         cursor.execute(sql.SQL("SELECT data FROM {}").format(self.db_hosts_table))
-        hosts = {}  # type: Dict[str, models.Host]
+        hosts: dict[str, models.Host] = {}
         for host in cursor.fetchall():
             try:
                 host_model = models.Host(**host[0])
@@ -655,7 +650,7 @@ class SourceMergerProcess(BaseProcess):
     def merge_sources(self) -> None:
         start_time = time.time()
         logging.info("Merge starting")
-        actions = Counter()  # type: Counter[HostAction]
+        actions: Counter[HostAction] = Counter()
 
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             # Get all hostnames from source hosts and current (merged) hosts
@@ -786,14 +781,14 @@ class ZabbixUpdater(BaseProcess):
     def do_update(self) -> None:
         pass
 
-    def get_db_hosts(self) -> Dict[str, models.Host]:
+    def get_db_hosts(self) -> dict[str, models.Host]:
         with self.db_connection, self.db_connection.cursor() as db_cursor:
             db_cursor.execute(
                 sql.SQL("SELECT data FROM {} WHERE data->>'enabled' = 'true'").format(
                     self.db_hosts_table
                 )
             )
-            db_hosts = {}  # type: Dict[str, models.Host]
+            db_hosts: dict[str, models.Host] = {}
             for res in db_cursor.fetchall():
                 try:
                     host = models.Host(**res[0])
@@ -806,7 +801,7 @@ class ZabbixUpdater(BaseProcess):
                     db_hosts[host.hostname] = host
             return db_hosts
 
-    def get_hostgroups(self, name: Optional[str] = None) -> List[HostGroup]:
+    def get_hostgroups(self, name: Optional[str] = None) -> list[HostGroup]:
         try:
             names = [name] if name else []
             hostgroups = self.api.get_hostgroups(*names)
@@ -839,10 +834,10 @@ class ZabbixGarbageCollector(ZabbixUpdater):
 
     def filter_disabled_hosts(
         self, model: ModelWithHosts
-    ) -> Tuple[List[Host], List[Host]]:
+    ) -> tuple[list[Host], list[Host]]:
         """Returns a tuple of (active_hosts, disabled_hosts) from a model."""
-        keep: List[Host] = []
-        remove: List[Host] = []
+        keep: list[Host] = []
+        remove: list[Host] = []
         for host in model.hosts:
             if host.status == MonitoringStatus.OFF:
                 remove.append(host)
@@ -850,7 +845,7 @@ class ZabbixGarbageCollector(ZabbixUpdater):
                 keep.append(host)
         return keep, remove
 
-    def get_maintenances(self, disabled_hosts: List[Host]) -> List[Maintenance]:
+    def get_maintenances(self, disabled_hosts: list[Host]) -> list[Maintenance]:
         """Fetch all maintenances with disabled hosts in Zabbix."""
         return self.api.get_maintenances(hosts=disabled_hosts, select_hosts=True)
 
@@ -894,7 +889,7 @@ class ZabbixGarbageCollector(ZabbixUpdater):
         self.api.delete_maintenance(maintenance)
         logging.info("Deleted maintenance '%s'", maintenance.name)
 
-    def cleanup_maintenances(self, disabled_hosts: List[Host]) -> None:
+    def cleanup_maintenances(self, disabled_hosts: list[Host]) -> None:
         maintenances = self.api.get_maintenances(
             hosts=disabled_hosts, select_hosts=True
         )
@@ -937,7 +932,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             return self.api.get_hostgroup(hostgroup)
 
-    def get_maintenances(self, zabbix_host: Host) -> List[Maintenance]:
+    def get_maintenances(self, zabbix_host: Host) -> list[Maintenance]:
         try:
             maintenances = self.api.get_maintenances(
                 hosts=[zabbix_host],
@@ -1194,7 +1189,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         )
 
     def validate_interface_details(
-        self, cls: Type[HostInterfaceDetailsT], interface: models.Interface, host: Host
+        self, cls: type[HostInterfaceDetailsT], interface: models.Interface, host: Host
     ) -> Optional[HostInterfaceDetailsT]:
         """Validate interface details from a source host.
 
@@ -1228,7 +1223,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             "Setting inventory_mode (%d) on host: %s", inventory_mode, zabbix_host
         )
 
-    def set_inventory(self, zabbix_host: Host, inventory: Dict[str, str]) -> None:
+    def set_inventory(self, zabbix_host: Host, inventory: dict[str, str]) -> None:
         if self.zabbix_config.dryrun:
             logging.info(
                 "DRYRUN: Setting inventory (%s) on host: %s", inventory, zabbix_host
@@ -1294,8 +1289,8 @@ class ZabbixHostUpdater(ZabbixUpdater):
         if not zabbix_proxies:
             logging.warning("No Zabbix proxies found.")
 
-        zabbix_managed_hosts: List[Host] = []
-        zabbix_manual_hosts: List[Host] = []
+        zabbix_managed_hosts: list[Host] = []
+        zabbix_manual_hosts: list[Host] = []
 
         for host in zabbix_hosts.values():
             if self.stop_event.is_set():
@@ -1558,7 +1553,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         super().__init__(name, state, config)
         self.update_interval = self.config.zac.process.template_updater.update_interval
 
-    def clear_templates(self, templates: List[Template], host: Host) -> None:
+    def clear_templates(self, templates: list[Template], host: Host) -> None:
         if self.zabbix_config.dryrun:
             logging.info(
                 "DRYRUN: Clearing templates %s on host: %s",
@@ -1578,7 +1573,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                 host,
             )
 
-    def set_templates(self, templates: List[Template], host: Host) -> None:
+    def set_templates(self, templates: list[Template], host: Host) -> None:
         # For logging
         to_add = ", ".join(f"{t.host!r}" for t in templates)
 
@@ -1600,7 +1595,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         managed_template_names = set(
             itertools.chain.from_iterable(self.property_template_map.values())
         )
-        zabbix_templates: Dict[str, Template] = {}
+        zabbix_templates: dict[str, Template] = {}
         for zabbix_template in self.api.get_templates():
             zabbix_templates[zabbix_template.host] = zabbix_template
 
@@ -1639,7 +1634,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                 continue
 
             # Determine managed templates
-            synced_template_names: Set[str] = set()
+            synced_template_names: set[str] = set()
             for prop in db_host.properties:
                 if template_names := self.property_template_map.get(prop):
                     synced_template_names.update(template_names)
@@ -1647,12 +1642,12 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                 set(zabbix_templates)  # list of dict keys
             )  # If the template isn't in zabbix we can't manage it
 
-            host_templates: Dict[str, Template] = {}
+            host_templates: dict[str, Template] = {}
             for zabbix_template in zabbix_host.parent_templates:
                 host_templates[zabbix_template.host] = zabbix_template
 
             old_host_templates = host_templates.copy()
-            host_templates_to_remove: Dict[str, Template] = {}
+            host_templates_to_remove: dict[str, Template] = {}
 
             # Update templates on host
             for template_name in list(host_templates):
@@ -1698,7 +1693,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         super().__init__(name, state, config)
         self.update_interval = self.config.zac.process.hostgroup_updater.update_interval
 
-    def set_hostgroups(self, host: Host, hostgroups: List[HostGroup]) -> None:
+    def set_hostgroups(self, host: Host, hostgroups: list[HostGroup]) -> None:
         """Set host groups on a host given a list of host groups."""
         to_add = ", ".join(f"{hg.name!r}" for hg in hostgroups)
         if self.zabbix_config.dryrun:
@@ -1711,7 +1706,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         else:
             logging.info("Set hostgroups %s on host: %s", to_add, host)
 
-    def create_extra_hostgroups(self, existing_hostgroups: List[HostGroup]) -> None:
+    def create_extra_hostgroups(self, existing_hostgroups: list[HostGroup]) -> None:
         """Creates additonal host groups based on the prefixes specified
         in the config file. These host groups are not assigned hosts by ZAC."""
         hostgroup_names = {h.name for h in existing_hostgroups}
@@ -1746,7 +1741,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             )
             return None
 
-    def create_templategroups(self, existing_hostgroups: List[HostGroup]) -> None:
+    def create_templategroups(self, existing_hostgroups: list[HostGroup]) -> None:
         """Creates template groups for each host group in the siteadmin
         mapping file with the configured template group prefix.
 
@@ -1779,7 +1774,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             )
             self._create_templategroups_pre_62_compat(tgroups, existing_hostgroups)
 
-    def _create_templategroups(self, tgroups: Set[str]) -> None:
+    def _create_templategroups(self, tgroups: set[str]) -> None:
         """Create the given template groups if they don't exist.
 
         Args:
@@ -1793,7 +1788,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             self.create_templategroup(tgroup)
 
     def _create_templategroups_pre_62_compat(
-        self, tgroups: Set[str], existing_hostgroups: List[HostGroup]
+        self, tgroups: set[str], existing_hostgroups: list[HostGroup]
     ) -> None:
         """Compatibility method for creating template groups on Zabbix <6.2.
 
@@ -1810,9 +1805,9 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             self.create_hostgroup(tgroup)
 
     def do_update(self) -> None:
-        managed_hostgroup_names = set(
+        managed_hostgroup_names: set[str] = set(
             itertools.chain.from_iterable(self.property_hostgroup_map.values())
-        )  # type: Set[str]
+        )
         managed_hostgroup_names.update(
             itertools.chain.from_iterable(self.siteadmin_hostgroup_map.values())
         )
@@ -1827,7 +1822,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         if self.zabbix_config.create_templategroups:
             self.create_templategroups(existing_hostgroups)
 
-        zabbix_hostgroups: Dict[str, HostGroup] = {}  # type: Dict[str, str]
+        zabbix_hostgroups: dict[str, HostGroup] = {}
         for zabbix_hostgroup in existing_hostgroups:
             zabbix_hostgroups[zabbix_hostgroup.name] = zabbix_hostgroup
             if zabbix_hostgroup.name.startswith(
@@ -1896,7 +1891,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                     f"{self.zabbix_config.hostgroup_importance_prefix}X"
                 )
 
-            host_hostgroups: Dict[str, HostGroup] = {}
+            host_hostgroups: dict[str, HostGroup] = {}
             for zabbix_hostgroup in zabbix_host.groups:
                 host_hostgroups[zabbix_hostgroup.name] = zabbix_hostgroup
             old_host_hostgroups = host_hostgroups.copy()

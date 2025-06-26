@@ -5,13 +5,10 @@ Leading underscore in module name to avoid name collision with built-in module `
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
-from typing import List
 from typing import NamedTuple
 from typing import Protocol
-from typing import Sequence
-from typing import Set
-from typing import Tuple
 from typing import TypedDict
 from typing import runtime_checkable
 
@@ -26,15 +23,15 @@ class ZabbixTag(TypedDict):
 
 ZabbixTags = Sequence[ZabbixTag]
 
-ZacTag = Tuple[str, str]
-ZacTags = Set[ZacTag]
+ZacTag = tuple[str, str]
+ZacTags = set[ZacTag]
 
 
 @runtime_checkable
 class SourceCollectorModule(Protocol):
     """Module that collects hosts from a source."""
 
-    def collect(self, *args: Any, **kwargs: Any) -> List[Host]:
+    def collect(self, *args: Any, **kwargs: Any) -> list[Host]:
         """Collect hosts from the given source. Returns a list of Host objects"""
         ...
 

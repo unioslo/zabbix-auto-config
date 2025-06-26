@@ -7,7 +7,6 @@ from datetime import timedelta
 from multiprocessing.managers import BaseManager
 from multiprocessing.managers import NamespaceProxy  # type: ignore # why unexported?
 from typing import Any
-from typing import Dict
 from typing import Optional
 
 from pydantic import BaseModel
@@ -50,7 +49,7 @@ class State(BaseModel):
     def _serialize_timedelta(self, value: timedelta) -> float:
         return value.total_seconds()
 
-    def asdict(self) -> Dict[str, Any]:
+    def asdict(self) -> dict[str, Any]:
         """Return dict representation of the State object."""
         return self.model_dump(mode="json")
 

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
-from typing import List
 from unittest.mock import MagicMock
 
 import pytest
@@ -97,7 +96,7 @@ FAIL_ZAC = pytest.mark.xfail(strict=True, raises=ZACException)
     ],
 )
 def test_check_failsafe(
-    config: Settings, failsafe: int, to_add: List[str], to_remove: List[str]
+    config: Settings, failsafe: int, to_add: list[str], to_remove: list[str]
 ) -> None:
     config.zabbix.failsafe = failsafe
     check_failsafe(config, to_add, to_remove)

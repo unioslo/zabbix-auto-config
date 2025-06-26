@@ -6,12 +6,11 @@ import logging
 import multiprocessing
 import queue
 import re
+from collections.abc import MutableMapping
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
-from typing import Dict
-from typing import List
-from typing import MutableMapping
+from typing import Any
 from typing import Optional
 from typing import Union
 
@@ -37,16 +36,16 @@ def is_valid_ip(ip: str):
         return False
 
 
-def zabbix_tags2zac_tags(zabbix_tags: List[HostTag]) -> ZacTags:
+def zabbix_tags2zac_tags(zabbix_tags: list[HostTag]) -> ZacTags:
     return {(tag.tag, tag.value) for tag in zabbix_tags}
 
 
-def zac_tags2zabbix_tags(zac_tags: ZacTags) -> List[HostTag]:
+def zac_tags2zabbix_tags(zac_tags: ZacTags) -> list[HostTag]:
     return [HostTag(tag=tag[0], value=tag[1]) for tag in zac_tags]
 
 
-def read_map_file(path: Union[str, Path]) -> Dict[str, List[str]]:
-    _map = {}  # type: Dict[str, List[str]]
+def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
+    _map: dict[str, list[str]] = {}
 
     with open(path) as f:
         for lineno, line in enumerate(f, start=1):
@@ -143,10 +142,10 @@ def with_prefix(
 
 
 def mapping_values_with_prefix(
-    m: MutableMapping[str, List[str]],
+    m: MutableMapping[str, list[str]],
     prefix: str,
     separator: str = "-",
-) -> MutableMapping[str, List[str]]:
+) -> MutableMapping[str, list[str]]:
     """Calls `with_prefix` on all items in the values (list) in the mapping `m`."""
     m = copy.copy(m)  # don't modify the original mapping
     for key, value in m.items():
@@ -162,7 +161,7 @@ def mapping_values_with_prefix(
     return m
 
 
-def drain_queue(q: multiprocessing.Queue) -> None:
+def drain_queue(q: multiprocessing.Queue[Any]) -> None:
     """Drains a multiprocessing.Queue by calling `queue.get_nowait()` until the queue is empty."""
     while not q.empty():
         try:

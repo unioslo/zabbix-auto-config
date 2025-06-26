@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 from typing import TypeVar
 
 from pydantic import BaseModel

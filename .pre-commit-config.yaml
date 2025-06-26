@@ -9,12 +9,17 @@ repos:
     - id: check-yaml
     - id: check-added-large-files
   - repo: https://github.com/abravalheri/validate-pyproject
-    rev: v0.23
+    rev: v0.24.1
     hooks:
       - id: validate-pyproject
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.20.0
+    hooks:
+      - id: pyupgrade
+        args: ["--py39-plus", "--keep-runtime-typing"]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.9.1
+    rev: v0.12.0
     hooks:
       # Run the linter.
       - id: ruff

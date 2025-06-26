@@ -2,16 +2,13 @@ from __future__ import annotations
 
 import datetime
 import importlib
-import importlib.metadata
 import logging
 import multiprocessing
 import os
-import os.path
 import sys
 import time
+from multiprocessing import Queue
 from pathlib import Path
-from typing import Annotated
-from typing import List
 from typing import Optional
 
 import multiprocessing_logging
@@ -32,11 +29,11 @@ from zabbix_auto_config.state import get_manager
 app = typer.Typer(add_completion=False, pretty_exceptions_enable=False)
 
 
-def get_source_collectors(config: models.Settings) -> List[SourceCollector]:
+def get_source_collectors(config: models.Settings) -> list[SourceCollector]:
     source_collector_dir = config.zac.source_collector_dir
     sys.path.append(source_collector_dir)
 
-    source_collectors = []  # type: List[SourceCollector]
+    source_collectors: list[SourceCollector] = []
     for (
         source_collector_name,
         source_collector_config,
@@ -66,7 +63,7 @@ def get_source_collectors(config: models.Settings) -> List[SourceCollector]:
     return source_collectors
 
 
-def get_host_modifiers(modifier_dir: str) -> List[HostModifier]:
+def get_host_modifiers(modifier_dir: str) -> list[HostModifier]:
     sys.path.append(modifier_dir)
     try:
         module_names = [
@@ -77,7 +74,7 @@ def get_host_modifiers(modifier_dir: str) -> List[HostModifier]:
     except FileNotFoundError:
         logging.error("Host modififier directory %s does not exist.", modifier_dir)
         sys.exit(1)
-    host_modifiers = []  # type: List[HostModifier]
+    host_modifiers: list[HostModifier] = []
     for module_name in module_names:
         module = importlib.import_module(module_name)
         if not isinstance(module, HostModifierModule):
@@ -100,7 +97,7 @@ def get_host_modifiers(modifier_dir: str) -> List[HostModifier]:
     return host_modifiers
 
 
-def log_process_status(processes: List[processing.BaseProcess]) -> None:
+def log_process_status(processes: list[processing.BaseProcess]) -> None:
     process_statuses = []
 
     for process in processes:
@@ -113,32 +110,26 @@ def log_process_status(processes: List[processing.BaseProcess]) -> None:
 
 @app.command()
 def main(
-    failsafe: Annotated[
-        Optional[int],
-        typer.Option(
-            "--failsafe",
-            "-F",
-            help="Maximum number of hosts to change.",
-            show_default=False,
-        ),
-    ] = None,
-    dryrun: Annotated[
-        Optional[bool],
-        typer.Option(
-            "--dryrun",
-            "-D",
-            help="Dry run mode.",
-        ),
-    ] = None,
-    config_path: Annotated[
-        Optional[Path],
-        typer.Option(
-            "--config",
-            "-C",
-            help="Path to config file.",
-            show_default=False,
-        ),
-    ] = None,
+    failsafe: Optional[int] = typer.Option(
+        None,
+        "--failsafe",
+        "-F",
+        help="Maximum number of hosts to change.",
+        show_default=False,
+    ),
+    dryrun: Optional[bool] = typer.Option(
+        None,
+        "--dryrun",
+        "-D",
+        help="Dry run mode.",
+    ),
+    config_path: Optional[Path] = typer.Option(
+        None,
+        "--config",
+        "-C",
+        help="Path to config file.",
+        show_default=False,
+    ),
 ) -> None:
     """Run Zabbix-auto-config."""
     multiprocessing_logging.install_mp_handler()
@@ -170,11 +161,11 @@ def main(
     source_collectors = get_source_collectors(config)
 
     # Initialize source collector processes from imported modules
-    source_hosts_queues = []  # type: List[multiprocessing.Queue[models.Host]]
-    src_processes = []  # type: List[processing.BaseProcess]
+    source_hosts_queues: list[Queue[models.Host]] = []
+    src_processes: list[processing.BaseProcess] = []
     for source_collector in source_collectors:
         # Each source collector has its own queue
-        source_hosts_queue = multiprocessing.Queue(maxsize=1)  # type: multiprocessing.Queue[models.Host]
+        source_hosts_queue: Queue[models.Host] = Queue(maxsize=1)
         source_hosts_queues.append(source_hosts_queue)
         process: processing.BaseProcess = processing.SourceCollectorProcess(
             source_collector.name,
@@ -187,7 +178,7 @@ def main(
         src_processes.append(process)
 
     # Initialize the default processes
-    processes: List[processing.BaseProcess] = [
+    processes: list[processing.BaseProcess] = [
         processing.SourceHandlerProcess(
             "source-handler",
             state_manager.State(),

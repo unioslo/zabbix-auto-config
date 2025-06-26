@@ -5,8 +5,6 @@ Tests against known versions of Zabbix. Expects support for alpha, beta and rc.
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import pytest
 from packaging.version import Version
 
@@ -28,7 +26,7 @@ from packaging.version import Version
         ("6.4.8rc1", (6, 4, 8)),
     ],
 )
-def test_version(version: str, release: Tuple[int, int, int]):
+def test_version(version: str, release: tuple[int, int, int]):
     """Test that the version string is parsed correctly."""
     v = Version(version)
     assert v.release == release
