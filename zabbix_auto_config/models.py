@@ -23,6 +23,8 @@ from typing_extensions import Self
 
 from zabbix_auto_config import utils
 
+logger = logging.getLogger(__name__)
+
 # TODO: Models aren't validated when making changes to a set/list. Why? How to handle?
 
 
@@ -51,7 +53,7 @@ class ConfigBaseModel(PydanticBaseModel):
             return values
         for key in values:
             if key not in cls.model_fields:
-                logging.warning(
+                logger.warning(
                     "%s: Got unknown config field '%s'.",
                     getattr(cls, "__name__", str(cls)),
                     key,
@@ -452,7 +454,7 @@ class SourceCollectorSettings(ConfigBaseModel):
 
         # Update interval of 0 cannot be used with backoff strategy
         if self.update_interval == 0:
-            logging.debug(
+            logger.debug(
                 "Update interval for collector '%s' is 0, but exponential backoff strategy is set due to `disable_duration = 0`. "
                 "Setting `disable_duration = -1` so no failure strategy is applied.",
                 self.module_name,
@@ -463,8 +465,9 @@ class SourceCollectorSettings(ConfigBaseModel):
         # Ensure any errors cause backoff to be triggered
         if self.error_tolerance != 0:
             self.error_tolerance = 0
-            logging.debug(
+            logger.debug(
                 "Setting error_tolerance to 0 for collector '%s' due to backoff strategy",
+                self.module_name,
             )
 
         if self.max_backoff < self.update_interval:
@@ -592,7 +595,7 @@ class Host(BaseModel):
             if other_interface.type not in self_interface_types:
                 self.interfaces.append(other_interface)
             else:
-                logging.warning(
+                logger.warning(
                     "Trying to merge host with interface of same type. The other interface is ignored. Host: %s, type: %s",
                     self.hostname,
                     other_interface.type,
@@ -601,7 +604,7 @@ class Host(BaseModel):
 
         for k, v in other.inventory.items():
             if k in self.inventory and v != self.inventory[k]:
-                logging.warning(
+                logger.warning(
                     "Same inventory ('%s') set multiple times for host: '%s'",
                     k,
                     self.hostname,
@@ -615,7 +618,7 @@ class Host(BaseModel):
             if proxy_pattern
         ]
         if len(proxy_patterns) > 1:
-            logging.warning(
+            logger.warning(
                 "Multiple proxy patterns are provided. Discarding down to one. Host: %s",
                 self.hostname,
             )

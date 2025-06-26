@@ -20,6 +20,9 @@ if TYPE_CHECKING:
     from zabbix_auto_config._types import ZacTags
 
 
+logger = logging.getLogger(__name__)
+
+
 def is_valid_regexp(pattern: str):
     try:
         re.compile(pattern)
@@ -70,7 +73,7 @@ def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
                         f"Empty value(s) on line {lineno} in map file {path}"
                     )
             except ValueError:
-                logging.warning(
+                logger.warning(
                     "Invalid format at line %d in map file '%s'. Expected 'key:value', got '%s'.",
                     lineno,
                     path,
@@ -79,7 +82,7 @@ def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
                 continue
 
             if key in _map:
-                logging.warning(
+                logger.warning(
                     "Duplicate key %s at line %d in map file '%s'.", key, lineno, path
                 )
                 _map[key].extend(values)
@@ -90,7 +93,7 @@ def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
     for key, values in _map.items():
         values_dedup = list(dict.fromkeys(values))  # dict.fromkeys() guarantees order
         if len(values) != len(values_dedup):
-            logging.warning(
+            logger.warning(
                 "Ignoring duplicate values for key '%s' in map file '%s'.", key, path
             )
         _map[key] = values_dedup
@@ -132,7 +135,7 @@ def with_prefix(
 
     groupname = f"{prefix}{suffix}"
     if not prefix.endswith(separator) and not suffix.startswith(separator):
-        logging.warning(
+        logger.warning(
             "Prefix '%s' for group name '%s' does not contain separator '%s'",
             prefix,
             groupname,
@@ -154,7 +157,7 @@ def mapping_values_with_prefix(
             try:
                 new_value = with_prefix(text=v, prefix=prefix, separator=separator)
             except ValueError:
-                logging.warning("Unable to replace prefix in '%s' with '%s'", v, prefix)
+                logger.warning("Unable to replace prefix in '%s' with '%s'", v, prefix)
                 continue
             new_values.append(new_value)
         m[key] = new_values
@@ -206,7 +209,7 @@ def write_file(path: Union[str, Path], content: str, end: str = "\n") -> None:
                 content += end
             f.write(content)
     except OSError as e:
-        logging.error("Failed to write to file '%s': %s", path, e)
+        logger.error("Failed to write to file '%s': %s", path, e)
         raise
 
 

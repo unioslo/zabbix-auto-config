@@ -18,6 +18,8 @@ from zabbix_auto_config import processing
 from zabbix_auto_config.state import State
 from zabbix_auto_config.state import StateProxy
 
+logger = logging.getLogger(__name__)
+
 
 class ProcessInfo(BaseModel):
     name: str
@@ -98,4 +100,4 @@ def write_health(
         with open(health_file, "w") as f:
             f.write(health.to_json())
     except Exception as e:
-        logging.error("Unable to write health file %s: %s", health_file, e)
+        logger.error("Unable to write health file %s: %s", health_file, e)

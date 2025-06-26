@@ -29,6 +29,9 @@ from zabbix_auto_config.state import get_manager
 app = typer.Typer(add_completion=False, pretty_exceptions_enable=False)
 
 
+logger = logging.getLogger(__name__)
+
+
 def get_source_collectors(config: models.Settings) -> list[SourceCollector]:
     source_collector_dir = config.zac.source_collector_dir
     sys.path.append(source_collector_dir)
@@ -41,14 +44,14 @@ def get_source_collectors(config: models.Settings) -> list[SourceCollector]:
         try:
             module = importlib.import_module(source_collector_config.module_name)
         except ModuleNotFoundError:
-            logging.error(
+            logger.error(
                 "Unable to find source collector named '%s' in '%s'",
                 source_collector_config.module_name,
                 source_collector_dir,
             )
             continue
         if not isinstance(module, SourceCollectorModule):
-            logging.error(
+            logger.error(
                 "Source collector named '%s' is not a valid source collector module",
                 source_collector_config.module_name,
             )
@@ -72,13 +75,13 @@ def get_host_modifiers(modifier_dir: str) -> list[HostModifier]:
             if filename.endswith(".py") and filename != "__init__.py"
         ]
     except FileNotFoundError:
-        logging.error("Host modififier directory %s does not exist.", modifier_dir)
+        logger.error("Host modifier directory %s does not exist.", modifier_dir)
         sys.exit(1)
     host_modifiers: list[HostModifier] = []
     for module_name in module_names:
         module = importlib.import_module(module_name)
         if not isinstance(module, HostModifierModule):
-            logging.warning(
+            logger.warning(
                 "Module '%s' is not a valid host modifier module. Skipping.",
                 module_name,
             )
@@ -89,7 +92,7 @@ def get_host_modifiers(modifier_dir: str) -> list[HostModifier]:
                 module=module,
             )
         )
-    logging.info(
+    logger.info(
         "Loaded %d host modifiers: %s",
         len(host_modifiers),
         ", ".join([repr(modifier.name) for modifier in host_modifiers]),
@@ -105,25 +108,25 @@ def log_process_status(processes: list[processing.BaseProcess]) -> None:
         process_status = "alive" if process.is_alive() else "dead"
         process_statuses.append(f"{process_name} is {process_status}")
 
-    logging.info("Process status: %s", ", ".join(process_statuses))
+    logger.info("Process status: %s", ", ".join(process_statuses))
 
 
 @app.command()
 def main(
-    failsafe: Optional[int] = typer.Option(
+    failsafe: Optional[int] = typer.Option(  # noqa: B008
         None,
         "--failsafe",
         "-F",
         help="Maximum number of hosts to change.",
         show_default=False,
     ),
-    dryrun: Optional[bool] = typer.Option(
+    dryrun: Optional[bool] = typer.Option(  # noqa: B008
         None,
         "--dryrun",
         "-D",
         help="Dry run mode.",
     ),
-    config_path: Optional[Path] = typer.Option(
+    config_path: Optional[Path] = typer.Option(  # noqa: B008
         None,
         "--config",
         "-C",
@@ -149,7 +152,7 @@ def main(
     logging.getLogger("httpcore").setLevel(logging.ERROR)
     logging.getLogger("httpx").setLevel(logging.ERROR)
 
-    logging.info("Main start (%d) version %s", os.getpid(), __version__)
+    logger.info("Main start (%d) version %s", os.getpid(), __version__)
     stop_event = multiprocessing.Event()
     state_manager = get_manager()
 
@@ -226,7 +229,7 @@ def main(
         try:
             pr.start()
         except Exception as e:
-            logging.error("Unable to start process %s: %s", pr.name, e)
+            logger.error("Unable to start process %s: %s", pr.name, e)
             stop_event.set()  # Stop other processes immediately
             break
 
@@ -252,20 +255,20 @@ def main(
                 process.name for process in processes if not process.is_alive()
             ]
             if dead_process_names:
-                logging.error(
+                logger.error(
                     "A child has died: %s. Exiting", ", ".join(dead_process_names)
                 )
                 stop_event.set()
 
             time.sleep(1)
 
-        logging.info(
+        logger.info(
             "Queues: %s",
             ", ".join([str(queue.qsize()) for queue in source_hosts_queues]),
         )
 
         for pr in processes:
-            logging.info("Terminating: %s(%d)", pr.name, pr.pid)
+            logger.info("Terminating: %s(%d)", pr.name, pr.pid)
             pr.terminate()
 
         def get_alive():
@@ -274,10 +277,10 @@ def main(
         while alive := get_alive():
             log_process_status(processes)
             for process in alive:
-                logging.info("Waiting for: %s(%d)", process.name, process.pid)
+                logger.info("Waiting for: %s(%d)", process.name, process.pid)
                 process.join(10)
                 if process.exitcode is None:
-                    logging.warning(
+                    logger.warning(
                         "Process hanging. Signaling new terminate: %s(%d)",
                         process.name,
                         process.pid,
@@ -285,7 +288,7 @@ def main(
                     process.terminate()
             time.sleep(1)
 
-    logging.info("Main exit")
+    logger.info("Main exit")
 
 
 def run() -> None:
