@@ -59,6 +59,7 @@ def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
                 continue
 
             try:
+                line = line.partition("#")[0].strip()  # remove trailing comments
                 key, value = line.split(":", 1)
 
                 # Remove whitespace and check for empty key
@@ -67,6 +68,7 @@ def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
                     raise ValueError(f"Emtpy key on line {lineno} in map file {path}")
 
                 # Split on comma, but only keep non-empty values
+                # remove trailing comments and whitespace
                 values = list(filter(None, [s.strip() for s in value.split(",")]))
                 if not values or all(not s for s in values):
                     raise ValueError(
