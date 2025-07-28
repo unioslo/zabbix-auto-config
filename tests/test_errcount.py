@@ -79,7 +79,7 @@ def test_rolling_error_counter_count_is_rolling():
     rec.add()
     rec.add()
     assert rec.count() == 2
-    time.sleep(0.1)  # Double duration just to be sure the first one expired
+    time.sleep(0.1)  # Double duration just to be sure the first two expired
     rec.add()
     assert rec.count() == 1
 
