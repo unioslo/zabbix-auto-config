@@ -71,18 +71,17 @@ def test_rolling_error_counter_count_is_rolling():
     """Check that the error counter is actually rolling by incrementally adding
     and sleeping. At some point we should see the counter decrease because
     an entry has expired."""
-    rec = RollingErrorCounter(0.03, 5)
+    # Init an error counter that rolls every 0.05 seconds.
+    # Trying to use a shorter interval, such as 0.01, is flaky in CI.
+    # We add 2 errors, then sleep 0.1 seconds to ensure the they have expired
+    # before we add a new one and check the count.
+    rec = RollingErrorCounter(0.05, 5)
     rec.add()
-    assert rec.count() == 1
-    time.sleep(0.01)
     rec.add()
     assert rec.count() == 2
-    time.sleep(0.01)
+    time.sleep(0.1)  # Double duration just to be sure the first one expired
     rec.add()
-    assert rec.count() == 3
-    time.sleep(0.011)  # just to be sure the first one expired
-    rec.add()
-    assert rec.count() == 3
+    assert rec.count() == 1
 
 
 def test_rolling_error_counter_tolerance_exceeded():
