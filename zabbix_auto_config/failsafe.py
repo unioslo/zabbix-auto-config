@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import logging
+import structlog
 
 from zabbix_auto_config import models
 from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.models import Settings
 from zabbix_auto_config.models import ZacSettings
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 
 def check_failsafe(config: Settings, to_add: list[str], to_remove: list[str]) -> None:

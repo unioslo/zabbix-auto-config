@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Optional
 
 import psycopg2
+import structlog
 from psycopg2 import sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
@@ -13,7 +13,7 @@ from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.models import DBSettings
 from zabbix_auto_config.models import Settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 
 def get_connection(

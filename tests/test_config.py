@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import structlog
 import tomli
 import zabbix_auto_config.models as models
 from hypothesis import given
@@ -19,18 +20,20 @@ def test_sample_config(sample_config: str):
     models.Settings(**tomli.loads(sample_config))
 
 
-def test_config_extra_field(sample_config: str, caplog: pytest.LogCaptureFixture):
+def test_config_extra_field(
+    sample_config: str, log_output: structlog.testing.LogCapture
+):
     config = tomli.loads(sample_config)
     config["foo"] = "bar"
     models.Settings(**config)
-    assert len(caplog.records) == 1
-    assert caplog.record_tuples == snapshot(
-        [("zabbix_auto_config.models", 30, "Settings: Got unknown config field 'foo'.")]
+    assert len(log_output.entries) == 1
+    assert log_output.entries == snapshot(
+        [{"event": "Settings: Got unknown config field 'foo'.", "log_level": "warning"}]
     )
 
 
 def test_config_extra_field_allowed(
-    sample_config: str, caplog: pytest.LogCaptureFixture
+    sample_config: str, log_output: structlog.testing.LogCapture
 ):
     config = tomli.loads(sample_config)
     config["foo"] = "bar"
@@ -40,7 +43,7 @@ def test_config_extra_field_allowed(
     try:
         models.Settings.model_config["extra"] = "allow"
         models.Settings(**config)
-        assert len(caplog.records) == 0
+        assert len(log_output.entries) == 0
     finally:
         models.Settings.model_config["extra"] = original_extra
 

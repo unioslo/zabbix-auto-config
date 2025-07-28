@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from datetime import timedelta
 from ipaddress import IPv4Address
 from ipaddress import IPv6Address
@@ -8,12 +7,12 @@ from pathlib import Path
 from typing import Union
 
 import pytest
+import structlog
 from hypothesis import HealthCheck
 from hypothesis import given
 from hypothesis import settings
 from hypothesis import strategies as st
 from inline_snapshot import snapshot
-from pytest import LogCaptureFixture
 from zabbix_auto_config import utils
 from zabbix_auto_config.pyzabbix.types import HostTag
 
@@ -39,7 +38,7 @@ def test_is_valid_ip(ip_address: Union[IPv4Address, IPv6Address]):
     assert utils.is_valid_ip(str(ip_address))
 
 
-def test_read_map_file(tmp_path: Path, caplog: pytest.LogCaptureFixture):
+def test_read_map_file(tmp_path: Path, log_output: structlog.testing.LogCapture):
     tmpfile = tmp_path / "map.txt"
     tmpfile.write_text(
         """\
@@ -66,8 +65,7 @@ Spaces in key: Spaces in values, are, ok
         encoding="utf-8",
     )
 
-    with caplog.at_level(logging.WARNING):
-        m = utils.read_map_file(tmpfile)
+    m = utils.read_map_file(tmpfile)
 
     assert m == snapshot(
         {
@@ -103,8 +101,10 @@ Spaces in key: Spaces in values, are, ok
         "line 16",
     ]
     for phrase in invalid_lines_contain:
-        assert phrase in caplog.text, f"Expected '{phrase}' in log output {caplog.text}"
-    assert caplog.text.count("WARNING") == 8
+        assert phrase in str(log_output.entries), (
+            f"Expected '{phrase}' in log output {log_output.entries}"
+        )
+    assert len(log_output.entries) == 8
 
 
 @given(st.text())
@@ -206,17 +206,21 @@ def test_mapping_values_with_prefix(hostgroup_map_file: Path, prefix: str):
     assert m["user3@example.com"] == [f"{old_prefix}user3-primary"]
 
 
-def test_mapping_values_with_prefix_no_prefix_arg(caplog: LogCaptureFixture) -> None:
+def test_mapping_values_with_prefix_no_prefix_arg(
+    log_output: structlog.testing.LogCapture,
+) -> None:
     """Passing an empty string as the prefix should be ignored and logged."""
     res = utils.mapping_values_with_prefix(
         {"user1@example.com": ["Hostgroup-user1-primary"]},
         prefix="",
     )
     assert res == {"user1@example.com": []}
-    assert caplog.text.count("WARNING") == 1
+    assert len(log_output.entries) == 1
 
 
-def test_mapping_values_with_prefix_no_group_prefix(caplog: LogCaptureFixture) -> None:
+def test_mapping_values_with_prefix_no_group_prefix(
+    log_output: structlog.testing.LogCapture,
+) -> None:
     """Passing a group name with no prefix separated by the separator
     should be ignored and logged."""
     res = utils.mapping_values_with_prefix(
@@ -224,11 +228,11 @@ def test_mapping_values_with_prefix_no_group_prefix(caplog: LogCaptureFixture) -
         prefix="Foo-",
     )
     assert res == {"user1@example.com": []}
-    assert caplog.text.count("WARNING") == 1
+    assert len(log_output.entries) == 1
 
 
 def test_mapping_values_with_prefix_no_prefix_separator(
-    caplog: LogCaptureFixture,
+    log_output: structlog.testing.LogCapture,
 ) -> None:
     """Passing a prefix with no separator emits a warning (but is otherwise legal)."""
     res = utils.mapping_values_with_prefix(
@@ -236,7 +240,7 @@ def test_mapping_values_with_prefix_no_prefix_separator(
         prefix="Foo",
     )
     assert res == {"user1@example.com": ["Foouser1-primary", "Foouser1-secondary"]}
-    assert caplog.text.count("WARNING") == 2
+    assert len(log_output.entries) == 2
 
 
 @pytest.mark.parametrize(

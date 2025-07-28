@@ -14,7 +14,6 @@
 #
 from __future__ import annotations
 
-import logging
 import ssl
 from collections.abc import Iterator
 from collections.abc import MutableMapping
@@ -27,6 +26,7 @@ from typing import Optional
 from typing import Union
 
 import httpx
+import structlog
 from pydantic import ValidationError
 
 from zabbix_auto_config.__about__ import __version__
@@ -90,7 +90,7 @@ if TYPE_CHECKING:
         timeout: TimeoutTypes
 
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 RPC_ENDPOINT = "/api_jsonrpc.php"
 

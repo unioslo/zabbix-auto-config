@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 import multiprocessing_logging
+import structlog
 import typer
 
 from zabbix_auto_config import models
@@ -29,7 +30,7 @@ from zabbix_auto_config.state import get_manager
 app = typer.Typer(add_completion=False, pretty_exceptions_enable=False)
 
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 
 def get_source_collectors(config: models.Settings) -> list[SourceCollector]:
@@ -136,9 +137,27 @@ def main(
 ) -> None:
     """Run Zabbix-auto-config."""
     multiprocessing_logging.install_mp_handler()
+
+    # Configure structlog
+    structlog.configure(
+        processors=[
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.add_logger_name,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.add_log_level,
+            structlog.processors.CallsiteParameterAdder(
+                parameters=[structlog.processors.CallsiteParameter.PROCESS_NAME]
+            ),
+            structlog.processors.JSONRenderer(),
+        ],
+        wrapper_class=structlog.stdlib.BoundLogger,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=False,
+    )
+
+    # Configure stdlib logging to work with structlog
     logging.basicConfig(
-        format="%(asctime)s %(levelname)s [%(processName)s %(process)d] [%(name)s] %(message)s",
-        datefmt="%Y-%m-%dT%H:%M:%S%z",
+        format="%(message)s",
         level=logging.DEBUG,
     )
     config = get_config(config_path)

@@ -23,6 +23,7 @@ from typing import TypeVar
 
 import httpx
 import psycopg2
+import structlog
 from packaging.version import Version
 from psycopg2 import sql
 from pydantic import ValidationError
@@ -61,7 +62,7 @@ if TYPE_CHECKING:
     from psycopg2.extensions import cursor as Cursor
 
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 
 class BaseProcess(multiprocessing.Process):

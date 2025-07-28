@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import ipaddress
-import logging
 import multiprocessing
 import queue
 import re
@@ -14,13 +13,15 @@ from typing import Any
 from typing import Optional
 from typing import Union
 
+import structlog
+
 from zabbix_auto_config.pyzabbix.types import HostTag
 
 if TYPE_CHECKING:
     from zabbix_auto_config._types import ZacTags
 
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 
 def is_valid_regexp(pattern: str):
@@ -58,6 +59,8 @@ def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
             if not line or line.startswith("#"):
                 continue
 
+            log = logger.bind(path=str(path), lineno=lineno)
+
             try:
                 line = line.partition("#")[0].strip()  # remove trailing comments
                 key, value = line.split(":", 1)
@@ -75,16 +78,17 @@ def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
                         f"Empty value(s) on line {lineno} in map file {path}"
                     )
             except ValueError:
-                logger.warning(
+                log.warning(
                     "Invalid format at line %d in map file '%s'. Expected 'key:value', got '%s'.",
                     lineno,
                     path,
                     line,
+                    path=str(path),
                 )
                 continue
 
             if key in _map:
-                logger.warning(
+                log.warning(
                     "Duplicate key %s at line %d in map file '%s'.", key, lineno, path
                 )
                 _map[key].extend(values)

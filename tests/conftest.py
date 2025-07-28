@@ -8,6 +8,7 @@ from unittest import mock
 from unittest.mock import MagicMock
 
 import pytest
+import structlog
 import tomli
 from zabbix_auto_config import models
 
@@ -222,3 +223,13 @@ def mock_zabbix_api() -> Iterable[type[MockZabbixAPI]]:
 def mock_psycopg2_connect() -> Iterable[PicklableMock]:
     with mock.patch("psycopg2.connect", PicklableMock()) as psycopg_mock:
         yield psycopg_mock
+
+
+@pytest.fixture(name="log_output")
+def fixture_log_output():
+    return structlog.testing.LogCapture()
+
+
+@pytest.fixture(autouse=True)
+def fixture_configure_structlog(log_output: structlog.testing.LogCapture):
+    structlog.configure(processors=[log_output])

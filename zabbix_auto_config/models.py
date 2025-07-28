@@ -10,6 +10,7 @@ from typing import Any
 from typing import Optional
 from typing import Union
 
+import structlog
 from pydantic import BaseModel
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict
@@ -23,7 +24,7 @@ from typing_extensions import Self
 
 from zabbix_auto_config import utils
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 # TODO: Models aren't validated when making changes to a set/list. Why? How to handle?
 
