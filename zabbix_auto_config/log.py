@@ -12,55 +12,6 @@ if sys.stderr.isatty():
     pass
 
 
-class CustomConsoleRenderer:
-    """Custom renderer that puts process_name in brackets."""
-
-    def __init__(self, colors=True):
-        # Use the default ConsoleRenderer for colorization
-        self._console_renderer = structlog.dev.ConsoleRenderer(colors=colors)
-
-    def __call__(self, logger, name, event_dict):
-        # Extract process_name if it exists
-        process_name = event_dict.pop("process_name", None)
-
-        # Build the formatted message parts
-        parts = []
-
-        # Timestamp
-        if "timestamp" in event_dict:
-            parts.append(event_dict.pop("timestamp"))
-
-        # Process name in brackets
-        if process_name:
-            parts.append(f"[{process_name}]")
-
-        # Log level
-        if "level" in event_dict:
-            level = event_dict.pop("level")
-            parts.append(f"[{level:<8}]")  # Left-align with padding
-
-        # Event message
-        if "event" in event_dict:
-            parts.append(event_dict.pop("event"))
-
-        # Join the parts
-        prefix = " ".join(parts)
-
-        # If there are remaining key-value pairs, render them
-        if event_dict:
-            # Put the remaining dict back with just the extra fields
-            remaining_dict = {"event": "", **event_dict}
-            _, _, rendered_dict = self._console_renderer(logger, name, remaining_dict)
-            # Remove the empty event from the rendered output
-            rendered_dict = rendered_dict.replace('event="" ', "").replace(
-                'event=""', ""
-            )
-            if rendered_dict.strip():
-                return f"{prefix} {rendered_dict.strip()}"
-
-        return prefix
-
-
 def configure_logging(config: Settings) -> None:
     multiprocessing_logging.install_mp_handler()
 
