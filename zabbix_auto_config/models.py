@@ -265,7 +265,7 @@ class LoggingSettings(ConfigBaseModel):
     """Settings for logging configuration."""
 
     level: LogLevel = Field(
-        default=logging.INFO,
+        default=LogLevel.INFO,
         description="The log level to use.",
     )
     file: Path = Field(
