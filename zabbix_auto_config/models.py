@@ -23,6 +23,7 @@ from pydantic import model_validator
 from typing_extensions import Self
 
 from zabbix_auto_config import utils
+from zabbix_auto_config.dirs import LOG_FILE_DEFAULT
 
 logger = structlog.stdlib.get_logger(__name__)
 
@@ -270,7 +271,7 @@ class LoggingSettings(ConfigBaseModel):
         description="The log level to use.",
     )
     file: Path = Field(
-        default=Path("zabbix-auto-config.log"),
+        default=LOG_FILE_DEFAULT,
         description="Path to store structured JSON logs.",
     )
     stderr: bool = Field(

@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - XDG Base Directory support for application files (config, logs, data, etc.). The following directories are supported:
   - `$XDG_CONFIG_HOME` or `~/.config/zabbix-auto-config` for configuration files.
+- Structured logging in JSON format to a file, with human-readable logs to stderr.
+  - The log file can be configured in the `zac.logging.file` option in the config file. Defaults to `$XDG_STATE_HOME/zabbix-auto-config/app.log`.
+  - Console logging can be toggled with the `zac.logging.stderr` option.
 
 ### Changed
 

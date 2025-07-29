@@ -69,7 +69,8 @@ level = "INFO"
 
 # Log file to write logs to.
 # The file contains structured JSON logs.
-file = "/var/log/zabbix-auto-config.log"
+# file = "/path/to/log/file.log" # Set the path to your log file
+# If not set, defaults to $XDG_STATE_HOME/zabbix-auto-config/logs/app.log
 
 # Enable human-readable logs to stderr.
 stderr = true
