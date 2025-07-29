@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime
 import importlib
-import logging
 import multiprocessing
 import os
 import sys
@@ -11,7 +10,6 @@ from multiprocessing import Queue
 from pathlib import Path
 from typing import Optional
 
-import multiprocessing_logging
 import structlog
 import typer
 
@@ -25,6 +23,7 @@ from zabbix_auto_config._types import SourceCollectorModule
 from zabbix_auto_config.config import get_config
 from zabbix_auto_config.db import init_db
 from zabbix_auto_config.health import write_health
+from zabbix_auto_config.log import configure_logging
 from zabbix_auto_config.state import get_manager
 
 app = typer.Typer(add_completion=False, pretty_exceptions_enable=False)
@@ -136,30 +135,7 @@ def main(
     ),
 ) -> None:
     """Run Zabbix-auto-config."""
-    multiprocessing_logging.install_mp_handler()
 
-    # Configure structlog
-    structlog.configure(
-        processors=[
-            structlog.stdlib.add_log_level,
-            structlog.stdlib.add_logger_name,
-            structlog.processors.TimeStamper(fmt="iso"),
-            structlog.processors.add_log_level,
-            structlog.processors.CallsiteParameterAdder(
-                parameters=[structlog.processors.CallsiteParameter.PROCESS_NAME]
-            ),
-            structlog.processors.JSONRenderer(),
-        ],
-        wrapper_class=structlog.stdlib.BoundLogger,
-        logger_factory=structlog.stdlib.LoggerFactory(),
-        cache_logger_on_first_use=False,
-    )
-
-    # Configure stdlib logging to work with structlog
-    logging.basicConfig(
-        format="%(message)s",
-        level=logging.DEBUG,
-    )
     config = get_config(config_path)
 
     if failsafe is not None:
@@ -167,9 +143,7 @@ def main(
     if dryrun is not None:
         config.zabbix.dryrun = dryrun
 
-    logging.getLogger().setLevel(config.zac.log_level)
-    logging.getLogger("httpcore").setLevel(logging.ERROR)
-    logging.getLogger("httpx").setLevel(logging.ERROR)
+    configure_logging(config)
 
     logger.info("Main start (%d) version %s", os.getpid(), __version__)
     stop_event = multiprocessing.Event()

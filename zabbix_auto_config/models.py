@@ -16,6 +16,7 @@ from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import RootModel
+from pydantic import ValidationError
 from pydantic import ValidationInfo
 from pydantic import field_serializer
 from pydantic import field_validator
@@ -237,16 +238,78 @@ class DBSettings(ConfigBaseModel):
         return extra
 
 
+class LogLevel(int, Enum):
+    """Log levels for the ZAC logger."""
+
+    NOTSET = logging.NOTSET
+    DEBUG = logging.DEBUG
+    INFO = logging.INFO
+    WARNING = logging.WARNING
+    ERROR = logging.ERROR
+    CRITICAL = logging.CRITICAL
+
+    @classmethod
+    def from_string(cls, level: str) -> LogLevel:
+        """Convert a string to a LogLevel."""
+        return cls(logging.getLevelName(level.upper()))
+
+    @classmethod
+    def _missing_(cls, value: int) -> LogLevel:
+        """Handle missing log levels."""
+        if value not in logging._levelToName:
+            raise ValueError(f"Invalid log level: {value}")
+        return cls(value)
+
+
+class LoggingSettings(ConfigBaseModel):
+    """Settings for logging configuration."""
+
+    level: LogLevel = Field(
+        default=logging.INFO,
+        description="The log level to use.",
+    )
+    file: Path = Field(
+        default=Path("zabbix-auto-config.log"),
+        description="Path to store structured JSON logs.",
+    )
+    stderr: bool = Field(
+        default=True,
+        description="Whether to log to stderr in human-readable format.",
+    )
+
+    @field_validator("level", mode="before")
+    @classmethod
+    def _validate_log_level(cls, v: Any) -> LogLevel:
+        """Validates the log level and converts it to a LogLevel enum."""
+        if isinstance(v, int):
+            return LogLevel(v)
+        elif isinstance(v, str):
+            return LogLevel.from_string(v)
+        else:
+            raise ValidationError("Invalid log level type. Must be int or str.")
+
+    @field_serializer("log_level")
+    def _serialize_log_level(self, v: LogLevel) -> str:
+        """Serializes the log level as a string.
+        Ensures consistent semantics between loading/storing log level in config.
+        E.g. we dump `"INFO"` instead of `20`.
+        """
+        return logging.getLevelName(v.value)
+
+
 class ZacSettings(ConfigBaseModel):
     source_collector_dir: str
     host_modifier_dir: str
-    log_level: int = Field(logging.INFO, description="The log level to use.")
+    log_level: int = Field(
+        logging.INFO, description="The log level to use.", deprecated=True, exclude=True
+    )
     health_file: Optional[Path] = None
     failsafe_file: Optional[Path] = None
     failsafe_ok_file: Optional[Path] = None
     failsafe_ok_file_strict: bool = True
     db: DBSettings = DBSettings()
     process: ProcessesSettings = ProcessesSettings()
+    logging: LoggingSettings = LoggingSettings()
 
     # Deprecated options
     db_uri: str = Field(default="", deprecated=True)
