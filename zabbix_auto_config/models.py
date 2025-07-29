@@ -16,7 +16,6 @@ from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import RootModel
-from pydantic import ValidationError
 from pydantic import ValidationInfo
 from pydantic import field_serializer
 from pydantic import field_validator
@@ -249,16 +248,18 @@ class LogLevel(int, Enum):
     CRITICAL = logging.CRITICAL
 
     @classmethod
-    def from_string(cls, level: str) -> LogLevel:
-        """Convert a string to a LogLevel."""
-        return cls(logging.getLevelName(level.upper()))
-
-    @classmethod
-    def _missing_(cls, value: int) -> LogLevel:
+    def _missing_(cls, value: object) -> LogLevel:
         """Handle missing log levels."""
-        if value not in logging._levelToName:
-            raise ValueError(f"Invalid log level: {value}")
-        return cls(value)
+        if isinstance(value, str):
+            if value.isnumeric():
+                return cls(int(value))
+            else:
+                try:
+                    return cls(logging._nameToLevel[value.upper()])  # pyright: ignore[reportPrivateUsage]
+                except (ValueError, KeyError):
+                    pass
+        logger.error("Invalid log level '%s'. Using ERROR level.", value)
+        return cls.ERROR
 
 
 class LoggingSettings(ConfigBaseModel):
@@ -277,18 +278,7 @@ class LoggingSettings(ConfigBaseModel):
         description="Whether to log to stderr in human-readable format.",
     )
 
-    @field_validator("level", mode="before")
-    @classmethod
-    def _validate_log_level(cls, v: Any) -> LogLevel:
-        """Validates the log level and converts it to a LogLevel enum."""
-        if isinstance(v, int):
-            return LogLevel(v)
-        elif isinstance(v, str):
-            return LogLevel.from_string(v)
-        else:
-            raise ValidationError("Invalid log level type. Must be int or str.")
-
-    @field_serializer("log_level")
+    @field_serializer("level", when_used="json")
     def _serialize_log_level(self, v: LogLevel) -> str:
         """Serializes the log level as a string.
         Ensures consistent semantics between loading/storing log level in config.

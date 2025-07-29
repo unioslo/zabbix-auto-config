@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 from typing import Optional
 
 import pytest
 from inline_snapshot import snapshot
 from pydantic import ValidationError
 from zabbix_auto_config import models
+from zabbix_auto_config.models import LogLevel
 
 # NOTE: Do not test msg and ctx of Pydantic errors!
 # They are not guaranteed to be stable between minor versions.
@@ -123,50 +125,47 @@ DEFAULT_DB_SETTINGS = models.DBSettings(user="zabbix", password="secret")
 
 
 @pytest.mark.parametrize(
-    "level,expect",
+    "inp,expect",
     [
-        ["notset", logging.NOTSET],
-        ["debug", logging.DEBUG],
-        ["info", logging.INFO],
-        ["warn", logging.WARN],  # noqa: LOG009 # we need to test the deprecated name
-        ["warning", logging.WARNING],
-        ["error", logging.ERROR],
-        ["fatal", logging.FATAL],
-        ["critical", logging.CRITICAL],
+        # Lower case values
+        ["notset", LogLevel.NOTSET],
+        ["debug", LogLevel.DEBUG],
+        ["info", LogLevel.INFO],
+        ["warn", LogLevel.WARNING],  # alias for warning
+        ["warning", LogLevel.WARNING],
+        ["error", LogLevel.ERROR],
+        ["fatal", LogLevel.CRITICAL],  # alias for critical
+        ["critical", LogLevel.CRITICAL],
+        # Upper case values
+        ["NOTSET", LogLevel.NOTSET],
+        ["DEBUG", LogLevel.DEBUG],
+        ["INFO", LogLevel.INFO],
+        ["WARN", LogLevel.WARNING],  # alias for warning
+        ["WARNING", LogLevel.WARNING],
+        ["ERROR", LogLevel.ERROR],
+        ["FATAL", LogLevel.CRITICAL],  # alias for critical
+        ["CRITICAL", LogLevel.CRITICAL],
+        # Numeric values
+        [0, LogLevel.NOTSET],
+        [10, LogLevel.DEBUG],
+        [20, LogLevel.INFO],
+        [30, LogLevel.WARNING],
+        [40, LogLevel.ERROR],
+        [50, LogLevel.CRITICAL],
+        # Numeric values as strings
+        ["0", LogLevel.NOTSET],
+        ["10", LogLevel.DEBUG],
+        ["20", LogLevel.INFO],
+        ["30", LogLevel.WARNING],
+        ["40", LogLevel.ERROR],
+        ["50", LogLevel.CRITICAL],
+        # Invalid values (uses default level)
+        ["invalid", LogLevel.ERROR],
+        [None, LogLevel.ERROR],
     ],
 )
-@pytest.mark.parametrize("upper", [True, False])
-def test_zacsettings_log_level_str(level: str, expect: int, upper: bool) -> None:
-    settings = models.ZacSettings(
-        source_collector_dir="",
-        host_modifier_dir="",
-        db=DEFAULT_DB_SETTINGS,
-        log_level=level.upper() if upper else level.lower(),
-    )
-    assert settings.log_level == expect
-
-
-@pytest.mark.parametrize(
-    "level,expect",
-    [
-        [0, logging.NOTSET],
-        [10, logging.DEBUG],
-        [20, logging.INFO],
-        [30, logging.WARN],  # noqa: LOG009 # we need to test the deprecated name
-        [30, logging.WARNING],
-        [40, logging.ERROR],
-        [50, logging.FATAL],
-        [50, logging.CRITICAL],
-    ],
-)
-def test_zacsettings_log_level_int(level: str, expect: int) -> None:
-    settings = models.ZacSettings(
-        source_collector_dir="",
-        host_modifier_dir="",
-        db=DEFAULT_DB_SETTINGS,
-        log_level=level,
-    )
-    assert settings.log_level == expect
+def test_log_level(inp: Any, expect: LogLevel) -> None:
+    assert LogLevel(inp) == expect
 
 
 def test_zacsettings_log_level_serialize() -> None:
