@@ -12,7 +12,6 @@ from typing import Union
 
 import structlog
 from pydantic import BaseModel
-from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import RootModel
@@ -30,7 +29,7 @@ logger = structlog.stdlib.get_logger(__name__)
 # TODO: Models aren't validated when making changes to a set/list. Why? How to handle?
 
 
-class ConfigBaseModel(PydanticBaseModel):
+class ConfigBaseModel(BaseModel):
     """Base class for all config models. Warns if unknown fields are passed in."""
 
     # https://pydantic-docs.helpmanual.io/usage/model_config/#change-behaviour-globally
@@ -263,21 +262,21 @@ class LogLevel(int, Enum):
         return cls.ERROR
 
 
-class LoggingSettings(ConfigBaseModel):
-    """Settings for logging configuration."""
+class LoggerFormat(str, Enum):
+    JSON = "json"
+    TEXT = "text"
 
-    level: LogLevel = Field(
-        default=LogLevel.INFO,
-        description="The log level to use.",
-    )
-    file: Path = Field(
-        default=LOG_FILE_DEFAULT,
-        description="Path to store structured JSON logs.",
-    )
-    stderr: bool = Field(
-        default=True,
-        description="Whether to log to stderr in human-readable format.",
-    )
+    @classmethod
+    def _missing(cls, value: object) -> LoggerFormat:
+        """Handle missing logger formats."""
+        try:
+            return cls(str(value).lower())
+        except (ValueError, AttributeError):
+            raise ValueError(f"Invalid logger format: {value}") from None
+
+
+class LogLevelSerializerMixin:
+    """Mixin for serializing log levels in configs."""
 
     @field_serializer("level", when_used="json")
     def _serialize_log_level(self, v: LogLevel) -> str:
@@ -286,6 +285,84 @@ class LoggingSettings(ConfigBaseModel):
         E.g. we dump `"INFO"` instead of `20`.
         """
         return logging.getLevelName(v.value)
+
+
+class LoggerConfigBase(LogLevelSerializerMixin, ConfigBaseModel):
+    enabled: bool = Field(
+        default=True,
+        description="Whether to enable this logger.",
+    )
+    format: LoggerFormat = Field(
+        default=LoggerFormat.JSON,
+        description="The format of the logger output.",
+    )
+    level: LogLevel = Field(
+        default=LogLevel.INFO,
+        description="Log level for this logger. Uses global level if not set.",
+    )
+
+
+class ConsoleLoggerConfig(LoggerConfigBase):
+    format: LoggerFormat = Field(
+        default=LoggerFormat.TEXT,
+        description="The format of the logger output.",
+    )
+
+
+class FileLoggerConfig(LoggerConfigBase):
+    path: Path = Field(
+        default=LOG_FILE_DEFAULT,
+        description="Path to the log file.",
+    )
+    rotate: bool = Field(
+        default=True,
+        description="Whether to enable log rotation for the file logger.",
+    )
+    max_size_mb: int = Field(
+        default=50,
+        description="Maximum size of the log file in megabytes.",
+    )
+    max_logs: int = Field(
+        default=5,
+        description="Maximum number of log files to keep.",
+    )
+
+    def max_size_as_bytes(self) -> int:
+        """Return the maximum size of the log file in bytes."""
+        return self.max_size_mb * 1024 * 1024
+
+
+class LoggingSettings(LogLevelSerializerMixin, ConfigBaseModel):
+    """Settings for logging configuration."""
+
+    console: ConsoleLoggerConfig = Field(
+        default_factory=ConsoleLoggerConfig,
+        description="Settings for the console logger.",
+    )
+    file: FileLoggerConfig = Field(
+        default_factory=FileLoggerConfig,
+        description="Settings for the file logger.",
+    )
+
+    level: LogLevel = Field(
+        default=LogLevel.INFO,
+        description="The global log level to use for the logger. Used if sub-configs do not specify a log level.",
+    )
+
+    use_mp_handler: bool = Field(
+        default=False,
+        description=(
+            "Activate multiprocessing_logging handler. Unclear if this is needed by default."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _set_log_levels_in_sub_configs(self) -> Self:
+        if "level" not in self.console.model_fields_set:
+            self.console.level = self.level
+        if "level" not in self.file.model_fields_set:
+            self.file.level = self.level
+        return self
 
 
 class ZacSettings(ConfigBaseModel):

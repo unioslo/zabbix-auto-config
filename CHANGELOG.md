@@ -11,9 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - XDG Base Directory support for application files (config, logs, data, etc.). The following directories are supported:
   - `$XDG_CONFIG_HOME` or `~/.config/zabbix-auto-config` for configuration files.
-- Structured logging in JSON format to a file, with human-readable logs to stderr.
-  - The log file can be configured in the `zac.logging.file` option in the config file. Defaults to `$XDG_STATE_HOME/zabbix-auto-config/app.log`.
-  - Console logging can be toggled with the `zac.logging.stderr` option.
+- Structured logging, supporting both text and JSON formats.
+  - Both console and file logging are enabled by default, rendering logs as text and JSON respectively.
+- New configuration options for logging:
+  - `[zac.logging]`
+    - `level`: Global log level for the logger. Defaults to `INFO`.
+    - `use_mp_handler`: Activate multiprocessing logging handler. Defaults to `false`.
+    - `[zac.logging.console]`: Configuration for console logging.
+      - `enabled`: Enable console logging. Defaults to `true`.
+      - `level`: Log level for console logging. Defaults to `INFO`.
+      - `format`: Format of the console log output. Can be `text` or `json`. Defaults to `text`.
+    - `[zac.logging.file]`: Configuration for file logging.
+      - `enabled`: Enable file logging. Defaults to `true`.
+      - `level`: Log level for file logging. Defaults to `INFO`.
+      - `format`: Format of the file log output. Can be `text` or `json`. Defaults to `json`.
+      - `path`: Path to the log file. Defaults to `$XDG_STATE_HOME/zabbix-auto-config/logs/app.log`.
+      - `rotate`: Enable log rotation. Defaults to `true`.
+      - `max_size_mb`: Maximum size of the log file in megabytes before it is rotated. Defaults to `50`.
+      - `max_logs`: Maximum number of log files to keep. Defaults to `5`.
 
 ### Changed
 

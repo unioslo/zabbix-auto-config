@@ -63,17 +63,55 @@ hosts = "hosts"
 hosts_source = "hosts_source"
 
 [zac.logging]
-# Log level for the application.
+# Global log level for the application.
+# This is the default log level used if sub-configs do not specify a log level.
+# It can be overridden by the console and file logger configurations.
 # Can be one of: DEBUG, INFO, WARNING, ERROR, CRITICAL
 level = "INFO"
 
-# Log file to write logs to.
-# The file contains structured JSON logs.
-# file = "/path/to/log/file.log" # Set the path to your log file
-# If not set, defaults to $XDG_STATE_HOME/zabbix-auto-config/logs/app.log
+# Activate multiprocessing_logging handler.
+# It is unclear whether or not this is needed by default.
+# Depending on your system and configuration, this might be necessary to ensure
+# that log messages from different processes are handled correctly.
+use_mp_handler = false
 
-# Enable human-readable logs to stderr.
-stderr = true
+# Settings for the console logger.
+[zac.logging.console]
+# Enable/disable the console logger.
+enabled = true
+
+# Log level for the console logger.
+level = "INFO"
+
+# Log format for the console logger.
+format = "text"
+
+# Settings for the file logger.
+[zac.logging.file]
+# Enable/disable the file logger.
+enabled = true
+
+# Log level for the file logger.
+level = "INFO"
+
+# Log format for the file logger.
+# Can be "text" for human-readable logs or "json" for structured logs.
+# Defaults to "json".
+format = "json"
+
+# Path to the log file.
+# If not set, defaults to $XDG_STATE_HOME/zabbix-auto-config/logs/app.log
+# path = "/path/to/log/file.log"
+
+# Enable/disable log rotation.
+rotate = true
+
+# Maximum size of the log file in megabytes before it is rotated.
+max_size_mb = 50
+
+# Maximum number of log files to keep.
+max_logs = 5
+
 
 # Configuration for ZAC processes.
 [zac.process.source_merger]
