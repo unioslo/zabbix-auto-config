@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from pathlib import Path
 from typing import Any
 from typing import Optional
 
@@ -168,22 +168,40 @@ def test_log_level(inp: Any, expect: LogLevel) -> None:
     assert LogLevel(inp) == expect
 
 
-def test_zacsettings_log_level_serialize() -> None:
-    settings = models.ZacSettings(
-        source_collector_dir="",
-        host_modifier_dir="",
-        db=DEFAULT_DB_SETTINGS,
-        log_level=logging.INFO,
-    )
-    assert settings.log_level == logging.INFO == 20  # sanity check
+def test_logging_settings_log_level_serialize() -> None:
+    conf = models.LoggingSettings()
+    conf.file.path = Path("/path/to/logfile.log")  # bogus path
 
-    # Serialize to dict:
-    settings_dict = settings.model_dump()
-    assert settings_dict["log_level"] == "INFO"
+    # Serialize to dict (in JSON mode):
+    conf_dict = conf.model_dump(mode="json")
+    assert conf_dict["level"] == "INFO"
+    assert conf_dict["console"]["level"] == "INFO"
+    assert conf_dict["file"]["level"] == "INFO"
 
     # Serialize to JSON:
-    settings_json = settings.model_dump_json()
-    assert '"log_level":"INFO"' in settings_json
+    conf_json = conf.model_dump_json(indent=2)
+    assert conf_json == snapshot(
+        """\
+{
+  "console": {
+    "enabled": true,
+    "format": "text",
+    "level": "INFO"
+  },
+  "file": {
+    "enabled": true,
+    "format": "json",
+    "level": "INFO",
+    "path": "/path/to/logfile.log",
+    "rotate": true,
+    "max_size_mb": 50,
+    "max_logs": 5
+  },
+  "level": "INFO",
+  "use_mp_handler": false
+}\
+"""
+    )
 
 
 @pytest.mark.parametrize(
