@@ -185,7 +185,6 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
             "zac": {
                 "source_collector_dir": "example/source_collectors/",
                 "host_modifier_dir": "example/host_modifiers/",
-                "log_level": "INFO",
                 "health_file": "/tmp/zac_health.json",
                 "failsafe_file": "/tmp/zac_failsafe.json",
                 "failsafe_ok_file": "/tmp/zac_failsafe_ok",
@@ -199,6 +198,20 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
                     "connect_timeout": 2,
                     "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
                     "init": {"db": True, "tables": True},
+                },
+                "logging": {
+                    "console": {"enabled": True, "format": "text", "level": "INFO"},
+                    "file": {
+                        "enabled": True,
+                        "format": "json",
+                        "level": "INFO",
+                        "path": "/Users/pederhan/Library/Logs/zabbix-auto-config/app.log",
+                        "rotate": True,
+                        "max_size_mb": 50,
+                        "max_logs": 5,
+                    },
+                    "level": "INFO",
+                    "use_mp_handler": False,
                 },
                 "process": {
                     "source_merger": {"update_interval": 60},
