@@ -2,13 +2,44 @@ from __future__ import annotations
 
 import logging
 import sys
+from dataclasses import dataclass
 
 import structlog
+from structlog.dev import Column
 
 from zabbix_auto_config.models import Settings
 
 if sys.stderr.isatty():
     pass
+
+
+@dataclass
+class ProcessNameFormatter:
+    style: str
+    reset_style: str
+
+    def __call__(self, key: str, value: object) -> str:
+        return f"[{self.style}{value}{self.reset_style}]"
+
+
+def get_console_renderer() -> structlog.dev.ConsoleRenderer:
+    """Create a console renderer that renders the process name before the event."""
+    renderer = structlog.dev.ConsoleRenderer(colors=True)
+
+    # HACK: Insert the process name column into the renderer's columns.
+    # The "proper" way would be to create _all_ columns manually,
+    # which is a lot of boilerplate.
+    renderer._columns.insert(
+        2,
+        Column(
+            "process_name",
+            ProcessNameFormatter(
+                style=renderer._styles.timestamp,
+                reset_style=renderer._styles.reset,
+            ),
+        ),
+    )
+    return renderer
 
 
 def configure_logging(config: Settings) -> None:
@@ -62,7 +93,7 @@ def configure_logging(config: Settings) -> None:
         console_handler = logging.StreamHandler(sys.stderr)
         console_handler.setLevel(config.zac.logging.level)
         console_formatter = structlog.stdlib.ProcessorFormatter(
-            processor=structlog.dev.ConsoleRenderer(colors=True),
+            processor=get_console_renderer(),
             foreign_pre_chain=shared_processors,
         )
         console_handler.setFormatter(console_formatter)
