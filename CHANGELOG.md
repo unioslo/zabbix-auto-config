@@ -36,6 +36,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Current working directory (`./config.toml`)
   - `$XDG_CONFIG_HOME` or `~/.config/zabbix-auto-config/config.toml`
 
+### Deprecated
+
+- `zac.log_level` option. Replaced with these new `[zac.logging]` options:
+  - `zac.logging.level`: Global log level for the logger.
+  - `zac.logging.console.level`: Log level for console logging.
+  - `zac.logging.file.level`: Log level for file logging.
+
 ## 0.3.0
 
 ### Added
