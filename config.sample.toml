@@ -5,9 +5,6 @@ source_collector_dir = "example/source_collectors/"
 # Directory containing the host modifier modules.
 host_modifier_dir = "example/host_modifiers/"
 
-# Log level for the application.
-log_level = "INFO"
-
 # Health status for each ZAC process.
 health_file = "/tmp/zac_health.json"
 

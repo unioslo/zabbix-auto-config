@@ -389,9 +389,6 @@ class LoggingSettings(ConfigBaseModel):
 class ZacSettings(ConfigBaseModel):
     source_collector_dir: str
     host_modifier_dir: str
-    log_level: int = Field(
-        logging.INFO, description="The log level to use.", deprecated=True, exclude=True
-    )
     health_file: Optional[Path] = None
     failsafe_file: Optional[Path] = None
     failsafe_ok_file: Optional[Path] = None
@@ -402,6 +399,13 @@ class ZacSettings(ConfigBaseModel):
 
     # Deprecated options
     db_uri: str = Field(default="", deprecated=True)
+    log_level: LogLevel = Field(
+        # `logging` shadowed in class scope here
+        LogLevel.INFO,
+        description="The log level to use.",
+        deprecated=True,
+        exclude=True,
+    )
 
     def _db_uri_to_db_settings(self, uri: str) -> None:
         """Parse a PostgreSQL libpq connection string into structured parameters.
@@ -450,6 +454,21 @@ class ZacSettings(ConfigBaseModel):
             warnings.simplefilter("ignore")  # ignore warnings in this block
             if self.db_uri:
                 self._db_uri_to_db_settings(self.db_uri)
+        return self
+
+    # TODO: remove after log_level is removed
+    @model_validator(mode="after")
+    def _set_log_level_from_deprecated_log_level(self) -> Self:
+        """Set the log level from the deprecated `log_level` field."""
+        if (
+            "log_level" in self.model_fields_set
+            and "level" not in self.logging.model_fields_set
+        ):
+            # If log_level is set, but not in logging sub-config, set it there
+            self.logging.level = LogLevel(self.log_level)
+            logger.warning(
+                "The `log_level` field is deprecated. Use `zac.logging.level` instead."
+            )
         return self
 
     @field_validator("health_file", "failsafe_file", "failsafe_ok_file", mode="after")
