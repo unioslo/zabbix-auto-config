@@ -14,11 +14,13 @@ import structlog
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import GetCoreSchemaHandler
 from pydantic import RootModel
 from pydantic import ValidationInfo
 from pydantic import field_serializer
 from pydantic import field_validator
 from pydantic import model_validator
+from pydantic_core import core_schema
 from typing_extensions import Self
 
 from zabbix_auto_config import utils
@@ -238,7 +240,7 @@ class DBSettings(ConfigBaseModel):
 
 
 class LogLevel(int, Enum):
-    """Log levels for the ZAC logger."""
+    """Valid log levels."""
 
     NOTSET = logging.NOTSET
     DEBUG = logging.DEBUG
@@ -248,13 +250,44 @@ class LogLevel(int, Enum):
     CRITICAL = logging.CRITICAL
 
     @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        """Custom core schema that serializes the log level as a string in JSON mode"""
+
+        def validate_log_level(value: Any) -> LogLevel:
+            if isinstance(value, cls):
+                return value
+            return cls(value)
+
+        def serialize_log_level(value: LogLevel) -> str:
+            return value.name
+
+        return core_schema.no_info_after_validator_function(
+            validate_log_level,
+            core_schema.union_schema(
+                [
+                    core_schema.int_schema(),
+                    core_schema.str_schema(),
+                    core_schema.is_instance_schema(cls),
+                ]
+            ),
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                serialize_log_level, when_used="json"
+            ),
+        )
+
+    @classmethod
     def _missing_(cls, value: object) -> LogLevel:
-        """Handle missing log levels."""
+        """Handle arguments that are not valid log levels."""
         if isinstance(value, str):
+            # Level as string
             if value.isnumeric():
                 return cls(int(value))
             else:
+                # Level as name, e.g. "DEBUG", "info", etc. (case-insensitive)
                 try:
+                    # Use logging module for conversion to handle aliases such as WARN and FATAL
                     return cls(logging._nameToLevel[value.upper()])  # pyright: ignore[reportPrivateUsage]
                 except (ValueError, KeyError):
                     pass
@@ -275,19 +308,7 @@ class LoggerFormat(str, Enum):
             raise ValueError(f"Invalid logger format: {value}") from None
 
 
-class LogLevelSerializerMixin:
-    """Mixin for serializing log levels in configs."""
-
-    @field_serializer("level", when_used="json")
-    def _serialize_log_level(self, v: LogLevel) -> str:
-        """Serializes the log level as a string.
-        Ensures consistent semantics between loading/storing log level in config.
-        E.g. we dump `"INFO"` instead of `20`.
-        """
-        return logging.getLevelName(v.value)
-
-
-class LoggerConfigBase(LogLevelSerializerMixin, ConfigBaseModel):
+class LoggerConfigBase(ConfigBaseModel):
     enabled: bool = Field(
         default=True,
         description="Whether to enable this logger.",
@@ -332,7 +353,7 @@ class FileLoggerConfig(LoggerConfigBase):
         return self.max_size_mb * 1024 * 1024
 
 
-class LoggingSettings(LogLevelSerializerMixin, ConfigBaseModel):
+class LoggingSettings(ConfigBaseModel):
     """Settings for logging configuration."""
 
     console: ConsoleLoggerConfig = Field(
