@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import Iterable
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import structlog
 from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.failsafe import check_failsafe
 from zabbix_auto_config.failsafe import check_failsafe_ok_file
@@ -197,17 +197,15 @@ def test_write_failsafe_hosts(
 
 
 def test_write_failsafe_hosts_no_file(
-    caplog: pytest.LogCaptureFixture, config: Settings
+    log_output: structlog.testing.LogCapture, config: Settings
 ) -> None:
     """Attempt to write failsafe hosts without a failsafe file."""
-    caplog.set_level(logging.WARNING)
     config.zac.failsafe_file = None
     write_failsafe_hosts(
         config.zac,
         ["foo.example.com", "bar.example.com"],
         ["baz.example.com", "qux.example.com"],
     )
-    assert (
-        "No failsafe file configured, cannot write hosts to add/remove."
-        in caplog.messages
+    assert "No failsafe file configured, cannot write hosts to add/remove." in str(
+        log_output.entries
     )

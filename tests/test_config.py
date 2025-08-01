@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import structlog
 import tomli
 import zabbix_auto_config.models as models
 from hypothesis import given
@@ -19,18 +20,20 @@ def test_sample_config(sample_config: str):
     models.Settings(**tomli.loads(sample_config))
 
 
-def test_config_extra_field(sample_config: str, caplog: pytest.LogCaptureFixture):
+def test_config_extra_field(
+    sample_config: str, log_output: structlog.testing.LogCapture
+):
     config = tomli.loads(sample_config)
     config["foo"] = "bar"
     models.Settings(**config)
-    assert len(caplog.records) == 1
-    assert caplog.record_tuples == snapshot(
-        [("zabbix_auto_config.models", 30, "Settings: Got unknown config field 'foo'.")]
+    assert len(log_output.entries) == 1
+    assert log_output.entries == snapshot(
+        [{"event": "Settings: Got unknown config field 'foo'.", "log_level": "warning"}]
     )
 
 
 def test_config_extra_field_allowed(
-    sample_config: str, caplog: pytest.LogCaptureFixture
+    sample_config: str, log_output: structlog.testing.LogCapture
 ):
     config = tomli.loads(sample_config)
     config["foo"] = "bar"
@@ -40,7 +43,7 @@ def test_config_extra_field_allowed(
     try:
         models.Settings.model_config["extra"] = "allow"
         models.Settings(**config)
-        assert len(caplog.records) == 0
+        assert len(log_output.entries) == 0
     finally:
         models.Settings.model_config["extra"] = original_extra
 
@@ -182,7 +185,6 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
             "zac": {
                 "source_collector_dir": "example/source_collectors/",
                 "host_modifier_dir": "example/host_modifiers/",
-                "log_level": "INFO",
                 "health_file": "/tmp/zac_health.json",
                 "failsafe_file": "/tmp/zac_failsafe.json",
                 "failsafe_ok_file": "/tmp/zac_failsafe_ok",
@@ -196,6 +198,20 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
                     "connect_timeout": 2,
                     "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
                     "init": {"db": True, "tables": True},
+                },
+                "logging": {
+                    "console": {"enabled": True, "format": "text", "level": "INFO"},
+                    "file": {
+                        "enabled": True,
+                        "format": "json",
+                        "level": "INFO",
+                        "path": "/path/to/log/file.log",
+                        "rotate": True,
+                        "max_size_mb": 50,
+                        "max_logs": 5,
+                    },
+                    "level": "INFO",
+                    "use_mp_handler": False,
                 },
                 "process": {
                     "source_merger": {"update_interval": 60},
