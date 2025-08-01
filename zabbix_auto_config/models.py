@@ -249,6 +249,9 @@ class LogLevel(int, Enum):
     ERROR = logging.ERROR
     CRITICAL = logging.CRITICAL
 
+    def __str__(self) -> str:
+        return self.name
+
     @classmethod
     def __get_pydantic_core_schema__(
         cls, source_type: Any, handler: GetCoreSchemaHandler
