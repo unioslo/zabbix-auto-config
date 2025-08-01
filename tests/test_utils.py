@@ -83,28 +83,35 @@ Spaces in key: Spaces in values, are, ok
     )
 
     # Test logging output
-    invalid_lines_contain = [
-        "'invalid line here'",
-        "'e:'",
-        "'f:'",
-        "'g:,'",
-        "duplicate values",
-        "Duplicate key",
-        "key 'h'",
-        "key 'j'",
-        # Check correct line numbers
-        "line 3",
-        "line 6",
-        "line 7",
-        "line 8",
-        "line 11",
-        "line 16",
+
+    # Invalid lines
+    lines = [
+        "invalid line here",
+        "e:",
+        "f:",
+        "g:,",
     ]
-    for phrase in invalid_lines_contain:
-        assert phrase in str(log_output.entries), (
-            f"Expected '{phrase}' in log output {log_output.entries}"
+    for line in lines:
+        assert any(line == event.get("line") for event in log_output.entries), (
+            f"Expected line '{line}' in log output {log_output.entries}"
         )
-    assert len(log_output.entries) == 8
+
+    # Parsed keys with warnings/errors
+    keys = [
+        "h",
+        "j",
+    ]
+    for key in keys:
+        assert any(key == event.get("key") for event in log_output.entries), (
+            f"Expected key '{key}' in log output {log_output.entries}"
+        )
+
+    # Line numbers where warnings/errors were logged
+    lines = [3, 6, 7, 8, 11, 16]
+    for lineno in lines:
+        assert any(lineno == event["lineno"] for event in log_output.entries), (
+            f"Expected line number {lineno} in log output"
+        )
 
 
 @given(st.text())

@@ -42,22 +42,22 @@ def check_failsafe_ok_file(config: ZacSettings) -> bool:
     if not config.failsafe_ok_file:
         logger.info("No failsafe OK file configured.")
         return False
+    log = logger.bind(file=str(config.failsafe_ok_file))
     if not config.failsafe_ok_file.exists():
-        logger.info(
-            "Failsafe OK file %s does not exist. Create it to approve changes. The ZAC process must have permission to delete the file.",
-            config.failsafe_ok_file,
+        log.warning(
+            "Failsafe OK file does not exist. Create it to approve changes. The ZAC process must have permission to delete the file."
         )
         return False
     # File exists, attempt to delete it
     try:
         config.failsafe_ok_file.unlink()
     except OSError as e:
-        logger.error("Unable to delete failsafe OK file: %s", e)
+        log.error("Unable to delete failsafe OK file", error=e)
         if config.failsafe_ok_file_strict:
             return False  # failed to delete in strict mode
         # NOTE: should this be an INFO or DEBUG log instead?
-        logger.warning("Continuing with changes despite failed deletion.")
-    logger.info("Failsafe OK file exists. Proceeding with changes.")
+        log.warning("Continuing with changes despite failed deletion.")
+    log.info("Failsafe OK file exists. Proceeding with changes.")
     return True
 
 
@@ -69,12 +69,11 @@ def write_failsafe_hosts(
     Uses the failsafe file defined in the config.
     Does nothing if no failsafe file is defined.
     """
+
     if not config.failsafe_file:
         logger.warning("No failsafe file configured, cannot write hosts to add/remove.")
         return
+    log = logger.bind(file=str(config.failsafe_file))
     h = models.HostActions(add=to_add, remove=to_remove)
     h.write_json(config.failsafe_file)
-    logger.info(
-        "Wrote list of hosts to add and remove: %s",
-        config.failsafe_file,
-    )
+    log.info("Wrote list of hosts to add and remove", file=config.failsafe_file)

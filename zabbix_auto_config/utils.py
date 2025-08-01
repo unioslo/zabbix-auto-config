@@ -52,14 +52,13 @@ def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
     _map: dict[str, list[str]] = {}
 
     with open(path) as f:
+        log = logger.bind(file=str(path))
         for lineno, line in enumerate(f, start=1):
             line = line.strip()
 
             # empty line or comment
             if not line or line.startswith("#"):
                 continue
-
-            log = logger.bind(path=str(path), lineno=lineno)
 
             try:
                 line = line.partition("#")[0].strip()  # remove trailing comments
@@ -79,18 +78,14 @@ def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
                     )
             except ValueError:
                 log.warning(
-                    "Invalid format at line %d in map file '%s'. Expected 'key:value', got '%s'.",
-                    lineno,
-                    path,
-                    line,
-                    path=str(path),
+                    "Invalid line in map file. Expected 'key:value'",
+                    lineno=lineno,
+                    line=line,
                 )
                 continue
 
             if key in _map:
-                log.warning(
-                    "Duplicate key %s at line %d in map file '%s'.", key, lineno, path
-                )
+                log.warning("Duplicate key in map file", key=key, lineno=lineno)
                 _map[key].extend(values)
             else:
                 _map[key] = values
@@ -99,9 +94,7 @@ def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
     for key, values in _map.items():
         values_dedup = list(dict.fromkeys(values))  # dict.fromkeys() guarantees order
         if len(values) != len(values_dedup):
-            logger.warning(
-                "Ignoring duplicate values for key '%s' in map file '%s'.", key, path
-            )
+            logger.warning("Ignoring duplicate values in map file.", key=key)
         _map[key] = values_dedup
     return _map
 
@@ -142,10 +135,10 @@ def with_prefix(
     groupname = f"{prefix}{suffix}"
     if not prefix.endswith(separator) and not suffix.startswith(separator):
         logger.warning(
-            "Prefix '%s' for group name '%s' does not contain separator '%s'",
-            prefix,
-            groupname,
-            separator,
+            "Prefix for group name does not contain separator",
+            prefix=prefix,
+            groupname=groupname,
+            separator=separator,
         )
     return groupname
 
@@ -163,7 +156,7 @@ def mapping_values_with_prefix(
             try:
                 new_value = with_prefix(text=v, prefix=prefix, separator=separator)
             except ValueError:
-                logger.warning("Unable to replace prefix in '%s' with '%s'", v, prefix)
+                logger.warning("Unable to replace prefix", text=v, prefix=prefix)
                 continue
             new_values.append(new_value)
         m[key] = new_values
@@ -215,7 +208,7 @@ def write_file(path: Union[str, Path], content: str, end: str = "\n") -> None:
                 content += end
             f.write(content)
     except OSError as e:
-        logger.error("Failed to write to file '%s': %s", path, e)
+        logger.error("Failed to write to file", file=str(path), error=e)
         raise
 
 

@@ -17,7 +17,6 @@ from pydantic import Field
 from pydantic import GetCoreSchemaHandler
 from pydantic import RootModel
 from pydantic import ValidationInfo
-from pydantic import field_serializer
 from pydantic import field_validator
 from pydantic import model_validator
 from pydantic_core import core_schema
@@ -487,42 +486,6 @@ class ZacSettings(ConfigBaseModel):
             utils.make_parent_dirs(v)
         return v
 
-    @field_serializer("log_level")
-    def _serialize_log_level(self, v: int) -> str:
-        """Serializes the log level as a string.
-        Ensures consistent semantics between loading/storing log level in config.
-        E.g. we dump `"INFO"` instead of `20`.
-        """
-        return logging.getLevelName(v)
-
-    @field_validator("log_level", mode="before")
-    @classmethod
-    def _validate_log_level(cls, v: Any) -> int:
-        """Validates the log level and converts it to an integer.
-        The log level can be specified as an integer or a string."""
-        # NOTE: this is basically an overcomplicated version of
-        # `logging.getLevelName(v)`, but it's necessary for 2 reasons:
-        # 1. We want to validate that the level is a valid log level.
-        #    `logging.getLevelName(v)` doesn't raise an error if `v` is invalid.
-        #    It just returns `Level <v>`, which is not helpful.
-        # 2. `logging.getLevelName(v)` with string arguments
-        #    is deprecated in Python 3.10.
-        if isinstance(v, int):
-            if v not in logging._levelToName:
-                raise ValueError(
-                    f"Invalid log level: {v} is not a valid log level integer."
-                )
-            return v
-        elif isinstance(v, str):
-            v = v.upper()
-            if (level_int := logging._nameToLevel.get(v)) is None:
-                raise ValueError(
-                    f"Invalid log level: {v} is not a valid log level name."
-                )
-            return level_int
-        else:
-            raise TypeError("Log level must be an integer or string.")
-
 
 class FailureStrategy(str, Enum):
     """Strategies for handling collector failures."""
@@ -751,6 +714,8 @@ class Host(BaseModel):
         if not isinstance(other, self.__class__):
             raise TypeError(f"Can't merge with objects of other type: {type(other)}")
 
+        log = logger.bind(hostname=self.hostname)
+
         self.enabled = self.enabled or other.enabled
         # self.macros TODO
         self.properties.update(other.properties)
@@ -770,19 +735,17 @@ class Host(BaseModel):
             if other_interface.type not in self_interface_types:
                 self.interfaces.append(other_interface)
             else:
-                logger.warning(
-                    "Trying to merge host with interface of same type. The other interface is ignored. Host: %s, type: %s",
-                    self.hostname,
-                    other_interface.type,
+                log.warning(
+                    "Trying to merge host with interface of same type. The other interface is ignored",
+                    interface_type=other_interface.type,
                 )
         self.interfaces = sorted(self.interfaces, key=lambda interface: interface.type)
 
         for k, v in other.inventory.items():
             if k in self.inventory and v != self.inventory[k]:
-                logger.warning(
-                    "Same inventory ('%s') set multiple times for host: '%s'",
-                    k,
-                    self.hostname,
+                log.warning(
+                    "Same inventory key set multiple times for host",
+                    inventory_key=k,
                 )
             else:
                 self.inventory[k] = v
@@ -793,12 +756,12 @@ class Host(BaseModel):
             if proxy_pattern
         ]
         if len(proxy_patterns) > 1:
-            logger.warning(
-                "Multiple proxy patterns are provided. Discarding down to one. Host: %s",
-                self.hostname,
-            )
             # TODO: Do something different? Is alphabetically first "good enough"? It will be consistent at least.
             self.proxy_pattern = sorted(proxy_patterns)[0]
+            log.warning(
+                "Multiple proxy patterns are provided. Discarding down to one",
+                proxy_pattern=self.proxy_pattern,
+            )
         elif len(proxy_patterns) == 1:
             self.proxy_pattern = proxy_patterns.pop()
 

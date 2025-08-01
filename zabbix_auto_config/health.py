@@ -100,4 +100,4 @@ def write_health(
         with open(health_file, "w") as f:
             f.write(health.to_json())
     except Exception as e:
-        logger.error("Unable to write health file %s: %s", health_file, e)
+        logger.error("Unable to write health file", file=health_file, error=e)

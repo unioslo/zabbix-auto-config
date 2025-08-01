@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 import structlog
 import tomli
+from packaging.version import Version
 from zabbix_auto_config import models
 
 
@@ -205,6 +206,7 @@ class MockZabbixAPI(PicklableMock):
         self.apiinfo = PicklableMock()
         self.apiinfo.version = PicklableMock(return_value="5.0.0")
         self.login = PicklableMock()
+        self.version = Version("5.0.0")
 
 
 # NOTE: if doing integration testing in the future, the definitions of these

@@ -22,7 +22,7 @@ LOG_FILE_DEFAULT = LOG_DIR / "app.log"
 
 def ensure_directory(path: Path) -> None:
     """Create a directory if it does not exist."""
-    log = logger.bind(path=path)
+    log = logger.bind(file=path)
     if path.exists():
         log.debug("Directory already exists")
         return

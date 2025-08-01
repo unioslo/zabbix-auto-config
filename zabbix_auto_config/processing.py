@@ -24,7 +24,6 @@ from typing import TypeVar
 import httpx
 import psycopg2
 import structlog
-from packaging.version import Version
 from psycopg2 import sql
 from pydantic import ValidationError
 
@@ -108,20 +107,19 @@ class BaseProcess(multiprocessing.Process):
                 try:
                     self.work()
                 except Exception as e:
+                    log = logger.bind(error=e)
                     # These are the error types we handle ourselves then continue
                     if isinstance(e, httpx.TimeoutException):
-                        logger.error("Timeout exception: %s", str(e))
+                        log.error("Timeout exception")
                     elif isinstance(e, ZACException):
-                        logger.error("Work exception: %s", str(e))
+                        log.error("Work exception")
                     elif isinstance(e, ZabbixAPISessionExpired):
-                        logger.error("Zabbix API session expired: %s", str(e))
+                        log.error("Zabbix API session expired")
                         if isinstance(self, ZabbixUpdater):
-                            logger.info(
-                                "Reconnecting to Zabbix API and retrying update"
-                            )
+                            log.info("Reconnecting to Zabbix API and retrying update")
                             self.login()
                     elif isinstance(e, ZabbixAPIException):
-                        logger.error("Zabbix API exception: %s", str(e))
+                        log.error("Zabbix API exception")
                     else:
                         raise e  # all other exceptions are fatal
                     self.state.set_error(e)
@@ -145,13 +143,16 @@ class BaseProcess(multiprocessing.Process):
                     )
                 ):
                     logger.warning(
-                        "Work duration (%s) exceeded update interval (%s). "
-                        "Stats - Avg duration: %s, Max duration: %s, Updates: %d",
-                        utils.format_timedelta(work_duration),
-                        utils.format_timedelta(timedelta(seconds=self.update_interval)),
-                        utils.format_timedelta(self.state.avg_duration),
-                        utils.format_timedelta(self.state.max_duration),
-                        self.state.execution_count,
+                        "Work duration exceeded update interval",
+                        work_duration=utils.format_timedelta(work_duration),
+                        update_interval=utils.format_timedelta(
+                            timedelta(seconds=self.update_interval)
+                        ),
+                        average_duration=utils.format_timedelta(
+                            self.state.avg_duration
+                        ),
+                        max_duration=utils.format_timedelta(self.state.max_duration),
+                        updates=self.state.execution_count,
                     )
                     self.state.last_duration_warning = datetime.now()
 
@@ -183,7 +184,7 @@ class SignalHandler:
         signal.signal(signal.SIGTERM, self.old_sigterm_handler)
 
     def _handler(self, signum: int, frame: Any) -> None:
-        logger.info("Received signal: %s", signal.Signals(signum).name)
+        logger.bind(signal_name=signal.Signals(signum).name).info("Received signal")
         self.event.set()
 
 
@@ -247,15 +248,15 @@ class SourceCollectorProcess(BaseProcess):
         if new_interval > self.settings.max_backoff:
             new_interval = self.settings.max_backoff
             logger.info(
-                "%s: Reached max update interval of %.2f",
-                self.name,
-                self.settings.max_backoff,
+                "Reached max backoff",
+                max_backoff=self.settings.max_backoff,
             )
+        old_interval = self.update_interval
         self.update_interval = new_interval
         logger.info(
-            "%s: Backing off. Increased update interval to %.2f",
-            self.name,
-            self.update_interval,
+            "Backing off, increasing update interval",
+            update_interval=self.update_interval,
+            old_interval=old_interval,
         )
 
     def reset_update_interval(self) -> None:
@@ -264,9 +265,8 @@ class SourceCollectorProcess(BaseProcess):
             return  # Nothing to do
         self.update_interval = self.settings.update_interval
         logger.info(
-            "%s: Reset update interval to %.2f",
-            self.name,
-            self.update_interval,
+            "Reset update interval",
+            update_interval=self.update_interval,
         )
 
     def handle_success(self) -> None:
@@ -275,7 +275,7 @@ class SourceCollectorProcess(BaseProcess):
 
     def handle_error(self, e: Exception) -> None:
         """Handle exceptions raised during collection."""
-        logger.error("Collect exception: %s", str(e))
+        logger.error("Collect exception", error=str(e))
         self.error_counter.add(exception=e)
 
         strat_handlers = {
@@ -293,15 +293,13 @@ class SourceCollectorProcess(BaseProcess):
                 handler()
             else:
                 logger.debug(
-                    "Source '%s' has not reached error tolerance of %d (current: %d) Keeping it enabled...",
-                    self.name,
-                    self.settings.error_tolerance,
-                    self.error_counter.count(),
+                    "Source has not reached error tolerance of. Keeping it enabled",
+                    error_tolerance=self.settings.error_tolerance,
+                    count=self.error_counter.count(),
                 )
         else:
             logger.info(
-                "Source '%s' has no failure handling strategy. Keeping it enabled...",
-                self.name,
+                "Source has no failure handling strategy. Keeping it enabled",
             )
 
         raise ZACException(f"Failed to collect from source {self.name!r}: {e}") from e
@@ -314,7 +312,7 @@ class SourceCollectorProcess(BaseProcess):
         self.disabled = True
         disable_duration = self.settings.disable_duration
 
-        logger.info("Disabling source '%s' for %s seconds", self.name, disable_duration)
+        logger.info("Disabling source", disable_duration=disable_duration)
         self.disabled_until = datetime.now() + timedelta(seconds=disable_duration)
         # Reset the error counter so that previous errors don't count towards
         # the error counter in the next run in case the disable duration is short
@@ -355,11 +353,10 @@ class SourceCollectorProcess(BaseProcess):
         self.source_hosts_queue.put_nowait(source_hosts)
 
         logger.info(
-            "Done collecting %d hosts from source, '%s', in %.2f seconds. Next update: %s",
-            len(valid_hosts),
-            self.name,
-            time.time() - start_time,
-            self.next_update.isoformat(timespec="seconds"),
+            "Done collecting hosts from source",
+            count=len(valid_hosts),
+            duration=time.time() - start_time,
+            next_update=self.next_update.isoformat(timespec="seconds"),
         )
 
 
@@ -408,10 +405,10 @@ class SourceHandlerProcess(BaseProcess):
             hosts = source_hosts["hosts"]
 
             logger.info(
-                "Handling %d hosts from source, '%s', from queue. Current queue size: %d",
-                len(source_hosts["hosts"]),
-                source,
-                source_hosts_queue.qsize(),
+                "Handling hosts from source",
+                count=len(hosts),
+                source=source,
+                queue_size=source_hosts_queue.qsize(),
             )
             self.handle_source_hosts(source, hosts)
 
@@ -456,12 +453,13 @@ class SourceHandlerProcess(BaseProcess):
         for result in cursor.fetchall():
             try:
                 host = models.Host(**result[0])
-            except ValidationError as e:
+            except ValidationError:
                 # TODO: ensure this actually identifies the faulty host
-                logger.exception("Invalid host in source hosts table: %s", e)
-            except Exception as e:
+                logger.exception("Invalid host in source hosts table", host=str(result))
+            except Exception:
                 logger.exception(
-                    "Error when parsing host from source hosts table: %s", e
+                    "Error when validating host from source hosts table",
+                    host=str(result),
                 )
             else:
                 hosts[host.hostname] = host
@@ -501,14 +499,14 @@ class SourceHandlerProcess(BaseProcess):
                 actions[action] += 1
 
         logger.info(
-            "Done handling hosts from source, '%s', in %.2f seconds. Equal hosts: %d, updated hosts: %d, inserted hosts: %d, removed hosts: %d. Next update: %s",
-            source,
-            time.time() - start_time,
-            actions[HostAction.NO_CHANGE],
-            actions[HostAction.UPDATE],
-            actions[HostAction.INSERT],
-            actions[HostAction.DELETE],
-            self.next_update.isoformat(timespec="seconds"),
+            "Done handling hosts from source",
+            source=source,
+            duration=time.time() - start_time,
+            no_change=actions[HostAction.NO_CHANGE],
+            updated=actions[HostAction.UPDATE],
+            inserted=actions[HostAction.INSERT],
+            deleted=actions[HostAction.DELETE],
+            next_update=self.next_update.isoformat(timespec="seconds"),
         )
 
 
@@ -582,18 +580,18 @@ class SourceMergerProcess(BaseProcess):
                 # Re-validate the host after modification
                 host = host.model_validate(modified_host)
             except AssertionError as e:
-                logger.warning(
-                    "Host, '%s', was modified to be invalid by modifier: '%s'. Error: %s",
-                    host.hostname,
-                    host_modifier.name,
-                    str(e),
+                logger.error(
+                    "Host was modified to be invalid by modifier",
+                    host=host.hostname,
+                    host_modifier=host_modifier.name,
+                    error=str(e),
                 )
             except Exception as e:
-                logger.warning(
-                    "Error when running modifier %s on host '%s': %s",
-                    host_modifier.name,
-                    host.hostname,
-                    str(e),
+                logger.error(
+                    "Error when running modifier on host",
+                    host=host.hostname,
+                    host_modifier=host_modifier.name,
+                    error=str(e),
                 )
                 # TODO: Do more?
 
@@ -623,12 +621,12 @@ class SourceMergerProcess(BaseProcess):
         for host in cursor.fetchall():
             try:
                 host_model = models.Host(**host[0])
-            except ValidationError as e:
+            except ValidationError:
                 # TODO: ensure this actually identifies the faulty host
-                logger.exception("Invalid host in source hosts table: %s", e)
-            except Exception as e:
+                logger.exception("Invalid host in source hosts table", host=host)
+            except Exception:
                 logger.exception(
-                    "Error when parsing host from source hosts table: %s", e
+                    "Error when parsing host from source hosts table", host=host
                 )
             else:
                 source_hosts[host_model.hostname].append(host_model)
@@ -640,11 +638,11 @@ class SourceMergerProcess(BaseProcess):
         for host in cursor.fetchall():
             try:
                 host_model = models.Host(**host[0])
-            except ValidationError as e:
+            except ValidationError:
                 # TODO: ensure this log actually identifies the faulty host
-                logger.exception("Invalid host in hosts table: %s", e)
-            except Exception as e:
-                logger.exception("Error when parsing host from hosts table: %s", e)
+                logger.exception("Invalid host in hosts table", host=host)
+            except Exception:
+                logger.exception("Error when parsing host from hosts table", host=host)
             else:
                 hosts[host_model.hostname] = host_model
         return hosts
@@ -698,7 +696,7 @@ class SourceMergerProcess(BaseProcess):
                 source_hosts = source_hosts_map.get(hostname)
                 if not source_hosts:
                     logger.warning(
-                        "Host '%s' not found in source hosts table", hostname
+                        "Host not found in source hosts table", host=hostname
                     )
                     continue
 
@@ -707,13 +705,13 @@ class SourceMergerProcess(BaseProcess):
                 actions[host_action] += 1
 
         logger.info(
-            "Done with merge in %.2f seconds. Equal hosts: %d, replaced hosts: %d, inserted hosts: %d, removed hosts: %d. Next update: %s",
-            time.time() - start_time,
-            actions[HostAction.NO_CHANGE],
-            actions[HostAction.UPDATE],
-            actions[HostAction.INSERT],
-            actions[HostAction.DELETE],
-            self.next_update.isoformat(timespec="seconds"),
+            "Done with merge of source hosts",
+            duration=time.time() - start_time,
+            no_change=actions[HostAction.NO_CHANGE],
+            updated=actions[HostAction.UPDATE],
+            inserted=actions[HostAction.INSERT],
+            deleted=actions[HostAction.DELETE],
+            next_update=self.next_update.isoformat(timespec="seconds"),
         )
 
 
@@ -749,23 +747,25 @@ class ZabbixUpdater(BaseProcess):
         )
 
         self.login()
-        ver = self.api.apiinfo.version()
-        self.zabbix_version = Version(ver)
-        logger.info("Connected to Zabbix API version: %s", ver)
+        self.zabbix_version = self.api.version
+        logger.info("Connected to Zabbix API", version=str(self.zabbix_version))
 
     def login(self) -> None:
+        log = logger.bind(
+            url=self.zabbix_config.url,
+            username=self.zabbix_config.username,
+            password=self.zabbix_config.password,
+        )
         try:
             self.api.login(self.zabbix_config.username, self.zabbix_config.password)
         except httpx.ConnectError as e:
-            logger.error("Error while connecting to Zabbix: %s", self.zabbix_config.url)
+            log.error("Error while connecting to Zabbix")
             raise ZACException(*e.args) from e
         except httpx.TimeoutException as e:
-            logger.error(
-                "Timed out while connecting to Zabbix API: %s", self.zabbix_config.url
-            )
+            log.error("Timed out while connecting to Zabbix API", error=str(e))
             raise ZACException(*e.args) from e
         except (ZabbixAPIException, httpx.HTTPError) as e:
-            logger.error("Unable to login to Zabbix API: %s", str(e))
+            log.error("Unable to login to Zabbix API", error=str(e))
             raise ZACException(*e.args) from e
 
     def work(self) -> None:
@@ -773,9 +773,9 @@ class ZabbixUpdater(BaseProcess):
         logger.info("Zabbix update starting")
         self.do_update()
         logger.info(
-            "Done with zabbix update in %.2f seconds. Next update: %s",
-            time.time() - start_time,
-            self.next_update.isoformat(timespec="seconds"),
+            "Done with zabbix update",
+            duration=time.time() - start_time,
+            next_update=self.next_update.isoformat(timespec="seconds"),
         )
 
     def do_update(self) -> None:
@@ -792,35 +792,30 @@ class ZabbixUpdater(BaseProcess):
             for res in db_cursor.fetchall():
                 try:
                     host = models.Host(**res[0])
-                except ValidationError as e:
+                except ValidationError:
                     # TODO: log invalid host then remove it from the database
-                    logger.exception("Invalid host in hosts table: %s", e)
-                except Exception as e:
-                    logger.exception("Error when parsing host from hosts table: %s", e)
+                    logger.exception("Invalid host in hosts table", host=str(res))
+                except Exception:
+                    logger.exception(
+                        "Failed to parse host from hosts table", host=str(res)
+                    )
                 else:
                     db_hosts[host.hostname] = host
             return db_hosts
 
-    def get_hostgroups(self, name: Optional[str] = None) -> list[HostGroup]:
-        try:
-            names = [name] if name else []
-            hostgroups = self.api.get_hostgroups(*names)
-        except ZabbixAPIException as e:
-            raise ZACException("Error when fetching hostgroups: %s", e) from e
-        return hostgroups
-
     def create_hostgroup(self, hostgroup_name: str) -> Optional[str]:
+        log = logger.bind(hostgroup_name=hostgroup_name)
         if self.zabbix_config.dryrun:
-            logger.info("DRYRUN: Creating hostgroup: '%s'", hostgroup_name)
+            log.info("DRYRUN: Creating hostgroup")
             return None
 
-        logger.debug("Creating hostgroup: '%s'", hostgroup_name)
+        log.debug("Creating hostgroup")
         try:
             groupid = self.api.create_hostgroup(hostgroup_name)
-            logger.info("Created host group '%s' (%s)", hostgroup_name, groupid)
+            log.info("Created host group", groupid=groupid)
             return groupid
         except ZabbixAPIException as e:
-            logger.error("Error when creating hostgroups '%s': %s", hostgroup_name, e)
+            log.error("Failed to create hostgroup", error=e)
             return None
 
 
@@ -853,41 +848,40 @@ class ZabbixGarbageCollector(ZabbixUpdater):
         """Remove all disabled hosts from a maintenance."""
         hosts_keep, hosts_remove = self.filter_disabled_hosts(maintenance)
 
+        log = logger.bind(maintenance=maintenance.name)
         if self.zabbix_config.dryrun:
-            logger.info(
-                "DRYRUN: Removing disabled hosts from maintenance '%s': %s",
-                maintenance.name,
-                ", ".join([host.host for host in hosts_remove]),
+            log.info(
+                "DRYRUN: Removing disabled hosts from maintenance",
+                hosts=hosts_remove,
             )
             return
 
         # No disabled hosts in maintenance (Should never happen)
         if len(hosts_keep) == len(maintenance.hosts):
-            logger.debug("No disabled hosts in maintenance '%s'", maintenance.name)
+            log.debug("No disabled hosts in maintenance")
         # No hosts left in maintenance
         elif not hosts_keep:
             if self.config.zac.process.garbage_collector.delete_empty_maintenance:
                 self.delete_maintenance(maintenance)
             else:
-                logger.error(
-                    "Unable to remove disabled hosts from maintenance '%s': no hosts left. Delete maintenance manually.",
-                    maintenance.name,
+                log.error(
+                    "Maintenance would be empty after removing disabled hosts. It must be deleted manually."
                 )
         else:
             self.api.update_maintenance(maintenance, hosts_keep)
-            logger.info(
-                "Removed disabled hosts from maintenance '%s': %s",
-                maintenance.name,
-                ", ".join([host.host for host in hosts_remove]),
+            log.info(
+                "Removed disabled hosts from maintenance",
+                hosts=hosts_remove,
             )
 
     def delete_maintenance(self, maintenance: Maintenance) -> None:
         """Delete a maintenance in Zabbix."""
+        log = logger.bind(maintenance=maintenance.name)
         if self.zabbix_config.dryrun:
-            logger.info("DRYRUN: Deleting maintenance '%s'", maintenance.name)
+            log.info("DRYRUN: Deleting maintenance")
             return
         self.api.delete_maintenance(maintenance)
-        logger.info("Deleted maintenance '%s'", maintenance.name)
+        log.info("Deleted maintenance")
 
     def cleanup_maintenances(self, disabled_hosts: list[Host]) -> None:
         maintenances = self.api.get_maintenances(
@@ -938,12 +932,11 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 hosts=[zabbix_host],
                 select_hosts=True,
             )
-        except ZabbixAPIException as e:
-            logger.error(
-                "Error when fetching maintenances for host '%s' (%s): %s",
-                zabbix_host.host,
-                zabbix_host.hostid,
-                e.args,
+        except ZabbixAPIException:
+            logger.exception(
+                "Failed to fetch maintenances for host",
+                host=zabbix_host.host,
+                hostid=zabbix_host.hostid,
             )
             maintenances = []
         return maintenances
@@ -951,12 +944,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
     def do_remove_host_from_maintenance(
         self, zabbix_host: Host, maintenance: Maintenance
     ) -> None:
+        log = logger.bind(host=zabbix_host.host, maintenance=maintenance.name)
         if self.zabbix_config.dryrun:
-            logger.info(
-                "DRYRUN: Removing host %s from maintenance %s",
-                zabbix_host.host,
-                maintenance.name,
-            )
+            log.info("DRYRUN: Removing host from maintenance")
             return
 
         # Determine new hosts list for maintenance
@@ -966,28 +956,15 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
         if not new_hosts:
             # NOTE: ZabbixGarbageCollector cleans this up if enabled
-            logger.info(
-                "Maintenance '%s' is empty would be empty if removing host '%s'. Skipping.",
-                zabbix_host.host,
-                maintenance.name,
-            )
+            log.info("Maintenance would be empty if removing host. Skipping.")
             return
 
         try:
             self.api.update_maintenance(maintenance, hosts=new_hosts)
-        except ZabbixAPIException as e:
-            logger.error(
-                "Error when removing host '%s' from maintenance '%s': %s",
-                zabbix_host.host,
-                maintenance.name,
-                e.args,
-            )
+        except ZabbixAPIException:
+            log.exception("Failed to remove host from maintenance")
         else:
-            logger.info(
-                "Removed host %s from maintenance %s",
-                zabbix_host.host,
-                maintenance.name,
-            )
+            log.info("Removed host from maintenance")
 
     def remove_host_from_maintenances(self, zabbix_host: Host) -> None:
         maintenances = self.get_maintenances(zabbix_host)
@@ -996,13 +973,11 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
     def disable_host(self, zabbix_host: Host) -> None:
         # Host needs to be removed from all maintenances before it is disabled
+        log = logger.bind(host=zabbix_host.host, hostid=zabbix_host.hostid)
+
         self.remove_host_from_maintenances(zabbix_host)
         if self.zabbix_config.dryrun:
-            logger.info(
-                "DRYRUN: Disabling host: '%s' (%s)",
-                zabbix_host.host,
-                zabbix_host.hostid,
-            )
+            log.info("DRYRUN: Disabling host")
             return
 
         try:
@@ -1012,25 +987,17 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 templates=[],
                 groups=[self.disabled_hostgroup],
             )
-        except ZabbixAPIException as e:
-            logger.error(
-                "Error when disabling host '%s' (%s): %s",
-                zabbix_host.host,
-                zabbix_host.hostid,
-                e.args,
-            )
+        except ZabbixAPIException:
+            log.exception("Error when disabling host")
         else:
-            logger.info(
-                "Disabled host: '%s' (%s)",
-                zabbix_host.host,
-                zabbix_host.hostid,
-            )
+            log.info("Disabled host")
 
     def enable_host(self, db_host: models.Host) -> None:
         # TODO: Set correct proxy when enabling
+        log = logger.bind(host=db_host.hostname)
         hostname = db_host.hostname
         if self.zabbix_config.dryrun:
-            logger.info("DRYRUN: Enabling host: '%s'", hostname)
+            log.info("DRYRUN: Enabling host")
             return
 
         try:
@@ -1041,7 +1008,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 self.api.update_host(
                     host, status=MonitoringStatus.ON, groups=[self.enabled_hostgroup]
                 )
-                logger.info("Enabled old host: '%s' (%s)", host.host, host.hostid)
+                log.info("Enabled existing host", hostid=host.hostid)
             else:
                 interface = HostInterface(
                     dns=hostname,
@@ -1054,24 +1021,22 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 hostid = self.api.create_host(
                     hostname, groups=[self.enabled_hostgroup], interfaces=[interface]
                 )
-                logger.info("Enabled new host: '%s' (%s)", hostname, hostid)
-        except ZabbixAPIException as e:
-            logger.error("Error when enabling/creating host '%s': %s", hostname, e.args)
+                log.info("Enabled new host", hostid=hostid)
+        except ZabbixAPIException:
+            log.exception("Error when enabling/creating host")
 
     def clear_proxy(self, zabbix_host: Host) -> None:
+        log = logger.bind(host=zabbix_host.host, hostid=zabbix_host.hostid)
+
         if self.zabbix_config.dryrun:
-            logger.info(
-                "DRYRUN: Clearing proxy on host: '%s' (%s)",
-                zabbix_host.host,
-                zabbix_host.hostid,
-            )
+            log.info("DRYRUN: Clearing proxy on host")
             return
         try:
             self.api.clear_host_proxy(zabbix_host)
-        except ZabbixAPIException as e:
-            logger.error("%s", e)  # Just log the error verbatim
+        except ZabbixAPIException:
+            log.exception("Error clearing proxy on host")
         else:
-            logger.info("Cleared proxy on host %s", zabbix_host)
+            log.info("Cleared proxy on host")
 
     def set_interface(
         self,
@@ -1080,12 +1045,13 @@ class ZabbixHostUpdater(ZabbixUpdater):
         useip: bool,
         old_interface: Optional[HostInterface] = None,
     ) -> None:
+        log = logger.bind(
+            host=zabbix_host.host,
+            hostid=zabbix_host.hostid,
+            interface_type=interface.type,
+        )
         if self.zabbix_config.dryrun:
-            logger.info(
-                "DRYRUN: Setting interface (type: %d) on host: %s",
-                interface.type,
-                zabbix_host,
-            )
+            log.info("DRYRUN: Setting interface on host")
             return
 
         if useip:
@@ -1098,11 +1064,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         try:
             ifacetype = InterfaceType(interface.type)
         except ValueError:
-            logger.error(
-                "Invalid/unknown interface type (%d) for host '%s'",
-                interface.type,
-                zabbix_host.host,
-            )
+            log.error("Invalid/unknown interface type")
             return
 
         # Update existing interface
@@ -1150,9 +1112,14 @@ class ZabbixHostUpdater(ZabbixUpdater):
             details=details,
         )
         logger.info(
-            "Created new interface (type: %s) on host: %s",
-            ifacetype.name,
-            zabbix_host,
+            "Created new interface",
+            host=zabbix_host.host,
+            hostid=zabbix_host.hostid,
+            interface_type=ifacetype.name,
+            use_ip=useip,
+            dns=dns,
+            ip=ip,
+            port=interface.port,
         )
 
     def update_host_interface(
@@ -1181,9 +1148,14 @@ class ZabbixHostUpdater(ZabbixUpdater):
             details=details,
         )
         logger.info(
-            "Updated old interface (type: %s) on host: %s",
-            interface.type,
-            zabbix_host,
+            "Updated existing interface on host",
+            host=zabbix_host.host,
+            hostid=zabbix_host.hostid,
+            interface_type=ifacetype.name,
+            interface_id=old_interface.interfaceid,
+            use_ip=useip,
+            dns=dns,
+            ip=ip,
         )
 
     def validate_interface_details(
@@ -1199,71 +1171,72 @@ class ZabbixHostUpdater(ZabbixUpdater):
             return cls.model_validate(interface.details)
         except ValidationError:
             logger.error(
-                "Invalid interface details (%s) for host '%s'",
-                interface.details,
-                host.host,
+                "Invalid interface details",
+                interface_details=interface.details,
+                host=host.host,
             )
         return None
 
     def set_inventory_mode(
         self, zabbix_host: Host, inventory_mode: InventoryMode
     ) -> None:
+        log = logger.bind(
+            host=zabbix_host.host,
+            hostid=zabbix_host.hostid,
+            inventory_mode=inventory_mode.value,
+        )
         if self.zabbix_config.dryrun:
-            logger.info(
-                "DRYRUN: Setting inventory_mode (%d) on host: %s",
-                inventory_mode,
-                zabbix_host,
-            )
+            log.info("DRYRUN: Setting inventory_mode on host")
             return
 
         self.api.update_host(zabbix_host, inventory_mode=inventory_mode)
-        logger.info(
-            "Setting inventory_mode (%d) on host: %s", inventory_mode, zabbix_host
-        )
+        log.info("Setting inventory_mode on host")
 
     def set_inventory(self, zabbix_host: Host, inventory: dict[str, str]) -> None:
+        log = logger.bind(
+            host=zabbix_host.host,
+            hostid=zabbix_host.hostid,
+            inventory=inventory,
+        )
         if self.zabbix_config.dryrun:
-            logger.info(
-                "DRYRUN: Setting inventory (%s) on host: %s", inventory, zabbix_host
-            )
+            log.info("DRYRUN: Setting inventory on host")
             return
         # TODO: refactor. Move everything in to ZabbixAPI.update_host?
         self.api.update_host_inventory(zabbix_host, inventory)
-        logger.info("Setting inventory (%s) on host: %s", inventory, zabbix_host)
+        logger.info("Set inventory on host")
 
     def set_proxy(self, zabbix_host: Host, zabbix_proxy: Proxy) -> None:
+        log = logger.bind(
+            host=zabbix_host.host,
+            hostid=zabbix_host.hostid,
+            proxy=zabbix_proxy.name,
+        )
         if self.zabbix_config.dryrun:
-            logger.info(
-                "DRYRUN: Setting proxy %s on host %s", zabbix_proxy.name, zabbix_host
-            )
+            log.info("DRYRUN: Setting proxy host")
             return
         try:
             self.api.update_host_proxy(zabbix_host, zabbix_proxy)
         except ZabbixAPIException as e:
-            logger.error(
-                "Failed to set proxy %s on host %s: %s",
-                zabbix_proxy.name,
-                zabbix_host,
-                e,
-            )
+            log.error("Failed to set proxy on host", error=str(e))
         else:
-            logger.info("Set proxy %s on host %s", zabbix_proxy.name, zabbix_host)
+            log.info("Set proxy on host")
 
     def set_tags(self, zabbix_host: Host, tags: ZacTags) -> None:
+        log = logger.bind(
+            host=zabbix_host.host,
+            hostid=zabbix_host.hostid,
+            tags=tags,
+        )
         if self.zabbix_config.dryrun:
-            logger.info(
-                "DRYRUN: Setting tags (%s) on host: %s",
-                tags,
-                zabbix_host,
-            )
+            log.info("DRYRUN: Setting tags on host")
             return
         zabbix_tags = utils.zac_tags2zabbix_tags(tags)
         try:
             self.api.update_host(zabbix_host, tags=zabbix_tags)
         except ZabbixAPIException as e:
-            logger.error("Failed to set tags (%s) on host %s: %s", tags, zabbix_host, e)
+            log.error("Failed to set tags on host", error=str(e))
         else:
-            logger.info("Set tags (%s) on host: %s", tags, zabbix_host)
+            log.info("Set tags on host")
 
     def do_update(self) -> None:
         db_hosts = self.get_db_hosts()
@@ -1300,6 +1273,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
         db_hostnames = set(db_hosts)
         zabbix_hostnames = set(zabbix_hosts)
+
         zabbix_managed_hostnames = {host.host for host in zabbix_managed_hosts}
         zabbix_manual_hostnames = {host.host for host in zabbix_manual_hosts}
 
@@ -1317,18 +1291,14 @@ class ZabbixHostUpdater(ZabbixUpdater):
             db_hostnames.intersection(zabbix_manual_hostnames)
         )
 
-        logger.info("Total in zabbix: %d", len(zabbix_hostnames))
-        logger.info("Total in db: %d", len(db_hostnames))
-        logger.info("Manual in zabbix: %d", len(zabbix_manual_hostnames))
-        logger.info("Manual and in source: %d", len(hostnames_in_manual_and_source))
         logger.info(
-            "Manual and in source: %s", " ".join(hostnames_in_manual_and_source[:10])
+            "Resulting hosts",
+            to_add=hostnames_to_add,
+            to_remove=hostnames_to_remove,
+            manual_and_source=hostnames_in_manual_and_source,
+            zabbix_count=len(zabbix_hostnames),
+            db_count=len(db_hostnames),
         )
-        logger.info("Only in zabbix: %d", len(hostnames_to_remove))
-        logger.info("Only in zabbix: %s", " ".join(hostnames_to_remove[:10]))
-        logger.info("Only in db: %d", len(hostnames_to_add))
-        logger.info("Only in db: %s", " ".join(hostnames_to_add[:10]))
-        logger.info("In both: %d", len(hostnames_in_both))
 
         # Check if we have too many hosts to add/remove
         check_failsafe(self.config, hostnames_to_add, hostnames_to_remove)
@@ -1348,14 +1318,14 @@ class ZabbixHostUpdater(ZabbixUpdater):
             self.enable_host(db_host)
 
         for hostname in hostnames_in_both:
-            # Check if these hosts are good
-
             if self.stop_event.is_set():
                 logger.debug("Told to stop. Breaking")
                 break
 
             db_host = db_hosts[hostname]
             zabbix_host = zabbix_hosts[hostname]
+
+            log = logger.bind(host=zabbix_host.host, hostid=zabbix_host.hostid)
 
             # Check proxy. A host with proxy_pattern should get a proxy that matches the pattern.
             zabbix_proxy_id = zabbix_host.proxyid
@@ -1372,11 +1342,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
                     if re.match(db_host.proxy_pattern, proxy.name)
                 ]
                 if not possible_proxies:
-                    logger.error(
-                        "Proxy pattern ('%s') for host, '%s' (%s), doesn't match any proxies.",
-                        db_host.proxy_pattern,
-                        hostname,
-                        zabbix_host.hostid,
+                    log.error(
+                        "Proxy pattern doesn't match any proxies.",
+                        proxy_pattern=db_host.proxy_pattern,
                     )
                 else:
                     new_proxy = random.choice(possible_proxies)
@@ -1403,6 +1371,10 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 }
 
                 for interface in db_host.interfaces:
+                    log_if = log.bind(
+                        interface_type=interface.type,
+                        interface_endpoint=interface.endpoint,
+                    )
                     # We assume that we're using an IP if the endpoint is a valid IP
                     useip = utils.is_valid_ip(interface.endpoint)
                     if zabbix_interface := zabbix_interfaces.get(interface.type):
@@ -1423,11 +1395,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                             or zabbix_interface.port != interface.port
                             or zabbix_interface.useip != useip
                         ):
-                            logger.info(
-                                "DNS interface of type %s for host '%s' is configured wrong",
-                                interface.type,
-                                db_host.hostname,
-                            )
+                            log_if.info("DNS interface is configured incorrectly")
                             # This DNS interface is configured wrong, set it
                             self.set_interface(
                                 zabbix_host,
@@ -1444,10 +1412,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                                 str(details_dict.get(k)) == str(v)
                                 for k, v in interface.details.items()
                             ):
-                                logger.info(
-                                    "SNMP interface for host '%s' differs from source data. Fixing.",
-                                    db_host.hostname,
-                                )
+                                log_if.info("SNMP interface is configured incorrectly")
                                 # This SNMP interface is configured wrong, set it.
                                 self.set_interface(
                                     zabbix_host,
@@ -1483,11 +1448,10 @@ class ZabbixHostUpdater(ZabbixUpdater):
             )
             if ignored_tags:
                 db_tags = db_tags - ignored_tags
-                logger.warning(
-                    "Tags (%s) not matching tags prefix ('%s') is configured on host %s. They will be ignored.",
-                    ignored_tags,
-                    self.zabbix_config.tags_prefix,
-                    zabbix_host,
+                log.warning(
+                    "Ignoring tags not matching configured tag prefix",
+                    tags=ignored_tags,
+                    tag_prefix=self.zabbix_config.tags_prefix,
                 )
 
             tags_to_remove = current_tags - db_tags
@@ -1495,17 +1459,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
             tags = db_tags.union(other_zabbix_tags)
             if tags_to_remove or tags_to_add:
                 if tags_to_remove:
-                    logger.debug(
-                        "Going to remove tags '%s' from host %s.",
-                        tags_to_remove,
-                        zabbix_host,
-                    )
+                    log.debug("Going to remove tags", tags=tags_to_remove)
                 if tags_to_add:
-                    logger.debug(
-                        "Going to add tags '%s' to host %s.",
-                        tags_to_add,
-                        zabbix_host,
-                    )
+                    log.debug("Going to add tags", tags=tags_to_add)
                 self.set_tags(zabbix_host, tags)
 
             if zabbix_host.inventory_mode != InventoryMode.AUTOMATIC:
@@ -1538,9 +1494,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
                     if inventory:
                         self.set_inventory(zabbix_host, inventory)
                     if ignored_inventory:
-                        logger.warning(
-                            "Zac is not configured to manage inventory properties: '%s'.",
-                            ignored_inventory,
+                        log.warning(
+                            "Zac is not configured to manage inventory properties",
+                            ignored_inventory=ignored_inventory,
                         )
 
 
@@ -1550,41 +1506,40 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         self.update_interval = self.config.zac.process.template_updater.update_interval
 
     def clear_templates(self, templates: list[Template], host: Host) -> None:
+        log = logger.bind(
+            host=host.host,
+            hostid=host.hostid,
+            templates=[t.host for t in templates],
+        )
         if self.zabbix_config.dryrun:
-            logger.info(
-                "DRYRUN: Clearing templates %s on host: %s",
-                ", ".join(t.host for t in templates),
-                host,
-            )
+            log.info("DRYRUN: Clearing templates on host")
             return
 
         try:
             self.api.unlink_templates_from_hosts(templates, [host], clear=True)
         except ZabbixAPIException as e:
-            logger.error("Error when clearing templates on host %s: %s", host, e)
+            log.error("Error when clearing templates on host", error=str(e))
         else:
-            logger.info(
-                "Cleared templates %s on host: %s",
-                ", ".join(t.host for t in templates),
-                host,
-            )
+            log.info("Cleared templates on host")
 
     def set_templates(self, templates: list[Template], host: Host) -> None:
         # For logging
-        to_add = ", ".join(f"{t.host!r}" for t in templates)
+        log = logger.bind(
+            host=host.host,
+            hostid=host.hostid,
+            templates=[t.host for t in templates],
+        )
 
         if self.zabbix_config.dryrun:
-            logger.info("DRYRUN: Setting templates %s on host: %s", to_add, host)
+            log.info("DRYRUN: Setting templates on host")
             return
 
         try:
             self.api.link_templates_to_hosts(templates, [host])
         except ZabbixAPIException as e:
-            logger.error(
-                "Error when setting templates %s on host %s: %s", to_add, host, e
-            )
+            log.error("Error setting templates on host", error=str(e))
         else:
-            logger.info("Set templates %s on host: %s", to_add, host)
+            log.info("Set templates on host")
 
     def do_update(self) -> None:
         # Determine names of templates we are managing
@@ -1611,22 +1566,25 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         )
 
         for zabbix_host in zabbix_hosts:
+            log = logger.bind(
+                host=zabbix_host.host,
+                hostid=zabbix_host.hostid,
+                groups=[group.name for group in zabbix_host.groups],
+            )
             if self.stop_event.is_set():
-                logger.debug("Told to stop. Breaking")
+                log.debug("Told to stop. Breaking")
                 break
 
             # Manually managed host - skip it
             if self.zabbix_config.hostgroup_manual in [
                 group.name for group in zabbix_host.groups
             ]:
-                logger.debug("Skipping manual host: %s", zabbix_host)
+                log.debug("Skipping manual host")
                 continue
 
             # Disabled hosts are not managed
             if not (db_host := db_hosts.get(zabbix_host.host)):
-                logger.debug(
-                    "Skipping host (It is not enabled in the database): %s", zabbix_host
-                )
+                log.debug("Skipping host (It is not enabled in the database)")
                 continue
 
             # Determine managed templates
@@ -1651,10 +1609,8 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                     template_name in managed_template_names
                     and template_name not in synced_template_names
                 ):
-                    logger.debug(
-                        "Going to remove template '%s' from host '%s'.",
-                        template_name,
-                        zabbix_host.host,
+                    log.debug(
+                        "Going to remove template from host.", template=template_name
                     )
                     host_templates_to_remove[template_name] = host_templates[
                         template_name
@@ -1662,18 +1618,13 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
                     del host_templates[template_name]
             for template_name in synced_template_names:
                 if template_name not in host_templates:
-                    logger.debug(
-                        "Going to add template '%s' to host '%s'.",
-                        template_name,
-                        zabbix_host.host,
-                    )
+                    log.debug("Going to add template to host.", template=template_name)
                     host_templates[template_name] = zabbix_templates[template_name]
             if host_templates != old_host_templates:
-                logger.info(
-                    "Updating templates on host '%s'. Old: %s. New: %s",
-                    zabbix_host.host,
-                    ", ".join(old_host_templates.keys()),
-                    ", ".join(host_templates.keys()),
+                log.info(
+                    "Updating templates on host",
+                    old_templates=list(old_host_templates.keys()),
+                    new_templates=list(host_templates.keys()),
                 )
                 if host_templates_to_remove:
                     self.clear_templates(
@@ -1691,16 +1642,20 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
     def set_hostgroups(self, host: Host, hostgroups: list[HostGroup]) -> None:
         """Set host groups on a host given a list of host groups."""
-        to_add = ", ".join(f"{hg.name!r}" for hg in hostgroups)
+        log = logger.bind(
+            host=host.host,
+            hostid=host.hostid,
+            hostgroups=[hg.name for hg in hostgroups],
+        )
         if self.zabbix_config.dryrun:
-            logger.info("DRYRUN: Setting hostgroups %s on host: %s", to_add, host)
+            log.info("DRYRUN: Setting hostgroups on host")
             return
         try:
             self.api.set_host_hostgroups(host, hostgroups)
         except ZabbixAPIException as e:
-            logger.error("Error when setting hostgroups on host %s: %s", host, e)
+            log.error("Error when setting hostgroups on host", error=str(e))
         else:
-            logger.info("Set hostgroups %s on host: %s", to_add, host)
+            log.info("Set hostgroups on host")
 
     def create_extra_hostgroups(self, existing_hostgroups: list[HostGroup]) -> None:
         """Creates additonal host groups based on the prefixes specified
@@ -1720,19 +1675,19 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                     self.create_hostgroup(hostgroup)
 
     def create_templategroup(self, templategroup_name: str) -> Optional[str]:
+        log = logger.bind(templategroup=templategroup_name)
+
         if self.zabbix_config.dryrun:
-            logger.info("DRYRUN: Creating template group: '%s'", templategroup_name)
+            log.info("DRYRUN: Creating template group")
             return None
 
-        logger.debug("Creating template group: '%s'", templategroup_name)
+        log.debug("Creating template group")
         try:
             groupid = self.api.create_templategroup(templategroup_name)
-            logger.info("Created template group '%s' (%s)", templategroup_name, groupid)
+            log.info("Created template group", groupid=groupid)
             return groupid
         except ZabbixAPIException as e:
-            logger.error(
-                "Error when creating template group '%s': %s", templategroup_name, e
-            )
+            log.error("Error when creating template group", error=str(e))
             return None
 
     def create_templategroups(self, existing_hostgroups: list[HostGroup]) -> None:
@@ -1757,14 +1712,14 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         }
         if compat.templategroups_supported(self.zabbix_version):
             logger.debug(
-                "Zabbix version is %s. Will create template groups.",
-                self.zabbix_version,
+                "Zabbix version supports template groups. Will create template groups.",
+                version=str(self.zabbix_version),
             )
             self._create_templategroups(tgroups)
         else:
             logger.debug(
-                "Zabbix version is %s. Will create host groups instead of template groups.",
-                self.zabbix_version,
+                "Zabbix version does not support template groups. Will create host groups instead of template groups.",
+                version=str(self.zabbix_version),
             )
             self._create_templategroups_pre_62_compat(tgroups, existing_hostgroups)
 
@@ -1841,6 +1796,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         )
         # Iterate over hosts in Zabbix and update synced hosts
         for zabbix_host in zabbix_hosts:
+            log = logger.bind(host=zabbix_host.host, hostid=zabbix_host.hostid)
             if self.stop_event.is_set():
                 logger.debug("Told to stop. Breaking")
                 break
@@ -1849,14 +1805,12 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             if self.zabbix_config.hostgroup_manual in [
                 group.name for group in zabbix_host.groups
             ]:
-                logger.debug("Skipping manual host: %s", zabbix_host)
+                log.debug("Skipping manual host")
                 continue
 
             # Disabled hosts are not managed
             if zabbix_host.host not in db_hosts:
-                logger.debug(
-                    "Skipping host (It is not enabled in the database): %s", zabbix_host
-                )
+                log.debug("Skipping host (It is not enabled in the database)")
                 continue
 
             db_host = db_hosts[zabbix_host.host]
@@ -1897,10 +1851,8 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                     hostgroup_name in managed_hostgroup_names
                     and hostgroup_name not in synced_hostgroup_names
                 ):
-                    logger.debug(
-                        "Going to remove hostgroup '%s' from host %s.",
-                        hostgroup_name,
-                        zabbix_host,
+                    log.debug(
+                        "Going to remove hostgroup from host", hostgroup=hostgroup_name
                     )
                     del host_hostgroups[hostgroup_name]
 
@@ -1908,10 +1860,8 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             # Creates synced host groups if they don't exist
             for hostgroup_name in synced_hostgroup_names:
                 if hostgroup_name not in host_hostgroups.keys():
-                    logger.debug(
-                        "Going to add hostgroup '%s' to host %s.",
-                        hostgroup_name,
-                        zabbix_host,
+                    log.debug(
+                        "Going to add hostgroup to host", hostgroup=hostgroup_name
                     )
                     zabbix_hostgroup = zabbix_hostgroups.get(hostgroup_name, None)
                     if not zabbix_hostgroup:
@@ -1927,11 +1877,9 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
             # Compare names of host groups to see if they are changed
             if sorted(host_hostgroups) != sorted(old_host_hostgroups):
-                logger.info(
-                    "Updating host groups on host '%s'. Old: %s. New: %s",
-                    zabbix_host.host,
-                    # Just re-compute here (it's cheap enough)
-                    ", ".join(sorted(old_host_hostgroups)),
-                    ", ".join(sorted(host_hostgroups)),
+                log.info(
+                    "Updating host groups on host",
+                    old_hostgroups=old_host_hostgroups,
+                    new_hostgroups=host_hostgroups,
                 )
                 self.set_hostgroups(zabbix_host, list(host_hostgroups.values()))

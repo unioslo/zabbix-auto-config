@@ -152,7 +152,7 @@ class ZabbixAPI:
 
         server, _, _ = server.partition(RPC_ENDPOINT)
         self.url = f"{server}/api_jsonrpc.php"
-        logger.info("JSON-RPC Server Endpoint: %s", self.url)
+        logger.info("JSON-RPC Server Endpoint", url=self.url)
 
         # Attributes for properties
         self._version: Optional[Version] = None
@@ -270,28 +270,25 @@ class ZabbixAPI:
             "id": self.id,
         }
 
+        log = logger.bind(method=method, url=self.url)
+
         # We don't have to pass the auth token if asking for the apiinfo.version
         if self.auth and method != "apiinfo.version":
             request_json["auth"] = self.auth
         # TODO: ensure we have auth token if method requires it
 
-        logger.debug("Sending %s to %s", method, self.url)
+        log.debug("Sending request", body=request_json)
 
         try:
             response = self.session.post(self.url, json=request_json)
         except Exception as e:
-            logger.error(
-                "Failed to send request to %s (%s) with params %s",
-                self.url,
-                method,
-                params,
-            )
+            logger.error("Failed to send request")
             raise ZabbixAPIRequestError(
                 f"Failed to send request to {self.url} ({method}) with params {params}",
                 params=params,
             ) from e
 
-        logger.debug("Response Code: %s", str(response.status_code))
+        logger.debug("Got response", code=response.status_code)
 
         # NOTE: Getting a 412 response code means the headers are not in the
         # list of allowed headers.
