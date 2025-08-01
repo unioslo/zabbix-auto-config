@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import structlog
 from structlog.dev import Column
 
+from zabbix_auto_config.dirs import ensure_directory
 from zabbix_auto_config.models import FileLoggerConfig
 from zabbix_auto_config.models import LoggerConfigBase
 from zabbix_auto_config.models import LoggerFormat
@@ -63,6 +64,8 @@ def get_console_renderer() -> structlog.dev.ConsoleRenderer:
 
 def get_file_handler(config: FileLoggerConfig) -> logging.FileHandler:
     """Get the correct type of file handler based on the configuration."""
+    log_path = config.path
+    ensure_directory(log_path.parent)  # ensure parent directories exist
     if config.rotate:
         handler = logging.handlers.RotatingFileHandler(
             config.path,
@@ -129,6 +132,6 @@ def configure_logging(config: Settings) -> None:
     if config.zac.logging.file.enabled:
         structlog.get_logger().info(
             "Logging to file",
-            file=str(config.zac.logging.file),
-            level=config.zac.logging.file.level,
+            file=str(config.zac.logging.file.path),
+            log_level=str(config.zac.logging.file.level),
         )
