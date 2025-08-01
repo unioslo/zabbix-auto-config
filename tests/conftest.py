@@ -109,7 +109,11 @@ def sample_config_path(tmp_path: Path):
 
     # Create a temp file with the contents of the sample config
     p = tmp_path / "config.toml"
-    p.write_text(sample_config_path.read_text())
+
+    # Uncomment file path(s) in sample config
+    text = sample_config_path.read_text()
+    text = text.replace("# path = ", "path = ")
+    p.write_text(text)
     yield p
 
 

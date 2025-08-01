@@ -205,7 +205,7 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
                         "enabled": True,
                         "format": "json",
                         "level": "INFO",
-                        "path": "/Users/pederhan/Library/Logs/zabbix-auto-config/app.log",
+                        "path": "/path/to/log/file.log",
                         "rotate": True,
                         "max_size_mb": 50,
                         "max_logs": 5,
