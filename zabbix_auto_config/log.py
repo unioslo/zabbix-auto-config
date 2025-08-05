@@ -14,18 +14,6 @@ from zabbix_auto_config.models import LoggerConfigBase
 from zabbix_auto_config.models import LoggerFormat
 from zabbix_auto_config.models import Settings
 
-
-@dataclass
-class ProcessNameFormatter:
-    """Formatter for process name in the log output."""
-
-    style: str
-    reset_style: str
-
-    def __call__(self, key: str, value: object) -> str:
-        return f"[{self.style}{value}{self.reset_style}]"
-
-
 shared_processors = [
     structlog.stdlib.filter_by_level,
     structlog.stdlib.add_log_level,
@@ -42,24 +30,46 @@ shared_processors = [
 """Shared processors for structlog that are used in both console and file logging."""
 
 
-def get_console_renderer() -> structlog.dev.ConsoleRenderer:
-    """Create a console renderer that renders the process name before the event."""
-    renderer = structlog.dev.ConsoleRenderer(colors=True)
+@dataclass
+class ProcessNameFormatter:
+    """Formatter for process name in the log output."""
 
-    # HACK: Insert the process name column into the renderer's columns.
-    # The "proper" way would be to create _all_ columns manually,
-    # which is a lot of boilerplate.
-    renderer._columns.insert(
-        2,
-        Column(
-            "process_name",
-            ProcessNameFormatter(
-                style=renderer._styles.timestamp,
-                reset_style=renderer._styles.reset,
-            ),
-        ),
-    )
-    return renderer
+    style: str
+    reset_style: str
+
+    def __call__(self, key: str, value: object) -> str:
+        return f"[{self.style}{value}{self.reset_style}]"
+
+
+class ZacConsoleRenderer(structlog.dev.ConsoleRenderer):
+    def add_process_name_formatter(self) -> None:
+        """Add a process name formatter to the console renderer (in-place)."""
+
+        try:
+            # HACK: Insert the process name column into the renderer's columns.
+            # The "proper" way would be to create _all_ columns manually,
+            # which is a lot of boilerplate.
+            self._columns.insert(
+                2,
+                Column(
+                    "process_name",
+                    ProcessNameFormatter(
+                        style=self._styles.timestamp,
+                        reset_style=self._styles.reset,
+                    ),
+                ),
+            )
+        except Exception as e:
+            structlog.stdlib.get_logger().error(
+                "Failed to initialize process name formatter", error=str(e)
+            )
+
+    @classmethod
+    def create(cls) -> ZacConsoleRenderer:
+        """Create a new instance of the ZacConsoleRenderer."""
+        instance = cls(colors=True)
+        instance.add_process_name_formatter()
+        return instance
 
 
 def get_file_handler(config: FileLoggerConfig) -> logging.FileHandler:
@@ -79,9 +89,10 @@ def get_file_handler(config: FileLoggerConfig) -> logging.FileHandler:
 
 def get_formatter(config: LoggerConfigBase) -> structlog.stdlib.ProcessorFormatter:
     """Get a structlog formatter based on the logger configuration."""
+
     if config.format == LoggerFormat.TEXT:
         return structlog.stdlib.ProcessorFormatter(
-            processor=get_console_renderer(),
+            processor=ZacConsoleRenderer.create(),
             foreign_pre_chain=shared_processors,
         )
     else:
