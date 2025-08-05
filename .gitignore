@@ -28,3 +28,6 @@ path/to/
 
 # Config file
 config.toml
+
+# Log files
+*.log
