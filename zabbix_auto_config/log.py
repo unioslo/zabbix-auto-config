@@ -76,14 +76,20 @@ def get_file_handler(config: FileLoggerConfig) -> logging.FileHandler:
     """Get the correct type of file handler based on the configuration."""
     log_path = config.path
     ensure_directory(log_path.parent)  # ensure parent directories exist
-    if config.rotate:
-        handler = logging.handlers.RotatingFileHandler(
-            config.path,
-            maxBytes=config.max_size_as_bytes(),
-            backupCount=config.max_logs,
+    try:
+        if config.rotate:
+            handler = logging.handlers.RotatingFileHandler(
+                config.path,
+                maxBytes=config.max_size_as_bytes(),
+                backupCount=config.max_logs,
+            )
+        else:
+            handler = logging.FileHandler(config.path)
+    except OSError as e:
+        structlog.stdlib.get_logger().error(
+            "Failed to create file handler", error=str(e), file=config.path
         )
-    else:
-        handler = logging.FileHandler(config.path)
+        raise
     return handler
 
 
