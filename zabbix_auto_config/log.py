@@ -20,12 +20,10 @@ shared_processors = [
     structlog.stdlib.PositionalArgumentsFormatter(),
     structlog.processors.TimeStamper(fmt="iso"),
     structlog.processors.StackInfoRenderer(),
-    structlog.processors.format_exc_info,
     structlog.processors.CallsiteParameterAdder(
         parameters=[structlog.processors.CallsiteParameter.PROCESS_NAME]
     ),
     structlog.processors.UnicodeDecoder(),
-    structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
 ]
 """Shared processors for structlog that are used in both console and file logging."""
 
@@ -67,7 +65,7 @@ class ZacConsoleRenderer(structlog.dev.ConsoleRenderer):
     @classmethod
     def create(cls) -> ZacConsoleRenderer:
         """Create a new instance of the ZacConsoleRenderer."""
-        instance = cls(colors=True)
+        instance = cls(colors=True, sort_keys=False)
         instance.add_process_name_formatter()
         return instance
 
@@ -103,7 +101,11 @@ def get_formatter(config: LoggerConfigBase) -> structlog.stdlib.ProcessorFormatt
         )
     else:
         return structlog.stdlib.ProcessorFormatter(
-            processor=structlog.processors.JSONRenderer(),
+            processors=[
+                structlog.processors.dict_tracebacks,
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                structlog.processors.JSONRenderer(),
+            ],
             foreign_pre_chain=shared_processors,
         )
 
@@ -120,7 +122,8 @@ def configure_logging(config: Settings) -> None:
         multiprocessing_logging.install_mp_handler()
 
     structlog.configure(
-        processors=shared_processors,
+        processors=shared_processors
+        + [structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
         wrapper_class=structlog.stdlib.BoundLogger,
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
