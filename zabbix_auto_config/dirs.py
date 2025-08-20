@@ -29,5 +29,6 @@ def ensure_directory(path: Path) -> None:
     try:
         path.mkdir(parents=True, exist_ok=True)
         log.info("Created directory")
-    except Exception:
+    except Exception as e:
         log.exception("Failed to create directory")
+        raise RuntimeError(f"Failed to create directory {path}: {e}") from e
