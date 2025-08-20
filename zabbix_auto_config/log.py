@@ -145,6 +145,7 @@ def configure_logging(config: Settings) -> None:
         root_logger.addHandler(console_handler)
 
     # Set level of other loggers that we want to capture
+    # TODO: Test capture of these logs!
     logging.getLogger("httpcore").setLevel(logging.ERROR)
     logging.getLogger("httpx").setLevel(logging.ERROR)
 
