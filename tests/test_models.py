@@ -248,7 +248,6 @@ def _get_zac_settings(config: models.Settings, db_uri: str) -> models.ZacSetting
     return models.ZacSettings(
         source_collector_dir=config.zac.source_collector_dir,
         host_modifier_dir=config.zac.host_modifier_dir,
-        log_level=config.zac.log_level,
         db_uri=db_uri,
         # Omit DBSettings
     )

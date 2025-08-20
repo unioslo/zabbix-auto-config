@@ -402,8 +402,7 @@ class ZacSettings(ConfigBaseModel):
     # Deprecated options
     db_uri: str = Field(default="", deprecated=True)
     log_level: LogLevel = Field(
-        # `logging` shadowed in class scope here
-        LogLevel.INFO,
+        default=LogLevel.INFO,
         description="The log level to use.",
         deprecated=True,
         exclude=True,
