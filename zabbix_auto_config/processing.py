@@ -1645,11 +1645,14 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         log = logger.bind(
             host=host.host,
             hostid=host.hostid,
-            hostgroups=[hg.name for hg in hostgroups],
+            new_hostgroups=[hg.name for hg in hostgroups],
+            old_hostgroups=[hg.name for hg in host.groups],
         )
         if self.zabbix_config.dryrun:
             log.info("DRYRUN: Setting hostgroups on host")
             return
+
+        log.debug("Setting hostgroups on host")
         try:
             self.api.set_host_hostgroups(host, hostgroups)
         except ZabbixAPIException as e:
@@ -1877,9 +1880,4 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
 
             # Compare names of host groups to see if they are changed
             if sorted(host_hostgroups) != sorted(old_host_hostgroups):
-                log.info(
-                    "Updating host groups on host",
-                    old_hostgroups=old_host_hostgroups,
-                    new_hostgroups=host_hostgroups,
-                )
                 self.set_hostgroups(zabbix_host, list(host_hostgroups.values()))
