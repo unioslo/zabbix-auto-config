@@ -1569,7 +1569,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
             log = logger.bind(
                 host=zabbix_host.host,
                 hostid=zabbix_host.hostid,
-                groups=[group.name for group in zabbix_host.groups],
+                hostgroups=[group.name for group in zabbix_host.groups],
             )
             if self.stop_event.is_set():
                 log.debug("Told to stop. Breaking")
