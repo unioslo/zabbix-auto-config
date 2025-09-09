@@ -15,7 +15,6 @@ from zabbix_auto_config.models import LoggerFormat
 from zabbix_auto_config.models import Settings
 
 shared_processors = [
-    structlog.stdlib.filter_by_level,
     structlog.stdlib.add_log_level,
     structlog.stdlib.PositionalArgumentsFormatter(),
     structlog.processors.TimeStamper(fmt="iso"),
@@ -102,6 +101,7 @@ def get_formatter(config: LoggerConfigBase) -> structlog.stdlib.ProcessorFormatt
     else:
         return structlog.stdlib.ProcessorFormatter(
             processors=[
+                structlog.stdlib.add_logger_name,
                 structlog.processors.dict_tracebacks,
                 structlog.stdlib.ProcessorFormatter.remove_processors_meta,
                 structlog.processors.JSONRenderer(),
@@ -122,7 +122,8 @@ def configure_logging(config: Settings) -> None:
         multiprocessing_logging.install_mp_handler()
 
     structlog.configure(
-        processors=shared_processors
+        processors=[structlog.stdlib.filter_by_level]
+        + shared_processors
         + [structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
         wrapper_class=structlog.stdlib.BoundLogger,
         context_class=dict,
@@ -146,8 +147,8 @@ def configure_logging(config: Settings) -> None:
 
     # Set level of other loggers that we want to capture
     # TODO: Test capture of these logs!
-    logging.getLogger("httpcore").setLevel(logging.ERROR)
-    logging.getLogger("httpx").setLevel(logging.ERROR)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
     # Show which file is being logged to (if any)
     if config.zac.logging.file.enabled:
