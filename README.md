@@ -250,10 +250,9 @@ disable_duration = 3600
 
 # Extra keyword arguments to pass to the collect() function
 filename = "hosts.json"
-foo = "bar"
 ```
 
-Only the extra `filename` option is passed in as a kwarg to the `collect()` function.
+Only the extra `filename` option is passed as a kwarg to the `collect()` function.
 
 The following configurations options are available:
 
