@@ -208,7 +208,7 @@ def write_file(path: Union[str, Path], content: str, end: str = "\n") -> None:
                 content += end
             f.write(content)
     except OSError as e:
-        logger.error("Failed to write to file", file=str(path), error=e)
+        logger.error("Failed to write to file", file=str(path), error=str(e))
         raise
 
 

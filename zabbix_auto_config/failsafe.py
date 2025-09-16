@@ -52,7 +52,7 @@ def check_failsafe_ok_file(config: ZacSettings) -> bool:
     try:
         config.failsafe_ok_file.unlink()
     except OSError as e:
-        log.error("Unable to delete failsafe OK file", error=e)
+        log.error("Unable to delete failsafe OK file", error=str(e))
         if config.failsafe_ok_file_strict:
             return False  # failed to delete in strict mode
         # NOTE: should this be an INFO or DEBUG log instead?

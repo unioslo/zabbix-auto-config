@@ -64,7 +64,7 @@ class PostgresDBInitializer:
         except psycopg2.Error as e:
             log.debug(
                 "Failed to connect to database. Assuming it doesn't exist.",
-                error=e,
+                error=str(e),
             )
             return False
         return True

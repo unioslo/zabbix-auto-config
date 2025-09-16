@@ -107,12 +107,12 @@ class BaseProcess(multiprocessing.Process):
                 try:
                     self.work()
                 except Exception as e:
-                    log = logger.bind(error=e)
+                    log = logger.bind(error=str(e))
                     # These are the error types we handle ourselves then continue
                     if isinstance(e, httpx.TimeoutException):
                         log.error("Timeout exception")
                     elif isinstance(e, ZACException):
-                        log.error("Work exception")
+                        log.exception("Work exception")
                     elif isinstance(e, ZabbixAPISessionExpired):
                         log.error("Zabbix API session expired")
                         if isinstance(self, ZabbixUpdater):
@@ -121,6 +121,7 @@ class BaseProcess(multiprocessing.Process):
                     elif isinstance(e, ZabbixAPIException):
                         log.error("Zabbix API exception")
                     else:
+                        log.exception("Unhandled exception")
                         raise e  # all other exceptions are fatal
                     self.state.set_error(e)
                 else:
@@ -237,6 +238,9 @@ class SourceCollectorProcess(BaseProcess):
         try:
             self.collect()
         except Exception as e:
+            logger.exception(
+                "Failed to collect from source", error=str(e), source=self.name
+            )
             self.handle_error(e)
         else:
             self.handle_success()
@@ -275,7 +279,6 @@ class SourceCollectorProcess(BaseProcess):
 
     def handle_error(self, e: Exception) -> None:
         """Handle exceptions raised during collection."""
-        logger.error("Collect exception", error=str(e))
         self.error_counter.add(exception=e)
 
         strat_handlers = {
@@ -353,7 +356,7 @@ class SourceCollectorProcess(BaseProcess):
         self.source_hosts_queue.put_nowait(source_hosts)
 
         logger.info(
-            "Done collecting hosts from source",
+            "Collected hosts from source",
             count=len(valid_hosts),
             duration=time.time() - start_time,
             next_update=self.next_update.isoformat(timespec="seconds"),
@@ -499,7 +502,7 @@ class SourceHandlerProcess(BaseProcess):
                 actions[action] += 1
 
         logger.info(
-            "Done handling hosts from source",
+            "Handled hosts from source",
             source=source,
             duration=time.time() - start_time,
             no_change=actions[HostAction.NO_CHANGE],
@@ -586,12 +589,11 @@ class SourceMergerProcess(BaseProcess):
                     host_modifier=host_modifier.name,
                     error=str(e),
                 )
-            except Exception as e:
-                logger.error(
+            except Exception:
+                logger.exception(
                     "Error when running modifier on host",
                     host=host.hostname,
                     host_modifier=host_modifier.name,
-                    error=str(e),
                 )
                 # TODO: Do more?
 
@@ -705,7 +707,7 @@ class SourceMergerProcess(BaseProcess):
                 actions[host_action] += 1
 
         logger.info(
-            "Done with merge of source hosts",
+            "Merged source hosts",
             duration=time.time() - start_time,
             no_change=actions[HostAction.NO_CHANGE],
             updated=actions[HostAction.UPDATE],
@@ -765,6 +767,7 @@ class ZabbixUpdater(BaseProcess):
             log.error("Timed out while connecting to Zabbix API", error=str(e))
             raise ZACException(*e.args) from e
         except (ZabbixAPIException, httpx.HTTPError) as e:
+            # NOTE: log whole exception here?
             log.error("Unable to login to Zabbix API", error=str(e))
             raise ZACException(*e.args) from e
 
@@ -773,7 +776,7 @@ class ZabbixUpdater(BaseProcess):
         logger.info("Zabbix update starting")
         self.do_update()
         logger.info(
-            "Done with zabbix update",
+            "Zabbix update finished",
             duration=time.time() - start_time,
             next_update=self.next_update.isoformat(timespec="seconds"),
         )
@@ -815,7 +818,7 @@ class ZabbixUpdater(BaseProcess):
             log.info("Created host group", groupid=groupid)
             return groupid
         except ZabbixAPIException as e:
-            log.error("Failed to create hostgroup", error=e)
+            log.exception("Failed to create hostgroup", error=str(e))
             return None
 
 
@@ -1217,7 +1220,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         try:
             self.api.update_host_proxy(zabbix_host, zabbix_proxy)
         except ZabbixAPIException as e:
-            log.error("Failed to set proxy on host", error=str(e))
+            log.exception("Failed to set proxy on host", error=str(e))
         else:
             log.info("Set proxy on host")
 
@@ -1234,7 +1237,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         try:
             self.api.update_host(zabbix_host, tags=zabbix_tags)
         except ZabbixAPIException as e:
-            log.error("Failed to set tags on host", error=str(e))
+            log.exception("Failed to set tags on host", error=str(e))
         else:
             log.info("Set tags on host")
 
@@ -1518,7 +1521,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         try:
             self.api.unlink_templates_from_hosts(templates, [host], clear=True)
         except ZabbixAPIException as e:
-            log.error("Error when clearing templates on host", error=str(e))
+            log.exception("Error when clearing templates on host", error=str(e))
         else:
             log.info("Cleared templates on host")
 
@@ -1537,7 +1540,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         try:
             self.api.link_templates_to_hosts(templates, [host])
         except ZabbixAPIException as e:
-            log.error("Error setting templates on host", error=str(e))
+            log.exception("Error setting templates on host", error=str(e))
         else:
             log.info("Set templates on host")
 
@@ -1656,7 +1659,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         try:
             self.api.set_host_hostgroups(host, hostgroups)
         except ZabbixAPIException as e:
-            log.error("Error when setting hostgroups on host", error=str(e))
+            log.exception("Error when setting hostgroups on host", error=str(e))
         else:
             log.info("Set hostgroups on host")
 
@@ -1690,7 +1693,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             log.info("Created template group", groupid=groupid)
             return groupid
         except ZabbixAPIException as e:
-            log.error("Error when creating template group", error=str(e))
+            log.exception("Error when creating template group", error=str(e))
             return None
 
     def create_templategroups(self, existing_hostgroups: list[HostGroup]) -> None:
