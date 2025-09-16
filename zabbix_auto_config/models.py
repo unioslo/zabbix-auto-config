@@ -713,7 +713,7 @@ class Host(BaseModel):
         if not isinstance(other, self.__class__):
             raise TypeError(f"Can't merge with objects of other type: {type(other)}")
 
-        log = logger.bind(hostname=self.hostname)
+        log = logger.bind(host=self.hostname)
 
         self.enabled = self.enabled or other.enabled
         # self.macros TODO
