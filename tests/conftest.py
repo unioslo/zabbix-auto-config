@@ -123,8 +123,14 @@ def sample_config(sample_config_path: Path):
 
 
 @pytest.fixture(name="config")
-def config(sample_config: str) -> Iterable[models.Settings]:
-    yield models.Settings(**tomli.loads(sample_config))
+def config(sample_config: str, tmp_path: Path) -> Iterable[models.Settings]:
+    """Return a valid config based on the sample config provided in the repo.
+
+    Adds a temporary (valid) log file path to the config.
+    """
+    config = models.Settings(**tomli.loads(sample_config))
+    config.zac.logging.file.path = tmp_path / "zac.log"
+    yield config
 
 
 @pytest.fixture(scope="function")
