@@ -17,8 +17,9 @@ Note: Primarily tested with Zabbix 7.0 and 6.4, but should work with 6.0 and 5.2
   - [uv (recommended)](#uv-recommended)
   - [pip](#pip)
 - [Configuration](#configuration)
-  - [Mock environment](#mock-environment)
+  - [Logging](#logging)
 - [Running](#running)
+  - [Mock environment](#mock-environment)
   - [Systemd unit](#systemd-unit)
 - [Concepts](#concepts)
   - [Source collectors](#source-collectors)
@@ -144,17 +145,6 @@ ZAC tries to load a config file on startup in the following order:
 2. `$XDG_CONFIG_HOME` or `~/.config/zabbix-auto-config/config.toml`
 
 A sample configuration file is provided in the repository: [config.sample.toml](./config.sample.toml). Move this file to one of the locations above and modify it to suit your environment.
-
-### Mock environment
-
-A ZAC environment with a set of mock source collectors, host modifiers, and mapping files is included in the [examples](./examples) directory. The [sample config file](./config.sample.toml) comes pre-configured with these activated.
-
-Rename the sample config file to `config.toml` (and optionally move it to the configuration directory) to use it:
-
-```bash
-mkdir -p ~/.config/zabbix-auto-config
-mv config.sample.toml ~/.config/zabbix-auto-config/config.toml
-```
 
 ### Logging
 
@@ -347,6 +337,17 @@ Installing the application adds the `zac` command to your path. After activating
 
 ```bash
 zac
+```
+
+### Mock environment
+
+A ZAC environment with a set of mock source collectors, host modifiers, and mapping files is included in the [examples](./examples) directory. The [sample config file](./config.sample.toml) comes pre-configured with these activated.
+
+Rename the sample config file to `config.toml` (and optionally move it to the configuration directory) to use it:
+
+```bash
+mkdir -p ~/.config/zabbix-auto-config
+mv config.sample.toml ~/.config/zabbix-auto-config/config.toml
 ```
 
 ### Systemd unit
@@ -654,13 +655,15 @@ The Zabbix version to target, as well as other settings, can be configured in th
 
 #### Non-containerized development
 
-If you are on a Linux machine and prefer not to develop inside a container, you can start the required services with Docker/Podman Compose:
+If you are on a Linux machine and prefer not to develop inside a container, you can first manually start the required services with Docker/Podman Compose:
 
 ```bash
-podman-compose up -d
+podman compose up -d
+# or
+docker compose up -d
 ```
 
-Running locally requires you to set up a virtual environment and install development dependencies on your host machine:
+Create a local virtual environment and install development dependencies:
 
 ```bash
 uv sync
