@@ -3,15 +3,60 @@ from __future__ import annotations
 import logging
 import logging.config
 import logging.handlers
+from dataclasses import dataclass
 from typing import Any
 
 import structlog
+from structlog.dev import Column
 from structlog.typing import EventDict
 
 from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.models import FileLoggerConfig
 from zabbix_auto_config.models import LoggerConfigBase
 from zabbix_auto_config.models import Settings
+
+
+@dataclass
+class ProcessNameFormatter:
+    """Formatter for process name in the log output."""
+
+    style: str
+    reset_style: str
+
+    def __call__(self, key: str, value: object) -> str:
+        return f"[{self.style}{value}{self.reset_style}]"
+
+
+class ZacConsoleRenderer(structlog.dev.ConsoleRenderer):
+    def add_process_name_formatter(self) -> None:
+        """Add a process name formatter to the console renderer (in-place)."""
+
+        try:
+            # HACK: Insert the process name column into the renderer's columns.
+            # The "proper" way would be to create _all_ columns manually,
+            # which is a lot of boilerplate.
+            self._columns.insert(
+                2,
+                Column(
+                    # Use the same parameter as in pre_chain as key
+                    structlog.processors.CallsiteParameter.PROCESS_NAME.value,
+                    ProcessNameFormatter(
+                        style=self._styles.timestamp,
+                        reset_style=self._styles.reset,
+                    ),
+                ),
+            )
+        except Exception as e:
+            structlog.stdlib.get_logger().error(
+                "Failed to initialize process name formatter", error=str(e)
+            )
+
+    @classmethod
+    def create(cls) -> ZacConsoleRenderer:
+        """Create a new instance of the ZacConsoleRenderer."""
+        instance = cls(colors=True, sort_keys=False)
+        instance.add_process_name_formatter()
+        return instance
 
 
 def _serialize_sets(logger: Any, method_name: str, event_dict: EventDict) -> EventDict:
@@ -99,7 +144,7 @@ def configure_logging(config: Settings) -> None:
                 "()": structlog.stdlib.ProcessorFormatter,
                 "processors": [
                     structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-                    structlog.dev.ConsoleRenderer(colors=True),
+                    ZacConsoleRenderer.create(),
                 ],
                 "foreign_pre_chain": pre_chain,
             },
