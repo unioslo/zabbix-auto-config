@@ -49,8 +49,8 @@ def get_source_collectors(config: models.Settings) -> list[SourceCollector]:
         try:
             log_mod.debug("Importing source collector module")
             module = importlib.import_module(source_collector_config.module_name)
-        except ModuleNotFoundError:
-            log_mod.error("Unable to find source collector module")
+        except ModuleNotFoundError as e:
+            log_mod.error("Unable to find source collector module", error=str(e))
             continue
         except Exception:
             log_mod.exception("Error importing source collector module")

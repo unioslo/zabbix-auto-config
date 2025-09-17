@@ -1295,7 +1295,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         )
 
         logger.info(
-            "Resulting hosts",
+            "Calculated hosts to add/remove",
             to_add=hostnames_to_add,
             to_remove=hostnames_to_remove,
             manual_and_source=hostnames_in_manual_and_source,
