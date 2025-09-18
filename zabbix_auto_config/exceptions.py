@@ -106,8 +106,16 @@ class FailsafeError(ZACException):
     """ZAC failsafe limit exceeded."""
 
     def __init__(
-        self, add: list[str], remove: list[str], *args: Any, **kwargs: Any
+        self,
+        add: list[str] | None = None,
+        remove: list[str] | None = None,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
-        self.add: list[str] = add
-        self.remove: list[str] = remove
+        # Use defaults for add/remove, since these don't seem
+        # to get pickled properly by the multiprocessing manager.
+        # We may actually lose these when pickling, but we should
+        # have already logged the details when we raised the exception.
+        self.add: list[str] = add or []
+        self.remove: list[str] = remove or []
         super().__init__(*args, **kwargs)
