@@ -35,6 +35,7 @@ from zabbix_auto_config._types import HostModifier
 from zabbix_auto_config._types import SourceCollectorModule
 from zabbix_auto_config._types import ZacTags
 from zabbix_auto_config.errcount import RollingErrorCounter
+from zabbix_auto_config.exceptions import FailsafeError
 from zabbix_auto_config.exceptions import SourceCollectorError
 from zabbix_auto_config.exceptions import SourceCollectorTypeError
 from zabbix_auto_config.exceptions import ZabbixAPIException
@@ -111,8 +112,6 @@ class BaseProcess(multiprocessing.Process):
                     # These are the error types we handle ourselves then continue
                     if isinstance(e, httpx.TimeoutException):
                         log.error("Timeout exception")
-                    elif isinstance(e, ZACException):
-                        log.exception("Work exception")
                     elif isinstance(e, ZabbixAPISessionExpired):
                         log.error("Zabbix API session expired")
                         if isinstance(self, ZabbixUpdater):
@@ -120,6 +119,10 @@ class BaseProcess(multiprocessing.Process):
                             self.login()
                     elif isinstance(e, ZabbixAPIException):
                         log.error("Zabbix API exception")
+                    elif isinstance(e, FailsafeError):
+                        log.error("Failsafe exceeded", add=e.add, remove=e.remove)
+                    elif isinstance(e, ZACException):
+                        log.exception("Work exception")
                     else:
                         log.exception("Unhandled exception")
                         raise e  # all other exceptions are fatal

@@ -3,7 +3,7 @@ from __future__ import annotations
 import structlog
 
 from zabbix_auto_config import models
-from zabbix_auto_config.exceptions import ZACException
+from zabbix_auto_config.exceptions import FailsafeError
 from zabbix_auto_config.models import Settings
 from zabbix_auto_config.models import ZacSettings
 
@@ -29,7 +29,7 @@ def check_failsafe(config: Settings, to_add: list[str], to_remove: list[str]) ->
         len(to_remove),
         len(to_add),
     )
-    raise ZACException("Failsafe triggered")
+    raise FailsafeError(to_add, to_remove)
 
 
 def check_failsafe_ok_file(config: ZacSettings) -> bool:

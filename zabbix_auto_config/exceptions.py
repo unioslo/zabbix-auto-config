@@ -79,8 +79,7 @@ class ZabbixNotFoundError(ZabbixAPICallError):
 
 
 class ZACException(Exception):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    """Base class for all ZAC exceptions."""
 
 
 class SourceCollectorError(ZACException):
@@ -101,3 +100,14 @@ class ConfigFileNotFoundError(ConfigError):
 
 class ConfigValidationError(ConfigError):
     """Configuration validation error."""
+
+
+class FailsafeError(ZACException):
+    """ZAC failsafe limit exceeded."""
+
+    def __init__(
+        self, add: list[str], remove: list[str], *args: Any, **kwargs: Any
+    ) -> None:
+        self.add: list[str] = add
+        self.remove: list[str] = remove
+        super().__init__(*args, **kwargs)
