@@ -10,25 +10,27 @@ from typing import Any
 from typing import Optional
 from typing import Union
 
+import structlog
 from pydantic import BaseModel
-from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import GetCoreSchemaHandler
 from pydantic import RootModel
 from pydantic import ValidationInfo
-from pydantic import field_serializer
 from pydantic import field_validator
 from pydantic import model_validator
+from pydantic_core import core_schema
 from typing_extensions import Self
 
 from zabbix_auto_config import utils
+from zabbix_auto_config.dirs import LOG_FILE_DEFAULT
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 # TODO: Models aren't validated when making changes to a set/list. Why? How to handle?
 
 
-class ConfigBaseModel(PydanticBaseModel):
+class ConfigBaseModel(BaseModel):
     """Base class for all config models. Warns if unknown fields are passed in."""
 
     # https://pydantic-docs.helpmanual.io/usage/model_config/#change-behaviour-globally
@@ -236,19 +238,175 @@ class DBSettings(ConfigBaseModel):
         return extra
 
 
+class LogLevel(int, Enum):
+    """Valid log levels."""
+
+    NOTSET = logging.NOTSET
+    DEBUG = logging.DEBUG
+    INFO = logging.INFO
+    WARNING = logging.WARNING
+    ERROR = logging.ERROR
+    CRITICAL = logging.CRITICAL
+
+    def __str__(self) -> str:
+        return self.name
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        """Custom core schema that serializes the log level as a string in JSON mode"""
+
+        def validate_log_level(value: Any) -> LogLevel:
+            if isinstance(value, cls):
+                return value
+            return cls(value)
+
+        def serialize_log_level(value: LogLevel) -> str:
+            return value.name
+
+        return core_schema.no_info_after_validator_function(
+            validate_log_level,
+            core_schema.union_schema(
+                [
+                    core_schema.int_schema(),
+                    core_schema.str_schema(),
+                    core_schema.is_instance_schema(cls),
+                ]
+            ),
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                serialize_log_level, when_used="json"
+            ),
+        )
+
+    @classmethod
+    def _missing_(cls, value: object) -> LogLevel:
+        """Handle arguments that are not valid log levels."""
+        if isinstance(value, str):
+            # Level as string
+            if value.isnumeric():
+                return cls(int(value))
+            else:
+                # Level as name, e.g. "DEBUG", "info", etc. (case-insensitive)
+                try:
+                    # Use logging module for conversion to handle aliases such as WARN and FATAL
+                    return cls(logging._nameToLevel[value.upper()])  # pyright: ignore[reportPrivateUsage]
+                except (ValueError, KeyError):
+                    pass
+        logger.error("Invalid log level '%s'. Using ERROR level.", value)
+        return cls.ERROR
+
+
+class LoggerFormat(str, Enum):
+    JSON = "json"
+    TEXT = "text"
+
+    @classmethod
+    def _missing(cls, value: object) -> LoggerFormat:
+        """Handle missing logger formats."""
+        try:
+            return cls(str(value).lower())
+        except (ValueError, AttributeError):
+            raise ValueError(f"Invalid logger format: {value}") from None
+
+
+class LoggerConfigBase(ConfigBaseModel):
+    enabled: bool = Field(
+        default=True,
+        description="Whether to enable this logger.",
+    )
+    format: LoggerFormat = Field(
+        default=LoggerFormat.JSON,
+        description="The format of the logger output.",
+    )
+    level: LogLevel = Field(
+        default=LogLevel.INFO,
+        description="Log level for this logger. Uses global level if not set.",
+    )
+
+
+class ConsoleLoggerConfig(LoggerConfigBase):
+    format: LoggerFormat = Field(
+        default=LoggerFormat.TEXT,
+        description="The format of the logger output.",
+    )
+
+
+class FileLoggerConfig(LoggerConfigBase):
+    path: Path = Field(
+        default=LOG_FILE_DEFAULT,
+        description="Path to the log file.",
+    )
+    rotate: bool = Field(
+        default=True,
+        description="Whether to enable log rotation for the file logger.",
+    )
+    max_size_mb: int = Field(
+        default=50,
+        description="Maximum size of the log file in megabytes.",
+    )
+    max_logs: int = Field(
+        default=5,
+        description="Maximum number of log files to keep.",
+    )
+
+    def max_size_as_bytes(self) -> int:
+        """Return the maximum size of the log file in bytes."""
+        return self.max_size_mb * 1024 * 1024
+
+
+class LoggingSettings(ConfigBaseModel):
+    """Settings for logging configuration."""
+
+    console: ConsoleLoggerConfig = Field(
+        default_factory=ConsoleLoggerConfig,
+        description="Settings for the console logger.",
+    )
+    file: FileLoggerConfig = Field(
+        default_factory=FileLoggerConfig,
+        description="Settings for the file logger.",
+    )
+
+    level: LogLevel = Field(
+        default=LogLevel.INFO,
+        description="The global log level to use for the logger. Used if sub-configs do not specify a log level.",
+    )
+
+    use_mp_handler: bool = Field(
+        default=False,
+        description=(
+            "Activate multiprocessing_logging handler. Unclear if this is needed by default."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _set_log_levels_in_sub_configs(self) -> Self:
+        if "level" not in self.console.model_fields_set:
+            self.console.level = self.level
+        if "level" not in self.file.model_fields_set:
+            self.file.level = self.level
+        return self
+
+
 class ZacSettings(ConfigBaseModel):
     source_collector_dir: str
     host_modifier_dir: str
-    log_level: int = Field(logging.INFO, description="The log level to use.")
     health_file: Optional[Path] = None
     failsafe_file: Optional[Path] = None
     failsafe_ok_file: Optional[Path] = None
     failsafe_ok_file_strict: bool = True
     db: DBSettings = DBSettings()
     process: ProcessesSettings = ProcessesSettings()
+    logging: LoggingSettings = LoggingSettings()
 
     # Deprecated options
     db_uri: str = Field(default="", deprecated=True)
+    log_level: LogLevel = Field(
+        default=LogLevel.INFO,
+        description="The log level to use.",
+        deprecated=True,
+        exclude=True,
+    )
 
     def _db_uri_to_db_settings(self, uri: str) -> None:
         """Parse a PostgreSQL libpq connection string into structured parameters.
@@ -299,6 +457,21 @@ class ZacSettings(ConfigBaseModel):
                 self._db_uri_to_db_settings(self.db_uri)
         return self
 
+    # TODO: remove after log_level is removed
+    @model_validator(mode="after")
+    def _set_log_level_from_deprecated_log_level(self) -> Self:
+        """Set the log level from the deprecated `log_level` field."""
+        if (
+            "log_level" in self.model_fields_set
+            and "level" not in self.logging.model_fields_set
+        ):
+            # If log_level is set, but not in logging sub-config, set it there
+            self.logging.level = LogLevel(self.log_level)
+            logger.warning(
+                "The `log_level` field is deprecated. Use `zac.logging.level` instead."
+            )
+        return self
+
     @field_validator("health_file", "failsafe_file", "failsafe_ok_file", mode="after")
     @classmethod
     def _validate_file_path(
@@ -311,42 +484,6 @@ class ZacSettings(ConfigBaseModel):
         if not v.exists():
             utils.make_parent_dirs(v)
         return v
-
-    @field_serializer("log_level")
-    def _serialize_log_level(self, v: int) -> str:
-        """Serializes the log level as a string.
-        Ensures consistent semantics between loading/storing log level in config.
-        E.g. we dump `"INFO"` instead of `20`.
-        """
-        return logging.getLevelName(v)
-
-    @field_validator("log_level", mode="before")
-    @classmethod
-    def _validate_log_level(cls, v: Any) -> int:
-        """Validates the log level and converts it to an integer.
-        The log level can be specified as an integer or a string."""
-        # NOTE: this is basically an overcomplicated version of
-        # `logging.getLevelName(v)`, but it's necessary for 2 reasons:
-        # 1. We want to validate that the level is a valid log level.
-        #    `logging.getLevelName(v)` doesn't raise an error if `v` is invalid.
-        #    It just returns `Level <v>`, which is not helpful.
-        # 2. `logging.getLevelName(v)` with string arguments
-        #    is deprecated in Python 3.10.
-        if isinstance(v, int):
-            if v not in logging._levelToName:
-                raise ValueError(
-                    f"Invalid log level: {v} is not a valid log level integer."
-                )
-            return v
-        elif isinstance(v, str):
-            v = v.upper()
-            if (level_int := logging._nameToLevel.get(v)) is None:
-                raise ValueError(
-                    f"Invalid log level: {v} is not a valid log level name."
-                )
-            return level_int
-        else:
-            raise TypeError("Log level must be an integer or string.")
 
 
 class FailureStrategy(str, Enum):
@@ -576,6 +713,8 @@ class Host(BaseModel):
         if not isinstance(other, self.__class__):
             raise TypeError(f"Can't merge with objects of other type: {type(other)}")
 
+        log = logger.bind(host=self.hostname)
+
         self.enabled = self.enabled or other.enabled
         # self.macros TODO
         self.properties.update(other.properties)
@@ -595,19 +734,17 @@ class Host(BaseModel):
             if other_interface.type not in self_interface_types:
                 self.interfaces.append(other_interface)
             else:
-                logger.warning(
-                    "Trying to merge host with interface of same type. The other interface is ignored. Host: %s, type: %s",
-                    self.hostname,
-                    other_interface.type,
+                log.warning(
+                    "Trying to merge host with interface of same type. The other interface is ignored",
+                    interface_type=other_interface.type,
                 )
         self.interfaces = sorted(self.interfaces, key=lambda interface: interface.type)
 
         for k, v in other.inventory.items():
             if k in self.inventory and v != self.inventory[k]:
-                logger.warning(
-                    "Same inventory ('%s') set multiple times for host: '%s'",
-                    k,
-                    self.hostname,
+                log.warning(
+                    "Same inventory key set multiple times for host",
+                    inventory_key=k,
                 )
             else:
                 self.inventory[k] = v
@@ -618,12 +755,12 @@ class Host(BaseModel):
             if proxy_pattern
         ]
         if len(proxy_patterns) > 1:
-            logger.warning(
-                "Multiple proxy patterns are provided. Discarding down to one. Host: %s",
-                self.hostname,
-            )
             # TODO: Do something different? Is alphabetically first "good enough"? It will be consistent at least.
             self.proxy_pattern = sorted(proxy_patterns)[0]
+            log.warning(
+                "Multiple proxy patterns are provided. Discarding down to one",
+                proxy_pattern=self.proxy_pattern,
+            )
         elif len(proxy_patterns) == 1:
             self.proxy_pattern = proxy_patterns.pop()
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import multiprocessing
 import os
 from datetime import datetime
@@ -8,6 +7,7 @@ from pathlib import Path
 from typing import Any
 from typing import Optional
 
+import structlog
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic import computed_field
@@ -18,7 +18,7 @@ from zabbix_auto_config import processing
 from zabbix_auto_config.state import State
 from zabbix_auto_config.state import StateProxy
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 
 class ProcessInfo(BaseModel):
@@ -100,4 +100,4 @@ def write_health(
         with open(health_file, "w") as f:
             f.write(health.to_json())
     except Exception as e:
-        logger.error("Unable to write health file %s: %s", health_file, e)
+        logger.error("Unable to write health file", file=health_file, error=str(e))

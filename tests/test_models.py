@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-import logging
+from pathlib import Path
+from typing import Any
 from typing import Optional
 
 import pytest
 from inline_snapshot import snapshot
 from pydantic import ValidationError
 from zabbix_auto_config import models
+from zabbix_auto_config.models import LogLevel
 
 # NOTE: Do not test msg and ctx of Pydantic errors!
 # They are not guaranteed to be stable between minor versions.
@@ -123,68 +125,83 @@ DEFAULT_DB_SETTINGS = models.DBSettings(user="zabbix", password="secret")
 
 
 @pytest.mark.parametrize(
-    "level,expect",
+    "inp,expect",
     [
-        ["notset", logging.NOTSET],
-        ["debug", logging.DEBUG],
-        ["info", logging.INFO],
-        ["warn", logging.WARN],  # noqa: LOG009 # we need to test the deprecated name
-        ["warning", logging.WARNING],
-        ["error", logging.ERROR],
-        ["fatal", logging.FATAL],
-        ["critical", logging.CRITICAL],
+        # Lower case values
+        ["notset", LogLevel.NOTSET],
+        ["debug", LogLevel.DEBUG],
+        ["info", LogLevel.INFO],
+        ["warn", LogLevel.WARNING],  # alias for warning
+        ["warning", LogLevel.WARNING],
+        ["error", LogLevel.ERROR],
+        ["fatal", LogLevel.CRITICAL],  # alias for critical
+        ["critical", LogLevel.CRITICAL],
+        # Upper case values
+        ["NOTSET", LogLevel.NOTSET],
+        ["DEBUG", LogLevel.DEBUG],
+        ["INFO", LogLevel.INFO],
+        ["WARN", LogLevel.WARNING],  # alias for warning
+        ["WARNING", LogLevel.WARNING],
+        ["ERROR", LogLevel.ERROR],
+        ["FATAL", LogLevel.CRITICAL],  # alias for critical
+        ["CRITICAL", LogLevel.CRITICAL],
+        # Numeric values
+        [0, LogLevel.NOTSET],
+        [10, LogLevel.DEBUG],
+        [20, LogLevel.INFO],
+        [30, LogLevel.WARNING],
+        [40, LogLevel.ERROR],
+        [50, LogLevel.CRITICAL],
+        # Numeric values as strings
+        ["0", LogLevel.NOTSET],
+        ["10", LogLevel.DEBUG],
+        ["20", LogLevel.INFO],
+        ["30", LogLevel.WARNING],
+        ["40", LogLevel.ERROR],
+        ["50", LogLevel.CRITICAL],
+        # Invalid values (uses default level)
+        ["invalid", LogLevel.ERROR],
+        [None, LogLevel.ERROR],
     ],
 )
-@pytest.mark.parametrize("upper", [True, False])
-def test_zacsettings_log_level_str(level: str, expect: int, upper: bool) -> None:
-    settings = models.ZacSettings(
-        source_collector_dir="",
-        host_modifier_dir="",
-        db=DEFAULT_DB_SETTINGS,
-        log_level=level.upper() if upper else level.lower(),
-    )
-    assert settings.log_level == expect
+def test_log_level(inp: Any, expect: LogLevel) -> None:
+    assert LogLevel(inp) == expect
 
 
-@pytest.mark.parametrize(
-    "level,expect",
-    [
-        [0, logging.NOTSET],
-        [10, logging.DEBUG],
-        [20, logging.INFO],
-        [30, logging.WARN],  # noqa: LOG009 # we need to test the deprecated name
-        [30, logging.WARNING],
-        [40, logging.ERROR],
-        [50, logging.FATAL],
-        [50, logging.CRITICAL],
-    ],
-)
-def test_zacsettings_log_level_int(level: str, expect: int) -> None:
-    settings = models.ZacSettings(
-        source_collector_dir="",
-        host_modifier_dir="",
-        db=DEFAULT_DB_SETTINGS,
-        log_level=level,
-    )
-    assert settings.log_level == expect
+def test_logging_settings_log_level_serialize() -> None:
+    conf = models.LoggingSettings()
+    conf.file.path = Path("/path/to/logfile.log")  # bogus path
 
-
-def test_zacsettings_log_level_serialize() -> None:
-    settings = models.ZacSettings(
-        source_collector_dir="",
-        host_modifier_dir="",
-        db=DEFAULT_DB_SETTINGS,
-        log_level=logging.INFO,
-    )
-    assert settings.log_level == logging.INFO == 20  # sanity check
-
-    # Serialize to dict:
-    settings_dict = settings.model_dump()
-    assert settings_dict["log_level"] == "INFO"
+    # Serialize to dict (in JSON mode):
+    conf_dict = conf.model_dump(mode="json")
+    assert conf_dict["level"] == "INFO"
+    assert conf_dict["console"]["level"] == "INFO"
+    assert conf_dict["file"]["level"] == "INFO"
 
     # Serialize to JSON:
-    settings_json = settings.model_dump_json()
-    assert '"log_level":"INFO"' in settings_json
+    conf_json = conf.model_dump_json(indent=2)
+    assert conf_json == snapshot(
+        """\
+{
+  "console": {
+    "enabled": true,
+    "format": "text",
+    "level": "INFO"
+  },
+  "file": {
+    "enabled": true,
+    "format": "json",
+    "level": "INFO",
+    "path": "/path/to/logfile.log",
+    "rotate": true,
+    "max_size_mb": 50,
+    "max_logs": 5
+  },
+  "level": "INFO",
+  "use_mp_handler": false
+}\
+"""
+    )
 
 
 @pytest.mark.parametrize(
@@ -231,7 +248,6 @@ def _get_zac_settings(config: models.Settings, db_uri: str) -> models.ZacSetting
     return models.ZacSettings(
         source_collector_dir=config.zac.source_collector_dir,
         host_modifier_dir=config.zac.host_modifier_dir,
-        log_level=config.zac.log_level,
         db_uri=db_uri,
         # Omit DBSettings
     )

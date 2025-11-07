@@ -3,10 +3,11 @@
 
 from __future__ import annotations
 
-import logging
 import sys
 from pathlib import Path
 from typing import Optional
+
+import structlog
 
 # Use standard library for Python 3.11+, fallback to tomli for older versions
 if sys.version_info >= (3, 11):
@@ -20,7 +21,7 @@ from zabbix_auto_config.dirs import CONFIG_FILENAME
 from zabbix_auto_config.exceptions import ConfigFileNotFoundError
 from zabbix_auto_config.exceptions import ConfigValidationError
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 
 CONFIG_PATHS = [

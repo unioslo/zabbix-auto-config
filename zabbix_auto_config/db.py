@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Optional
 
 import psycopg2
+import structlog
 from psycopg2 import sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
@@ -13,7 +13,7 @@ from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.models import DBSettings
 from zabbix_auto_config.models import Settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 
 def get_connection(
@@ -36,7 +36,7 @@ def init_resource(
     try:
         yield
     except exc_type as e:
-        logger.error("Failed to initialize %s: %s", resource, e)
+        logger.error("Failed to initialize DB resource", resource=resource, e=e)
         raise ZACException(f"Failed to initialize {resource}: {e}") from e
 
 
@@ -57,14 +57,14 @@ class PostgresDBInitializer:
                 self._init_tables()
 
     def _zac_db_exists(self) -> bool:
+        log = logger.bind(db=self.config.zac.db.dbname)
         try:
             with get_connection(self.config.zac.db):
-                logger.debug("ZAC database '%s' exists", self.config.zac.db.dbname)
+                log.debug("ZAC database already exists")
         except psycopg2.Error as e:
-            logger.debug(
-                "Failed to connect to database '%s'. Assuming it doesn't exist. Error: %s",
-                self.config.zac.db.dbname,
-                e,
+            log.debug(
+                "Failed to connect to database. Assuming it doesn't exist.",
+                error=str(e),
             )
             return False
         return True
@@ -73,6 +73,8 @@ class PostgresDBInitializer:
         """Create the database if it doesn't exist."""
         if self._zac_db_exists():
             return
+
+        log = logger.bind(db=self.config.zac.db.dbname)
 
         # Cannot create a database inside a transaction block (no with statement)
         conn = get_connection(self.config.zac.db, dbname="postgres")
@@ -89,7 +91,7 @@ class PostgresDBInitializer:
                 exists = cur.fetchone()
 
                 if not exists:  # should exist given _zac_db_exists()
-                    logger.debug("Creating database %s", self.config.zac.db.dbname)
+                    log.debug("Creating database")
                     cur.execute(
                         sql.SQL("CREATE DATABASE {}").format(
                             sql.Identifier(self.config.zac.db.dbname)
@@ -100,11 +102,12 @@ class PostgresDBInitializer:
 
     def _init_tables(self) -> None:
         with get_connection(self.config.zac.db) as conn:
+            log = logger.bind(db=self.config.zac.db.dbname)
             with conn.cursor() as cur:
                 # Create hosts table
-                logger.debug(
-                    "Creating table '%s' if it doesn't exist",
-                    self.config.zac.db.tables.hosts,
+                log.debug(
+                    "Creating table if it doesn't exist",
+                    table=self.config.zac.db.tables.hosts,
                 )
                 cur.execute(
                     sql.SQL("""
@@ -115,9 +118,9 @@ class PostgresDBInitializer:
                 )
 
                 # Create hosts_source table
-                logger.debug(
-                    "Creating table '%s' if it doesn't exist",
-                    self.config.zac.db.tables.hosts_source,
+                log.debug(
+                    "Creating table if it doesn't exist",
+                    table=self.config.zac.db.tables.hosts_source,
                 )
                 cur.execute(
                     sql.SQL("""

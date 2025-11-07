@@ -8,7 +8,9 @@ from unittest import mock
 from unittest.mock import MagicMock
 
 import pytest
+import structlog
 import tomli
+from packaging.version import Version
 from zabbix_auto_config import models
 
 
@@ -107,7 +109,11 @@ def sample_config_path(tmp_path: Path):
 
     # Create a temp file with the contents of the sample config
     p = tmp_path / "config.toml"
-    p.write_text(sample_config_path.read_text())
+
+    # Uncomment file path(s) in sample config
+    text = sample_config_path.read_text()
+    text = text.replace("# path = ", "path = ")
+    p.write_text(text)
     yield p
 
 
@@ -117,8 +123,14 @@ def sample_config(sample_config_path: Path):
 
 
 @pytest.fixture(name="config")
-def config(sample_config: str) -> Iterable[models.Settings]:
-    yield models.Settings(**tomli.loads(sample_config))
+def config(sample_config: str, tmp_path: Path) -> Iterable[models.Settings]:
+    """Return a valid config based on the sample config provided in the repo.
+
+    Adds a temporary (valid) log file path to the config.
+    """
+    config = models.Settings(**tomli.loads(sample_config))
+    config.zac.logging.file.path = tmp_path / "zac.log"
+    yield config
 
 
 @pytest.fixture(scope="function")
@@ -204,6 +216,7 @@ class MockZabbixAPI(PicklableMock):
         self.apiinfo = PicklableMock()
         self.apiinfo.version = PicklableMock(return_value="5.0.0")
         self.login = PicklableMock()
+        self.version = Version("5.0.0")
 
 
 # NOTE: if doing integration testing in the future, the definitions of these
@@ -222,3 +235,13 @@ def mock_zabbix_api() -> Iterable[type[MockZabbixAPI]]:
 def mock_psycopg2_connect() -> Iterable[PicklableMock]:
     with mock.patch("psycopg2.connect", PicklableMock()) as psycopg_mock:
         yield psycopg_mock
+
+
+@pytest.fixture(name="log_output")
+def fixture_log_output():
+    return structlog.testing.LogCapture()
+
+
+@pytest.fixture(autouse=True)
+def fixture_configure_structlog(log_output: structlog.testing.LogCapture):
+    structlog.configure(processors=[log_output])

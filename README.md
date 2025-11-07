@@ -17,8 +17,9 @@ Note: Primarily tested with Zabbix 7.0 and 6.4, but should work with 6.0 and 5.2
   - [uv (recommended)](#uv-recommended)
   - [pip](#pip)
 - [Configuration](#configuration)
-  - [Mock environment](#mock-environment)
+  - [Logging](#logging)
 - [Running](#running)
+  - [Mock environment](#mock-environment)
   - [Systemd unit](#systemd-unit)
 - [Concepts](#concepts)
   - [Source collectors](#source-collectors)
@@ -145,6 +146,199 @@ ZAC tries to load a config file on startup in the following order:
 
 A sample configuration file is provided in the repository: [config.sample.toml](./config.sample.toml). Move this file to one of the locations above and modify it to suit your environment.
 
+### Logging
+
+ZAC provides structured logging via the [structlog](https://www.structlog.org/en/stable/) library. The logs can be rendered as JSON or plain text, depending on the configuration. By default, plain logs are rendered to the console, while JSON logs are rendered to a file.
+
+The logging configuration can be adjusted in the config file:
+
+```toml
+
+[zac.logging]
+# Global log level for the application.
+# This is the default log level used if sub-configs do not specify a log level.
+level = "INFO"
+
+# Activate multiprocessing_logging handler.
+# It is unclear whether or not this is needed by default.
+# Depending on your system and configuration, this might be necessary to enable,
+# so that log messages from different processes are handled correctly.
+use_mp_handler = false
+
+[zac.logging.console]
+enabled = true
+level = "INFO"
+format = "text"
+
+[zac.logging.file]
+enabled = true
+level = "INFO"
+format = "json"
+# If not set, defaults to $XDG_STATE_HOME/zabbix-auto-config/logs/app.log
+path = "/path/to/log/file.log"
+rotate = true
+max_size_mb = 50
+max_logs = 5
+```
+
+#### JSON log format
+
+With the default configuration, each line of the log file is a JSON object containing the following fields:
+
+- `event`: The log event (message).
+- `level`: The log level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL).
+- `logger`: The name of the logger that generated the log entry.
+- `process_name`: The name of the process that generated the log entry.
+- `timestamp`: The time the log entry was created in ISO 8601 format.
+
+Other fields may be present depending on the context of the log entry, such as `host`, `source`, etc.
+
+In the event of an exception, the log entry will also contain an `exception` field with a dict-like structure containing exception information:
+
+<details>
+<summary>Example log entry with exception</summary>
+
+The following is a log entry from a source collector that raises an exception, formatted for readability:
+
+```json
+{
+    "error": "Failed to collect from source 'faultysource': Source collector error!",
+    "event": "Work exception",
+    "level": "error",
+    "timestamp": "2025-09-16T10:13:25.931268Z",
+    "process_name": "faultysource",
+    "exception": [
+        {
+            "exc_type": "ZACException",
+            "exc_value": "Failed to collect from source 'faultysource': Source collector error!",
+            "exc_notes": [],
+            "syntax_error": null,
+            "is_cause": false,
+            "frames": [
+                {
+                    "filename": "/workspaces/zabbix-auto-config/zabbix_auto_config/processing.py",
+                    "lineno": 108,
+                    "name": "run",
+                    "locals": {
+                        "self": "<SourceCollectorProcess name='faultysource' parent=21759 started>",
+                        "parent_process": "<_ParentProcess name='MainProcess' parent=None unknown>",
+                        "start_time": "datetime.datetime(2025, 9, 16, 10, 13, 25, 712298)",
+                        "e": "ZACException(\"Failed to collect from source 'faultysource': Source collector error!\")",
+                        "log": "<BoundLogger(context={'error': \"Failed to collect from source 'faultysource': Source collector error!\"}, processors=[<function add_log_level at 0xffff9b000680>, <structlog.stdlib.PositionalArgumentsFormatter object at 0xffff9874ced0>, <structlog.processors.TimeStamper object at 0xffff991865c0>, <structlog.processors.CallsiteParameterAdder object at 0xffff9874d0c0>, <structlog.processors.StackInfoRenderer object at 0xffff99172ef0>, <structlog.processors.UnicodeDecoder object at 0xffff9874d290>, <function _serialize_sets at 0xffff99180860>, <function ProcessorFormatter.wrap_for_formatter at 0xffff9abbec00>])>",
+                        "work_duration": "datetime.timedelta(microseconds=594460)"
+                    }
+                },
+                {
+                    "filename": "/workspaces/zabbix-auto-config/zabbix_auto_config/processing.py",
+                    "lineno": 244,
+                    "name": "work",
+                    "locals": {
+                        "self": "<SourceCollectorProcess name='faultysource' parent=21759 started>"
+                    }
+                },
+                {
+                    "filename": "/workspaces/zabbix-auto-config/zabbix_auto_config/processing.py",
+                    "lineno": 308,
+                    "name": "handle_error",
+                    "locals": {
+                        "self": "<SourceCollectorProcess name='faultysource' parent=21759 started>",
+                        "e": "SourceCollectorError(RuntimeError('Source collector error!'))",
+                        "strat_handlers": "{\n    <FailureStrategy.BACKOFF: 'backoff'>: <bound method SourceCollectorProcess.increase_update_interval of <SourceCollectorProcess name='faultysource' parent=21759 started>>,\n    <FailureStrategy.EXIT: 'exit'>: <bound method BaseProcess.stop of <SourceCollectorProcess name='faultysource' parent=21759 started>>,\n    <FailureStrategy.DISABLE: 'disable'>: <bound method SourceCollectorProcess.disable of <SourceCollectorProcess name='faultysource' parent=21759 started>>\n}",
+                        "strat": "<FailureStrategy.BACKOFF: 'backoff'>",
+                        "handler": "<bound method SourceCollectorProcess.increase_update_interval of <SourceCollectorProcess name='faultysource' parent=21759 started>>"
+                    }
+                }
+            ],
+            "is_group": false,
+            "exceptions": []
+        },
+        {
+            "exc_type": "SourceCollectorError",
+            "exc_value": "Source collector error!",
+            "exc_notes": [],
+            "syntax_error": null,
+            "is_cause": true,
+            "frames": [
+                {
+                    "filename": "/workspaces/zabbix-auto-config/zabbix_auto_config/processing.py",
+                    "lineno": 239,
+                    "name": "work",
+                    "locals": {
+                        "self": "<SourceCollectorProcess name='faultysource' parent=21759 started>"
+                    }
+                },
+                {
+                    "filename": "/workspaces/zabbix-auto-config/zabbix_auto_config/processing.py",
+                    "lineno": 330,
+                    "name": "collect",
+                    "locals": {
+                        "self": "<SourceCollectorProcess name='faultysource' parent=21759 started>",
+                        "start_time": "1758017605.7387369"
+                    }
+                }
+            ],
+            "is_group": false,
+            "exceptions": []
+        },
+        {
+            "exc_type": "RuntimeError",
+            "exc_value": "Source collector error!",
+            "exc_notes": [],
+            "syntax_error": null,
+            "is_cause": true,
+            "frames": [
+                {
+                    "filename": "/workspaces/zabbix-auto-config/zabbix_auto_config/processing.py",
+                    "lineno": 327,
+                    "name": "collect",
+                    "locals": {
+                        "self": "<SourceCollectorProcess name='faultysource' parent=21759 started>",
+                        "start_time": "1758017605.7387369"
+                    }
+                },
+                {
+                    "filename": "/workspaces/zabbix-auto-config/path/to/source_collector_dir/faultysource.py",
+                    "lineno": 16,
+                    "name": "collect",
+                    "locals": {
+                        "args": "()",
+                        "kwargs": "{}"
+                    }
+                }
+            ],
+            "is_group": false,
+            "exceptions": []
+        }
+    ]
+}
+```
+
+</details>
+
+#### Monitor log file in real-time
+
+In order to monitor the log file in real-time, you can use the `tail` command together with `jq` to follow the file and pretty-print the JSON output:
+
+```bash
+tail -fn +1 /path/to/log/file | jq .
+```
+
+#### Location
+
+By default, the log file is created in `$XDG_STATE_HOME/zabbix-auto-config/logs/app.log`. The application displays the path to the log file on startup if file logging is enabled and the level is set to `DEBUG`:
+
+```
+2025-09-16T10:15:21.043038Z [debug    ] Logging to file                file=/home/vscode/.local/state/zabbix-auto-config/log/app.log process_name=MainProcess
+```
+
+## Running
+
+Installing the application adds the `zac` command to your path. After activating your virtual environment, you can run the application with:
+
+```bash
+zac
+```
+
 ### Mock environment
 
 A ZAC environment with a set of mock source collectors, host modifiers, and mapping files is included in the [examples](./examples) directory. The [sample config file](./config.sample.toml) comes pre-configured with these activated.
@@ -154,14 +348,6 @@ Rename the sample config file to `config.toml` (and optionally move it to the co
 ```bash
 mkdir -p ~/.config/zabbix-auto-config
 mv config.sample.toml ~/.config/zabbix-auto-config/config.toml
-```
-
-## Running
-
-Installing the application adds the `zac` command to your path. After activating your virtual environment, you can run the application with:
-
-```bash
-zac
 ```
 
 ### Systemd unit
@@ -468,13 +654,15 @@ The Zabbix version to target, as well as other settings, can be configured in th
 
 #### Non-containerized development
 
-If you are on a Linux machine and prefer not to develop inside a container, you can start the required services with Docker/Podman Compose:
+If you are on a Linux machine and prefer not to develop inside a container, you can first manually start the required services with Docker/Podman Compose:
 
 ```bash
-podman-compose up -d
+podman compose up -d
+# or
+docker compose up -d
 ```
 
-Running locally requires you to set up a virtual environment and install development dependencies on your host machine:
+Create a local virtual environment and install development dependencies:
 
 ```bash
 uv sync
