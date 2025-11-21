@@ -10,6 +10,7 @@ import structlog
 from structlog.dev import Column
 from structlog.typing import EventDict
 
+from zabbix_auto_config.dirs import ensure_directory
 from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.models import FileLoggerConfig
 from zabbix_auto_config.models import LoggerConfigBase
@@ -174,6 +175,9 @@ def configure_logging(config: Settings) -> None:
             },
         },
     }
+    if config.zac.logging.file.enabled:
+        ensure_directory(config.zac.logging.file.path.parent)
+
     # NOTE: this seems hacky?
     if not config.zac.logging.file.enabled:
         del config_dict["handlers"]["file"]
