@@ -31,7 +31,7 @@ CONFIG_PATHS = [
 
 
 def get_config(path: Optional[Path] = None) -> models.Settings:
-    """Load the ZAC configuration from the first available configuration file."""
+    """Load the ZAC configuration from the first available valid configuration file."""
     # We have a specific path, load it
     if path:
         return load_config(path)
@@ -41,9 +41,9 @@ def get_config(path: Optional[Path] = None) -> models.Settings:
         try:
             return load_config(path)
         except ConfigFileNotFoundError as e:
-            logger.debug(e)
+            logger.debug(str(e), file=str(path))
         except ConfigValidationError as e:
-            logger.error(e)
+            logger.error(str(e), file=str(path))
     raise FileNotFoundError(f"No valid configuration file found in {CONFIG_PATHS}")
 
 
