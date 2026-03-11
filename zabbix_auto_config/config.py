@@ -67,4 +67,6 @@ def _load_config(config_file: Path) -> models.Settings:
         config_dict = tomllib.load(f)
     config = models.Settings(**config_dict)
     config.config_path = config_file
+    if not config.source_collectors:
+        logger.warning("No source collectors configured.")
     return config

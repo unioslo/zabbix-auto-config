@@ -631,7 +631,10 @@ class SourceCollectorSettings(ConfigBaseModel):
 class Settings(ConfigBaseModel):
     zac: ZacSettings
     zabbix: ZabbixSettings
-    source_collectors: dict[str, SourceCollectorSettings]
+    source_collectors: dict[str, SourceCollectorSettings] = Field(
+        default_factory=dict,
+        description="A mapping of source collector names to their settings.",
+    )
 
     config_path: Optional[Path] = Field(
         default=None, description="Path the config was loaded from.", exclude=True
