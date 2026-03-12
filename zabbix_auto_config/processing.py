@@ -1854,8 +1854,6 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             old_host_hostgroups = host_hostgroups.copy()
 
             for hostgroup_name in list(host_hostgroups):
-                # TODO: Here lies a bug due to managed_hostgroup_names not being properly updated above?
-                # NOTE (pederhan): Not sure what this refers to?
                 if (
                     hostgroup_name in managed_hostgroup_names
                     and hostgroup_name not in synced_hostgroup_names
@@ -1880,6 +1878,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                         if hostgroup_id:
                             zabbix_hostgroup = self.api.get_hostgroup(hostgroup_id)
                             zabbix_hostgroups[hostgroup_name] = zabbix_hostgroup
+                            managed_hostgroup_names.add(hostgroup_name)  # keep in sync
 
                     if zabbix_hostgroup:
                         host_hostgroups[hostgroup_name] = zabbix_hostgroup
