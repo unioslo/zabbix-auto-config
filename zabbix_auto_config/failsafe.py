@@ -3,9 +3,9 @@ from __future__ import annotations
 import structlog
 
 from zabbix_auto_config import models
+from zabbix_auto_config.config import Settings
+from zabbix_auto_config.config import ZacSettings
 from zabbix_auto_config.exceptions import FailsafeError
-from zabbix_auto_config.models import Settings
-from zabbix_auto_config.models import ZacSettings
 
 logger = structlog.stdlib.get_logger(__name__)
 

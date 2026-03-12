@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import multiprocessing
 import os
 from datetime import datetime
 from pathlib import Path
@@ -15,6 +14,7 @@ from pydantic import field_serializer
 from pydantic import field_validator
 
 from zabbix_auto_config import processing
+from zabbix_auto_config._types import SourceHostQueue
 from zabbix_auto_config.state import State
 from zabbix_auto_config.state import StateProxy
 
@@ -70,7 +70,7 @@ class HealthFile(BaseModel):
 def write_health(
     health_file: Path,
     processes: list[processing.BaseProcess],
-    queues: list[multiprocessing.Queue],
+    queues: list[SourceHostQueue],
     failsafe: int,
 ) -> None:
     health = HealthFile(

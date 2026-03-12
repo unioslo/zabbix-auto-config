@@ -32,8 +32,13 @@ from zabbix_auto_config import db
 from zabbix_auto_config import models
 from zabbix_auto_config import utils
 from zabbix_auto_config._types import HostModifier
+from zabbix_auto_config._types import HostQueueEntry
 from zabbix_auto_config._types import SourceCollectorModule
+from zabbix_auto_config._types import SourceHostQueue
 from zabbix_auto_config._types import ZacTags
+from zabbix_auto_config.config import FailureStrategy
+from zabbix_auto_config.config import Settings
+from zabbix_auto_config.config import SourceCollectorSettings
 from zabbix_auto_config.errcount import RollingErrorCounter
 from zabbix_auto_config.exceptions import FailsafeError
 from zabbix_auto_config.exceptions import SourceCollectorError
@@ -66,7 +71,7 @@ logger = structlog.stdlib.get_logger(__name__)
 
 
 class BaseProcess(multiprocessing.Process):
-    def __init__(self, name: str, state: State, config: models.Settings) -> None:
+    def __init__(self, name: str, state: State, config: Settings) -> None:
         super().__init__()
         self.name = name
         self.state = state
@@ -197,10 +202,10 @@ class SourceCollectorProcess(BaseProcess):
         self,
         name: str,
         state: State,
-        config: models.Settings,
+        config: Settings,
         module: SourceCollectorModule,
-        settings: models.SourceCollectorSettings,
-        source_hosts_queue: multiprocessing.Queue[models.Host],
+        settings: SourceCollectorSettings,
+        source_hosts_queue: SourceHostQueue,
     ) -> None:
         super().__init__(name, state, config)
         self.module = module
@@ -285,9 +290,9 @@ class SourceCollectorProcess(BaseProcess):
         self.error_counter.add(exception=e)
 
         strat_handlers = {
-            models.FailureStrategy.BACKOFF: self.increase_update_interval,
-            models.FailureStrategy.EXIT: self.stop,
-            models.FailureStrategy.DISABLE: self.disable,
+            FailureStrategy.BACKOFF: self.increase_update_interval,
+            FailureStrategy.EXIT: self.stop,
+            FailureStrategy.DISABLE: self.disable,
         }
         strat = self.settings.failure_strategy
 
@@ -347,7 +352,7 @@ class SourceCollectorProcess(BaseProcess):
             valid_hosts.append(host)
 
         # Add source hosts to queue
-        source_hosts = {
+        source_hosts: HostQueueEntry = {
             "source": self.name,
             "hosts": valid_hosts,
         }
@@ -355,6 +360,9 @@ class SourceCollectorProcess(BaseProcess):
             logger.warning(
                 "Collection outpacing processing. Consider extending the update interval."
             )
+            # NOTE: Should we really drain the queue here instead of
+            #       discarding the current result? Seems like we could
+            #       end up in a situation where data never gets processed.
             utils.drain_queue(self.source_hosts_queue)
         self.source_hosts_queue.put_nowait(source_hosts)
 
@@ -379,8 +387,8 @@ class SourceHandlerProcess(BaseProcess):
         self,
         name: str,
         state: State,
-        config: models.Settings,
-        source_hosts_queues: list[multiprocessing.Queue[models.Host]],
+        config: Settings,
+        source_hosts_queues: list[SourceHostQueue],
     ) -> None:
         super().__init__(name, state, config)
 
@@ -526,7 +534,7 @@ class SourceMergerProcess(BaseProcess):
         self,
         name: str,
         state: State,
-        config: models.Settings,
+        config: Settings,
         host_modifiers: list[HostModifier],
     ) -> None:
         super().__init__(name, state, config)
@@ -721,7 +729,7 @@ class SourceMergerProcess(BaseProcess):
 
 
 class ZabbixUpdater(BaseProcess):
-    def __init__(self, name: str, state: State, config: models.Settings) -> None:
+    def __init__(self, name: str, state: State, config: Settings) -> None:
         super().__init__(name, state, config)
 
         self.db_hosts_table = sql.Identifier(self.config.zac.db.tables.hosts)
@@ -828,7 +836,7 @@ class ZabbixUpdater(BaseProcess):
 class ZabbixGarbageCollector(ZabbixUpdater):
     """Cleans up disabled hosts from maintenances in Zabbix."""
 
-    def __init__(self, name: str, state: State, config: models.Settings) -> None:
+    def __init__(self, name: str, state: State, config: Settings) -> None:
         super().__init__(name, state, config)
 
         self.update_interval = self.config.zac.process.garbage_collector.update_interval
@@ -906,7 +914,7 @@ class ZabbixGarbageCollector(ZabbixUpdater):
 
 
 class ZabbixHostUpdater(ZabbixUpdater):
-    def __init__(self, name: str, state: State, config: models.Settings) -> None:
+    def __init__(self, name: str, state: State, config: Settings) -> None:
         super().__init__(name, state, config)
 
         self.update_interval = self.config.zac.process.host_updater.update_interval
@@ -1507,7 +1515,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
 
 class ZabbixTemplateUpdater(ZabbixUpdater):
-    def __init__(self, name: str, state: State, config: models.Settings) -> None:
+    def __init__(self, name: str, state: State, config: Settings) -> None:
         super().__init__(name, state, config)
         self.update_interval = self.config.zac.process.template_updater.update_interval
 
@@ -1642,7 +1650,7 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
 
 
 class ZabbixHostgroupUpdater(ZabbixUpdater):
-    def __init__(self, name: str, state: State, config: models.Settings) -> None:
+    def __init__(self, name: str, state: State, config: Settings) -> None:
         super().__init__(name, state, config)
         self.update_interval = self.config.zac.process.hostgroup_updater.update_interval
 

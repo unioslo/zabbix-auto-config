@@ -4,9 +4,9 @@ import multiprocessing
 import time
 
 import pytest
+from zabbix_auto_config.config import Settings
+from zabbix_auto_config.config import SourceCollectorSettings
 from zabbix_auto_config.models import Host
-from zabbix_auto_config.models import Settings
-from zabbix_auto_config.models import SourceCollectorSettings
 from zabbix_auto_config.processing import SourceCollectorProcess
 from zabbix_auto_config.state import get_manager
 

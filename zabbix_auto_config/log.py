@@ -10,11 +10,11 @@ import structlog
 from structlog.dev import Column
 from structlog.typing import EventDict
 
+from zabbix_auto_config.config import FileLoggerConfig
+from zabbix_auto_config.config import LoggerConfigBase
+from zabbix_auto_config.config import Settings
 from zabbix_auto_config.dirs import ensure_directory
 from zabbix_auto_config.exceptions import ZACException
-from zabbix_auto_config.models import FileLoggerConfig
-from zabbix_auto_config.models import LoggerConfigBase
-from zabbix_auto_config.models import Settings
 
 
 @dataclass
@@ -92,11 +92,7 @@ def get_file_handler(config: FileLoggerConfig) -> logging.FileHandler:
             handler = logging.FileHandler(config.path)
     except OSError as e:
         # Raise error with context which is caught by handler
-        raise ZACException(
-            str(e),
-            path=str(config.path),
-            show_traceback=False,
-        ) from e
+        raise ZACException(str(e)) from e
     return handler
 
 

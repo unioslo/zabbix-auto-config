@@ -9,9 +9,9 @@ from unittest.mock import MagicMock
 
 import pytest
 import structlog
-import tomli
 from packaging.version import Version
-from zabbix_auto_config import models
+from zabbix_auto_config.config import Settings
+from zabbix_auto_config.config import load_config
 
 
 @pytest.fixture(scope="function")
@@ -123,13 +123,13 @@ def sample_config(sample_config_path: Path):
 
 
 @pytest.fixture(name="config")
-def config(sample_config: str, tmp_path: Path) -> Iterable[models.Settings]:
+def config(sample_config_path: Path) -> Iterable[Settings]:
     """Return a valid config based on the sample config provided in the repo.
 
     Adds a temporary (valid) log file path to the config.
     """
-    config = models.Settings(**tomli.loads(sample_config))
-    config.zac.logging.file.path = tmp_path / "zac.log"
+    config = load_config(sample_config_path)
+    config.zac.logging.file.path = sample_config_path.parent / "zac.log"
     yield config
 
 
