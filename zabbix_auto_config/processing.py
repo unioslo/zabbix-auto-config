@@ -43,6 +43,7 @@ from zabbix_auto_config.errcount import RollingErrorCounter
 from zabbix_auto_config.exceptions import FailsafeError
 from zabbix_auto_config.exceptions import SourceCollectorError
 from zabbix_auto_config.exceptions import SourceCollectorTypeError
+from zabbix_auto_config.exceptions import ZabbixAPICallError
 from zabbix_auto_config.exceptions import ZabbixAPIException
 from zabbix_auto_config.exceptions import ZabbixAPISessionExpired
 from zabbix_auto_config.exceptions import ZabbixNotFoundError
@@ -123,8 +124,10 @@ class BaseProcess(multiprocessing.Process):
                             log.info("Reconnecting to Zabbix API and retrying update")
                             self.login()
                     elif isinstance(e, ZabbixAPIException):
-                        log.error("Zabbix API exception")
+                        # Unhandled Zabbix API Exceptions are logged with traceback
+                        log.exception("Zabbix API exception")
                     elif isinstance(e, FailsafeError):
+                        # Failsafe errors do not need traceback
                         log.error("Failsafe exceeded", add=e.add, remove=e.remove)
                     elif isinstance(e, ZACException):
                         log.exception("Work exception")
@@ -817,20 +820,27 @@ class ZabbixUpdater(BaseProcess):
                     db_hosts[host.hostname] = host
             return db_hosts
 
-    def create_hostgroup(self, hostgroup_name: str) -> Optional[str]:
+    def create_hostgroup(self, hostgroup_name: str) -> None:
+        """Create a host group in Zabbix.
+
+        Wrapper over API client that catches errors and logs them. Never raises.
+
+        Args:
+            hostgroup_name (str): Name of the host group to create.
+        """
         log = logger.bind(hostgroup_name=hostgroup_name)
         if self.zabbix_config.dryrun:
             log.info("DRYRUN: Creating hostgroup")
-            return None
+            return
 
         log.debug("Creating hostgroup")
         try:
             groupid = self.api.create_hostgroup(hostgroup_name)
             log.info("Created host group", groupid=groupid)
-            return groupid
-        except ZabbixAPIException as e:
-            log.exception("Failed to create hostgroup", error=str(e))
-            return None
+        except ZabbixAPICallError as e:
+            log.error("Failed to create hostgroup", error=str(e))
+        except Exception as e:
+            log.exception("Unexpected error creating hostgroup", error=str(e))
 
 
 class ZabbixGarbageCollector(ZabbixUpdater):
@@ -941,16 +951,35 @@ class ZabbixHostUpdater(ZabbixUpdater):
             return self.api.get_hostgroup(hostgroup)
 
     def get_maintenances(self, zabbix_host: Host) -> list[Maintenance]:
+        """Get all maintenances for a host.
+
+        Catches errors and logs them. Returns an empty list on failure.
+
+        Args:
+            zabbix_host (Host): The host to fetch maintenances for.
+
+        Returns:
+            list[Maintenance]: List of maintenances the host belongs to.
+        """
         try:
             maintenances = self.api.get_maintenances(
                 hosts=[zabbix_host],
                 select_hosts=True,
             )
-        except ZabbixAPIException:
-            logger.exception(
+        except ZabbixAPIException as e:
+            logger.error(
                 "Failed to fetch maintenances for host",
                 host=zabbix_host.host,
                 hostid=zabbix_host.hostid,
+                error=str(e),
+            )
+            maintenances = []
+        except Exception as e:
+            logger.exception(
+                "Unexpected error fetching maintenances for host",
+                host=zabbix_host.host,
+                hostid=zabbix_host.hostid,
+                error=str(e),
             )
             maintenances = []
         return maintenances
@@ -958,6 +987,14 @@ class ZabbixHostUpdater(ZabbixUpdater):
     def do_remove_host_from_maintenance(
         self, zabbix_host: Host, maintenance: Maintenance
     ) -> None:
+        """Remove a host from a single maintenance.
+
+        Wrapper over API client that catches errors and logs them. Never raises.
+
+        Args:
+            zabbix_host (Host): The host to remove from the maintenance.
+            maintenance (Maintenance): The maintenance to remove the host from.
+        """
         log = logger.bind(host=zabbix_host.host, maintenance=maintenance.name)
         if self.zabbix_config.dryrun:
             log.info("DRYRUN: Removing host from maintenance")
@@ -975,8 +1012,12 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
         try:
             self.api.update_maintenance(maintenance, hosts=new_hosts)
-        except ZabbixAPIException:
-            log.exception("Failed to remove host from maintenance")
+        except ZabbixAPIException as e:
+            log.error("Failed to remove host from maintenance", error=str(e))
+        except Exception as e:
+            log.exception(
+                "Unexpected error removing host from maintenance", error=str(e)
+            )
         else:
             log.info("Removed host from maintenance")
 
@@ -986,6 +1027,13 @@ class ZabbixHostUpdater(ZabbixUpdater):
             self.do_remove_host_from_maintenance(zabbix_host, maintenance)
 
     def disable_host(self, zabbix_host: Host) -> None:
+        """Disable a host in Zabbix.
+
+        Wrapper over API client that catches errors and logs them. Never raises.
+
+        Args:
+            zabbix_host (Host): The host to disable.
+        """
         # Host needs to be removed from all maintenances before it is disabled
         log = logger.bind(host=zabbix_host.host, hostid=zabbix_host.hostid)
 
@@ -1001,12 +1049,21 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 templates=[],
                 groups=[self.disabled_hostgroup],
             )
-        except ZabbixAPIException:
-            log.exception("Error when disabling host")
+        except ZabbixAPIException as e:
+            log.error("Failed to disable host", error=str(e))
+        except Exception as e:
+            log.exception("Unexpected error disabling host", error=str(e))
         else:
             log.info("Disabled host")
 
     def enable_host(self, db_host: models.Host) -> None:
+        """Enable a host in Zabbix, creating it if it does not already exist.
+
+        Wrapper over API client that catches errors and logs them. Never raises.
+
+        Args:
+            db_host (models.Host): The host to enable.
+        """
         # TODO: Set correct proxy when enabling
         log = logger.bind(host=db_host.hostname)
         hostname = db_host.hostname
@@ -1036,10 +1093,19 @@ class ZabbixHostUpdater(ZabbixUpdater):
                     hostname, groups=[self.enabled_hostgroup], interfaces=[interface]
                 )
                 log.info("Enabled new host", hostid=hostid)
-        except ZabbixAPIException:
-            log.exception("Error when enabling/creating host")
+        except ZabbixAPIException as e:
+            log.error("Failed to enable/create host", error=str(e))
+        except Exception as e:
+            log.exception("Unexpected error enabling/creating host", error=str(e))
 
     def clear_proxy(self, zabbix_host: Host) -> None:
+        """Remove the proxy assignment from a host.
+
+        Wrapper over API client that catches errors and logs them. Never raises.
+
+        Args:
+            zabbix_host (Host): The host to clear the proxy on.
+        """
         log = logger.bind(host=zabbix_host.host, hostid=zabbix_host.hostid)
 
         if self.zabbix_config.dryrun:
@@ -1047,8 +1113,10 @@ class ZabbixHostUpdater(ZabbixUpdater):
             return
         try:
             self.api.clear_host_proxy(zabbix_host)
-        except ZabbixAPIException:
-            log.exception("Error clearing proxy on host")
+        except ZabbixAPIException as e:
+            log.error("Failed to clear proxy on host", error=str(e))
+        except Exception as e:
+            log.exception("Unexpected error clearing proxy on host", error=str(e))
         else:
             log.info("Cleared proxy on host")
 
@@ -1220,6 +1288,14 @@ class ZabbixHostUpdater(ZabbixUpdater):
         logger.info("Set inventory on host")
 
     def set_proxy(self, zabbix_host: Host, zabbix_proxy: Proxy) -> None:
+        """Set the proxy on a host.
+
+        Wrapper over API client that catches errors and logs them. Never raises.
+
+        Args:
+            zabbix_host (Host): The host to set the proxy on.
+            zabbix_proxy (Proxy): The proxy to assign to the host.
+        """
         log = logger.bind(
             host=zabbix_host.host,
             hostid=zabbix_host.hostid,
@@ -1231,11 +1307,21 @@ class ZabbixHostUpdater(ZabbixUpdater):
         try:
             self.api.update_host_proxy(zabbix_host, zabbix_proxy)
         except ZabbixAPIException as e:
-            log.exception("Failed to set proxy on host", error=str(e))
+            log.error("Failed to set proxy on host", error=str(e))
+        except Exception as e:
+            log.exception("Unexpected error setting proxy on host", error=str(e))
         else:
             log.info("Set proxy on host")
 
     def set_tags(self, zabbix_host: Host, tags: ZacTags) -> None:
+        """Set tags on a host.
+
+        Wrapper over API client that catches errors and logs them. Never raises.
+
+        Args:
+            zabbix_host (Host): The host to set tags on.
+            tags (ZacTags): The tags to set on the host.
+        """
         log = logger.bind(
             host=zabbix_host.host,
             hostid=zabbix_host.hostid,
@@ -1248,7 +1334,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
         try:
             self.api.update_host(zabbix_host, tags=zabbix_tags)
         except ZabbixAPIException as e:
-            log.exception("Failed to set tags on host", error=str(e))
+            log.error("Failed to set tags on host", error=str(e))
+        except Exception as e:
+            log.exception("Unexpected error setting tags on host", error=str(e))
         else:
             log.info("Set tags on host")
 
@@ -1520,6 +1608,14 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
         self.update_interval = self.config.zac.process.template_updater.update_interval
 
     def clear_templates(self, templates: list[Template], host: Host) -> None:
+        """Unlink and clear templates from a host.
+
+        Wrapper over API client that catches errors and logs them. Never raises.
+
+        Args:
+            templates (list[Template]): List of templates to clear from the host.
+            host (Host): The host to clear templates from.
+        """
         log = logger.bind(
             host=host.host,
             hostid=host.hostid,
@@ -1531,12 +1627,22 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
 
         try:
             self.api.unlink_templates_from_hosts(templates, [host], clear=True)
-        except ZabbixAPIException as e:
-            log.exception("Error when clearing templates on host", error=str(e))
+        except ZabbixAPICallError as e:
+            log.error("Failed to clear templates on host", error=str(e))
+        except Exception as e:
+            log.exception("Unexpected error clearing templates on host", error=str(e))
         else:
             log.info("Cleared templates on host")
 
     def set_templates(self, templates: list[Template], host: Host) -> None:
+        """Set templates on a host.
+
+        Wrapper over API client that catches errors and logs them. Never raises.
+
+        Args:
+            templates (list[Template]): List of _all_ templates for the host.
+            host (Host): The host to set templates on.
+        """
         # For logging
         log = logger.bind(
             host=host.host,
@@ -1550,8 +1656,13 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
 
         try:
             self.api.link_templates_to_hosts(templates, [host])
-        except ZabbixAPIException as e:
-            log.exception("Error setting templates on host", error=str(e))
+        except ZabbixAPICallError as e:
+            # No traceback
+            log.error("Failed to set templates on host", error=str(e))
+        except Exception as e:
+            log.exception(
+                "Unexpected error when setting templates on host", error=str(e)
+            )
         else:
             log.info("Set templates on host")
 
@@ -1655,7 +1766,14 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         self.update_interval = self.config.zac.process.hostgroup_updater.update_interval
 
     def set_hostgroups(self, host: Host, hostgroups: list[HostGroup]) -> None:
-        """Set host groups on a host given a list of host groups."""
+        """Set host groups on a host.
+
+        Wrapper over API client that catches errors and logs them. Never raises.
+
+        Args:
+            host (Host): The host to set host groups on.
+            hostgroups (list[HostGroup]): The host groups to assign to the host.
+        """
         log = logger.bind(
             host=host.host,
             hostid=host.hostid,
@@ -1670,7 +1788,9 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
         try:
             self.api.set_host_hostgroups(host, hostgroups)
         except ZabbixAPIException as e:
-            log.exception("Error when setting hostgroups on host", error=str(e))
+            log.error("Failed to set hostgroups on host", error=str(e))
+        except Exception as e:
+            log.exception("Unexpected error setting hostgroups on host", error=str(e))
         else:
             log.info("Set hostgroups on host")
 
@@ -1692,6 +1812,16 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                     self.create_hostgroup(hostgroup)
 
     def create_templategroup(self, templategroup_name: str) -> Optional[str]:
+        """Create a template group in Zabbix.
+
+        Wrapper over API client that catches errors and logs them. Never raises.
+
+        Args:
+            templategroup_name (str): Name of the template group to create.
+
+        Returns:
+            Optional[str]: The ID of the created template group, or None on failure.
+        """
         log = logger.bind(templategroup=templategroup_name)
 
         if self.zabbix_config.dryrun:
@@ -1704,7 +1834,10 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
             log.info("Created template group", groupid=groupid)
             return groupid
         except ZabbixAPIException as e:
-            log.exception("Error when creating template group", error=str(e))
+            log.error("Failed to create template group", error=str(e))
+            return None
+        except Exception as e:
+            log.exception("Unexpected error creating template group", error=str(e))
             return None
 
     def create_templategroups(self, existing_hostgroups: list[HostGroup]) -> None:
@@ -1727,16 +1860,15 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                 self.siteadmin_hostgroup_map.values()
             )
         }
+        log = logger.bind(version=str(self.zabbix_version))
         if compat.templategroups_supported(self.zabbix_version):
-            logger.debug(
-                "Zabbix version supports template groups. Will create template groups.",
-                version=str(self.zabbix_version),
+            log.debug(
+                "Zabbix version supports template groups. Will create template groups."
             )
             self._create_templategroups(tgroups)
         else:
-            logger.debug(
-                "Zabbix version does not support template groups. Will create host groups instead of template groups.",
-                version=str(self.zabbix_version),
+            log.debug(
+                "Zabbix version does not support template groups. Will create host groups instead of template groups."
             )
             self._create_templategroups_pre_62_compat(tgroups, existing_hostgroups)
 
