@@ -6,14 +6,17 @@ Leading underscore in module name to avoid name collision with built-in module `
 from __future__ import annotations
 
 from collections.abc import Sequence
+from multiprocessing import Queue
 from typing import Any
 from typing import NamedTuple
 from typing import Protocol
 from typing import TypedDict
 from typing import runtime_checkable
 
+from typing_extensions import TypeAlias
+
+from zabbix_auto_config.config import SourceCollectorSettings
 from zabbix_auto_config.models import Host
-from zabbix_auto_config.models import SourceCollectorSettings
 
 
 class ZabbixTag(TypedDict):
@@ -59,3 +62,13 @@ class SourceCollector(NamedTuple):
     name: str
     module: SourceCollectorModule
     config: SourceCollectorSettings
+
+
+class HostQueueEntry(TypedDict):
+    """Hosts collected from a source."""
+
+    source: str
+    hosts: list[Host]
+
+
+SourceHostQueue: TypeAlias = "Queue[HostQueueEntry]"

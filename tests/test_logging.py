@@ -8,7 +8,7 @@ import structlog
 import zabbix_auto_config.log
 from inline_snapshot import snapshot
 from structlog.types import EventDict
-from zabbix_auto_config.models import Settings
+from zabbix_auto_config.config import Settings
 
 
 @contextmanager

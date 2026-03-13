@@ -5,8 +5,8 @@ import time
 
 import pytest
 from inline_snapshot import snapshot
+from zabbix_auto_config.config import Settings
 from zabbix_auto_config.exceptions import ZACException
-from zabbix_auto_config.models import Settings
 from zabbix_auto_config.processing import BaseProcess
 from zabbix_auto_config.state import State
 from zabbix_auto_config.state import StateProxy

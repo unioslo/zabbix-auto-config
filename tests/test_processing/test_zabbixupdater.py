@@ -8,8 +8,8 @@ import pytest
 from httpx import ConnectTimeout
 from httpx import ReadTimeout
 from zabbix_auto_config import exceptions
-from zabbix_auto_config.models import Settings
-from zabbix_auto_config.models import ZabbixSettings
+from zabbix_auto_config.config import Settings
+from zabbix_auto_config.config import ZabbixSettings
 from zabbix_auto_config.processing import ZabbixUpdater
 from zabbix_auto_config.state import get_manager
 

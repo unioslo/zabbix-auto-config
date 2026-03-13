@@ -9,9 +9,9 @@ import structlog
 from psycopg2 import sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
+from zabbix_auto_config.config import DBSettings
+from zabbix_auto_config.config import Settings
 from zabbix_auto_config.exceptions import ZACException
-from zabbix_auto_config.models import DBSettings
-from zabbix_auto_config.models import Settings
 
 logger = structlog.stdlib.get_logger(__name__)
 

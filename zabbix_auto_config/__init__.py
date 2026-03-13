@@ -15,13 +15,14 @@ from typing import TypedDict
 import structlog
 import typer
 
-from zabbix_auto_config import models
 from zabbix_auto_config import processing
 from zabbix_auto_config.__about__ import __version__
 from zabbix_auto_config._types import HostModifier
 from zabbix_auto_config._types import HostModifierModule
 from zabbix_auto_config._types import SourceCollector
 from zabbix_auto_config._types import SourceCollectorModule
+from zabbix_auto_config._types import SourceHostQueue
+from zabbix_auto_config.config import Settings
 from zabbix_auto_config.config import get_config
 from zabbix_auto_config.db import init_db
 from zabbix_auto_config.health import write_health
@@ -34,7 +35,7 @@ app = typer.Typer(add_completion=False, pretty_exceptions_enable=False)
 logger = structlog.stdlib.get_logger(__name__)
 
 
-def get_source_collectors(config: models.Settings) -> list[SourceCollector]:
+def get_source_collectors(config: Settings) -> list[SourceCollector]:
     source_collector_dir = config.zac.source_collector_dir
     sys.path.append(source_collector_dir)
 
@@ -179,11 +180,11 @@ def main(
     source_collectors = get_source_collectors(config)
 
     # Initialize source collector processes from imported modules
-    source_hosts_queues: list[Queue[models.Host]] = []
+    source_hosts_queues: list[SourceHostQueue] = []
     src_processes: list[processing.BaseProcess] = []
     for source_collector in source_collectors:
         # Each source collector has its own queue
-        source_hosts_queue: Queue[models.Host] = Queue(maxsize=1)
+        source_hosts_queue: SourceHostQueue = Queue(maxsize=1)
         source_hosts_queues.append(source_hosts_queue)
         process: processing.BaseProcess = processing.SourceCollectorProcess(
             source_collector.name,

@@ -6,12 +6,12 @@ from unittest.mock import MagicMock
 
 import pytest
 import structlog
+from zabbix_auto_config.config import Settings
 from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.failsafe import check_failsafe
 from zabbix_auto_config.failsafe import check_failsafe_ok_file
 from zabbix_auto_config.failsafe import write_failsafe_hosts
 from zabbix_auto_config.models import HostActions
-from zabbix_auto_config.models import Settings
 
 from tests.utils import disable_assignment_validation
 
