@@ -866,17 +866,33 @@ class ZabbixAPI:
                 f"Failed to update host {host.host} ({host.hostid}): {e}"
             ) from e
 
-    def delete_host(self, host_id: str) -> None:
-        """Deletes a host."""
+    def delete_host(self, hosts: list[str] | str) -> list[str]:
+        """Delete one or more hosts.
+
+        Parameters
+        ----------
+        hosts : list[Host]
+            Host ID or list of Host IDs to delete.
+
+        Returns
+        -------
+        list[str]
+            List of deleted host IDs.
+        """
+        if isinstance(hosts, str):
+            hosts = [hosts]
         try:
-            self.host.delete(host_id)
+            resp = self.host.delete(hosts)
         except ZabbixAPIException as e:
+            raise ZabbixAPICallError(f"Failed to delete hosts {hosts}") from e
+        if not resp or not resp.get("hostids"):
             raise ZabbixAPICallError(
-                f"Failed to delete host with ID {host_id!r}"
-            ) from e
+                "Host deletion returned no data. Unable to determine if host(s) were deleted."
+            )
+        return resp["hostids"]
 
     def host_exists(self, name_or_id: str) -> bool:
-        """Checks if a host exists given its name or ID."""
+        """Check if a host exists given its name or ID."""
         try:
             self.get_host(name_or_id)
         except ZabbixNotFoundError:

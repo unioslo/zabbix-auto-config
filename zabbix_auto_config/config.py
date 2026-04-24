@@ -151,11 +151,59 @@ class TemplateUpdaterSettings(ProcessSettings):
     pass
 
 
+class HostGcSettings(ConfigBaseModel):
+    enabled: bool = Field(
+        default=True,
+        description="Whether to remove disabled hosts from Zabbix after a certain retention period.",
+    )
+
+    retention_days: int = Field(
+        default=90,
+        description="Number of days to keep disabled hosts before deleting them permanently.",
+        ge=0,
+    )
+
+
+class MaintenanceGcSettings(ConfigBaseModel):
+    enabled: bool = Field(
+        default=True,
+        description="Remove disabled hosts from maintenances",
+    )
+
+    delete_empty: bool = Field(
+        default=False,
+        description="Delete maintenances if they are empty after removing disabled hosts.",
+        ge=0,
+    )
+
+
 class GarbageCollectorSettings(ProcessSettings):
-    enabled: bool = False
-    """Remove disabled hosts from maintenances and triggers."""
-    delete_empty_maintenance: bool = False
-    """Delete maintenance periods if they are empty after removing disabled hosts."""
+    enabled: bool = Field(
+        default=False, description="Enable/disable all garbage collection features."
+    )
+
+    hosts: HostGcSettings = Field(default_factory=HostGcSettings)
+    maintenances: MaintenanceGcSettings = Field(default_factory=MaintenanceGcSettings)
+
+    # Deprecated fields
+    delete_empty_maintenance: bool = Field(
+        default=False,
+        exclude=True,
+        description="DEPRECATED: Delete maintenances if they are empty after removing disabled hosts.",
+        deprecated="Use `zac.process.garbage_collector.maintenances.delete_empty` instead.",
+    )
+
+    @model_validator(mode="after")
+    def validate_model(self) -> Self:
+        # Handle deprecated fields
+        if (
+            "delete_empty_maintenance" in self.model_fields_set
+            and "delete_empty" not in self.maintenances.model_fields_set
+        ):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                self.maintenances.delete_empty = self.delete_empty_maintenance
+        return self
 
 
 class ProcessesSettings(ConfigBaseModel):
@@ -173,6 +221,7 @@ class ProcessesSettings(ConfigBaseModel):
 class DBTableSettings(ConfigBaseModel):
     hosts: str = Field(default="hosts")
     hosts_source: str = Field(default="hosts_source")
+    hosts_pending_deletion: str = Field(default="hosts_pending_deletion")
 
     @model_validator(mode="after")
     def _validate_table_names(self) -> Self:

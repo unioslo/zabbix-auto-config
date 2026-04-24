@@ -25,7 +25,9 @@ import httpx
 import psycopg2
 import structlog
 from psycopg2 import sql
+from psycopg2.extras import execute_values
 from pydantic import ValidationError
+from typing_extensions import override
 
 from zabbix_auto_config import compat
 from zabbix_auto_config import db
@@ -850,6 +852,34 @@ class ZabbixGarbageCollector(ZabbixUpdater):
         super().__init__(name, state, config)
 
         self.update_interval = self.config.zac.process.garbage_collector.update_interval
+        self.pending_hosts_table = sql.Identifier(
+            self.config.zac.db.tables.hosts_pending_deletion
+        )
+        self.gc_config = self.config.zac.process.garbage_collector
+
+    @override
+    def do_update(self) -> None:
+        if not self.config.zac.process.garbage_collector.enabled:
+            logger.debug("Garbage collection is disabled")
+            return
+        # Get all disabled hosts
+        disabled_hosts = self.api.get_hosts(status=MonitoringStatus.OFF)
+        disabled_hosts = list(disabled_hosts)  # consume iterator
+        if self.gc_config.maintenances.enabled:
+            self.cleanup_maintenances(disabled_hosts)
+        if self.gc_config.hosts.enabled:
+            self.cleanup_disabled_hosts(disabled_hosts)
+
+    #######################
+    # Maintenance cleanup #
+    #######################
+
+    def cleanup_maintenances(self, disabled_hosts: list[Host]) -> None:
+        maintenances = self.api.get_maintenances(
+            hosts=disabled_hosts, select_hosts=True
+        )
+        for maintenance in maintenances:
+            self.remove_disabled_hosts_from_maintenance(maintenance)
 
     def filter_disabled_hosts(
         self, model: ModelWithHosts
@@ -880,12 +910,20 @@ class ZabbixGarbageCollector(ZabbixUpdater):
             )
             return
 
+        # NOTE: we do not handle a situation wherein a maintenance is already empty
+        # when passed to this method. First if-block handles the case where there
+        # are no disabled hosts in the maintenance - but we don't consider that
+        # there could be no hosts _at all_! It is conceivable that we may want
+        # to start pruning all empty maintenances, not just those that become
+        # empty after having their disabled hosts removed.
+        # For now, this is a minor issue, however.
+
         # No disabled hosts in maintenance (Should never happen)
         if len(hosts_keep) == len(maintenance.hosts):
             log.debug("No disabled hosts in maintenance")
         # No hosts left in maintenance
         elif not hosts_keep:
-            if self.config.zac.process.garbage_collector.delete_empty_maintenance:
+            if self.gc_config.maintenances.delete_empty:
                 self.delete_maintenance(maintenance)
             else:
                 log.error(
@@ -907,20 +945,147 @@ class ZabbixGarbageCollector(ZabbixUpdater):
         self.api.delete_maintenance(maintenance)
         log.info("Deleted maintenance")
 
-    def cleanup_maintenances(self, disabled_hosts: list[Host]) -> None:
-        maintenances = self.api.get_maintenances(
-            hosts=disabled_hosts, select_hosts=True
-        )
-        for maintenance in maintenances:
-            self.remove_disabled_hosts_from_maintenance(maintenance)
+    #########################
+    # Disabled host cleanup #
+    #########################
 
-    def do_update(self) -> None:
-        if not self.config.zac.process.garbage_collector.enabled:
-            logger.debug("Garbage collection is disabled")
+    def cleanup_disabled_hosts(self, disabled_hosts: list[Host]) -> None:
+        """Delete disabled hosts that have exceeded their retention period.
+
+        The pending deletion table is kept in sync by pruning hosts that are no
+        longer disabled at the start of each cycle. This means hosts deleted from
+        Zabbix (whether by this process or externally) are removed from the table
+        on the _following_ cycle, not immediately after deletion.
+        """
+        # NOTE: IMPORTANT: Remove hosts that were removed in the previous cycle
+        # OR were re-enabled at some point after being added to the pending DB
+        # by diffing against the current list of disabled hosts.
+        self.prune_pending_hosts(disabled_hosts)
+
+        to_schedule: list[Host] = []
+        """Disabled hosts not yet scheduled for deletion."""
+
+        to_delete: list[Host] = []
+        """Disabled hosts to delete."""
+
+        pending_hosts = self.get_hosts_pending_deletion()
+        pending_host_map = {host.host_id: host for host in pending_hosts}
+
+        # Avoid recomputing for each host
+        current_time = datetime.now()
+
+        for host in disabled_hosts:
+            # Host must already be pending deletion before we can try to delete it
+            pending_host = pending_host_map.get(host.hostid)
+            log = logger.bind(host=host.host, hostid=host.hostid)
+            if not pending_host:
+                log.info(
+                    "Scheduling host for deletion in the future",
+                    retention_days=self.gc_config.hosts.retention_days,
+                )
+                to_schedule.append(host)
+                continue
+
+            log = logger.bind(disabled_at=pending_host.disabled_at)
+
+            deletion_date = pending_host.disabled_at + timedelta(
+                days=self.gc_config.hosts.retention_days
+            )
+            if deletion_date <= current_time:
+                to_delete.append(host)
+                log.debug("Host is past retention period, will be deleted")
+            else:
+                log.debug("Host is within retention period, skipping deletion")
+
+        # Delete hosts that are past their retention period
+        self.delete_hosts(to_delete)
+
+        # Schedule newly disabled hosts for deletion
+        self.schedule_hosts_for_deletion(to_schedule)
+
+    def prune_pending_hosts(self, disabled_hosts: list[Host]) -> None:
+        """Prune hosts that are no longer disabled from the pending deletion table.
+
+        These hosts have either been re-enabled or deleted from Zabbix.
+
+        If `disabled_hosts` is empty, all pending hosts are cleared, as this means
+        there are no disabled hosts in Zabbix.
+        """
+        with self.db_connection, self.db_connection.cursor() as cursor:
+            cursor.execute(
+                sql.SQL("DELETE FROM {} WHERE host_id != ALL(%s::text[])").format(
+                    self.pending_hosts_table
+                ),
+                # deduplicate host ids
+                [list({host.hostid for host in disabled_hosts})],
+            )
+
+    def get_hosts_pending_deletion(self) -> list[models.HostPendingDeletion]:
+        """Get all hosts that are pending deletion from the database."""
+        with self.db_connection, self.db_connection.cursor() as db_cursor:
+            db_cursor.execute(
+                sql.SQL("SELECT host_id, hostname, disabled_at FROM {}").format(
+                    self.pending_hosts_table
+                )
+            )
+            hosts: list[models.HostPendingDeletion] = []
+            for res in db_cursor.fetchall():
+                try:
+                    host = models.HostPendingDeletion(
+                        host_id=res[0], hostname=res[1], disabled_at=res[2]
+                    )
+                    hosts.append(host)
+                except ValidationError:
+                    logger.exception(
+                        "Invalid host in pending deletion hosts table", host=str(res)
+                    )
+                except Exception:
+                    logger.exception(
+                        "Error when parsing host from pending deletion hosts table",
+                        host=str(res),
+                    )
+            return hosts
+
+    def schedule_hosts_for_deletion(self, hosts: list[Host]) -> None:
+        """Schedule a list of hosts for deletion by adding them to the pending deletion table."""
+        if not hosts:
             return
-        # Get all disabled hosts
-        disabled_hosts = self.api.get_hosts(status=MonitoringStatus.OFF)
-        self.cleanup_maintenances(list(disabled_hosts))
+
+        with self.db_connection, self.db_connection.cursor() as cursor:
+            execute_values(
+                cursor,
+                sql.SQL(
+                    "INSERT INTO {} (host_id, hostname) VALUES %s ON CONFLICT (host_id) DO NOTHING"
+                )
+                .format(self.pending_hosts_table)
+                .as_string(cursor),  # execute_values takes a string!
+                [(host.hostid, host.host) for host in hosts],
+            )
+
+    def delete_hosts(self, hosts: list[Host]) -> None:
+        """Delete a list of hosts from Zabbix.
+
+        The pending deletion table is not updated here; stale entries are pruned
+        at the start of the next cycle by prune_pending_hosts.
+        """
+        if not hosts:
+            logger.debug("No hosts to delete")
+            return
+
+        host_ids = [host.hostid for host in hosts]
+        log = logger.bind(hosts=host_ids)
+        if self.zabbix_config.dryrun:
+            log.info("DRYRUN: Deleting expired disabled hosts")
+            return
+
+        try:
+            self.api.delete_host(host_ids)  # pyright: ignore[reportUnusedCallResult]
+        except ZabbixAPIException as e:
+            log.error("Failed to delete hosts", error=str(e))
+        except Exception as e:
+            log.exception("Unexpected error deleting hosts", error=str(e))
+        else:
+            log.info("Deleted hosts")
 
 
 class ZabbixHostUpdater(ZabbixUpdater):
@@ -961,27 +1126,23 @@ class ZabbixHostUpdater(ZabbixUpdater):
         Returns:
             list[Maintenance]: List of maintenances the host belongs to.
         """
+        maintenances: list[Maintenance] = []
+        log = logger.bind(host=zabbix_host.host, hostid=zabbix_host.hostid)
+
         try:
             maintenances = self.api.get_maintenances(
                 hosts=[zabbix_host],
                 select_hosts=True,
             )
         except ZabbixAPIException as e:
-            logger.error(
+            log.error(
                 "Failed to fetch maintenances for host",
-                host=zabbix_host.host,
-                hostid=zabbix_host.hostid,
                 error=str(e),
             )
-            maintenances = []
-        except Exception as e:
-            logger.exception(
+        except Exception:
+            log.exception(
                 "Unexpected error fetching maintenances for host",
-                host=zabbix_host.host,
-                hostid=zabbix_host.hostid,
-                error=str(e),
             )
-            maintenances = []
         return maintenances
 
     def do_remove_host_from_maintenance(
@@ -1340,6 +1501,211 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             log.info("Set tags on host")
 
+    def _sync_proxy(
+        self, db_host: models.Host, zabbix_host: Host, zabbix_proxies: dict[str, Proxy]
+    ) -> None:
+        """Sync the proxy assignment of a Zabbix host with the proxy pattern defined on the DB host."""
+        log = logger.bind(host=zabbix_host.host, hostid=zabbix_host.hostid)
+        zabbix_proxy_id = zabbix_host.proxyid
+
+        zabbix_proxy = [
+            proxy
+            for proxy in zabbix_proxies.values()
+            if proxy.proxyid == zabbix_proxy_id
+        ]
+        current_zabbix_proxy = zabbix_proxy[0] if zabbix_proxy else None
+
+        # A host with proxy_pattern should get a proxy that matches the pattern.
+        if db_host.proxy_pattern:
+            possible_proxies = [
+                proxy
+                for proxy in zabbix_proxies.values()
+                if re.match(db_host.proxy_pattern, proxy.name)
+            ]
+            if not possible_proxies:
+                log.error(
+                    "Proxy pattern doesn't match any proxies.",
+                    proxy_pattern=db_host.proxy_pattern,
+                )
+            else:
+                new_proxy = random.choice(possible_proxies)
+                if current_zabbix_proxy and not re.match(
+                    db_host.proxy_pattern,
+                    current_zabbix_proxy.name,
+                ):
+                    # Wrong proxy, set new
+                    self.set_proxy(zabbix_host, new_proxy)
+                elif not current_zabbix_proxy:
+                    # Missing proxy, set new
+                    self.set_proxy(zabbix_host, new_proxy)
+        elif not db_host.proxy_pattern and current_zabbix_proxy:
+            # Should not have proxy, remove
+            self.clear_proxy(zabbix_host)
+
+    def _sync_interfaces(self, db_host: models.Host, zabbix_host: Host) -> None:
+        """Sync interfaces of a Zabbix host with the interfaces defined on the DB host."""
+        log = logger.bind(host=zabbix_host.host, hostid=zabbix_host.hostid)
+
+        # Check the main/default interfaces
+        if db_host.interfaces:
+            zabbix_interfaces = zabbix_host.interfaces
+
+            # Create dict of main interfaces only
+            zabbix_interfaces = {
+                i.type: i for i in zabbix_host.interfaces if i.main == 1
+            }
+
+            for interface in db_host.interfaces:
+                # We assume that we're using an IP if the endpoint is a valid IP
+                useip = utils.is_valid_ip(interface.endpoint)
+                if zabbix_interface := zabbix_interfaces.get(interface.type):
+                    if useip and (
+                        zabbix_interface.ip != interface.endpoint
+                        or zabbix_interface.port != interface.port
+                        or zabbix_interface.useip != useip
+                    ):
+                        # This IP interface is configured wrong, set it
+                        self.set_interface(
+                            zabbix_host,
+                            interface,
+                            useip,
+                            zabbix_interface,
+                        )
+                    elif not useip and (
+                        zabbix_interface.dns != interface.endpoint
+                        or zabbix_interface.port != interface.port
+                        or zabbix_interface.useip != useip
+                    ):
+                        log.info(
+                            "DNS interface is configured incorrectly",
+                            interface_type=interface.type,
+                            interface_endpoint=interface.endpoint,
+                        )
+                        # This DNS interface is configured wrong, set it
+                        self.set_interface(
+                            zabbix_host,
+                            interface,
+                            useip,
+                            zabbix_interface,
+                        )
+                    if interface.type == 2 and interface.details:
+                        details_dict = zabbix_interface.details
+                        # Check that the interface details are correct.
+                        # Note that the Zabbix API response may include more
+                        # information than our back-end; ignore such keys.
+                        if not all(
+                            str(details_dict.get(k)) == str(v)
+                            for k, v in interface.details.items()
+                        ):
+                            log.info(
+                                "SNMP interface is configured incorrectly",
+                                interface_type=interface.type,
+                                interface_endpoint=interface.endpoint,
+                                interface_details=interface.details,
+                            )
+                            # This SNMP interface is configured wrong, set it.
+                            self.set_interface(
+                                zabbix_host,
+                                interface,
+                                useip,
+                                zabbix_interface,
+                            )
+                else:
+                    # This interface is missing, set it
+                    self.set_interface(zabbix_host, interface, useip, None)
+
+    def _sync_tags(self, db_host: models.Host, zabbix_host: Host) -> None:
+        """Sync tags of a Zabbix host with the tags defined on the DB host."""
+        log = logger.bind(host=zabbix_host.host, hostid=zabbix_host.hostid)
+
+        # Check current tags and apply db tags
+        other_zabbix_tags = utils.zabbix_tags2zac_tags(
+            [
+                tag
+                for tag in zabbix_host.tags
+                if not tag.tag.startswith(self.zabbix_config.tags_prefix)
+            ]
+        )  # These are tags outside our namespace/prefix. Keep them.
+        current_tags = utils.zabbix_tags2zac_tags(
+            [
+                tag
+                for tag in zabbix_host.tags
+                if tag.tag.startswith(self.zabbix_config.tags_prefix)
+            ]
+        )
+        db_tags = db_host.tags
+        ignored_tags = set(
+            filter(
+                lambda tag: not tag[0].startswith(self.zabbix_config.tags_prefix),
+                db_tags,
+            )
+        )
+        if ignored_tags:
+            db_tags = db_tags - ignored_tags
+            log.warning(
+                "Ignoring tags not matching configured tag prefix",
+                tags=ignored_tags,
+                tag_prefix=self.zabbix_config.tags_prefix,
+            )
+
+        tags_to_remove = current_tags - db_tags
+        tags_to_add = db_tags - current_tags
+        tags = db_tags.union(other_zabbix_tags)
+        if tags_to_remove or tags_to_add:
+            if tags_to_remove:
+                log.debug("Going to remove tags", tags=tags_to_remove)
+            if tags_to_add:
+                log.debug("Going to add tags", tags=tags_to_add)
+            self.set_tags(zabbix_host, tags)
+
+    def _sync_inventory(self, db_host: models.Host, zabbix_host: Host) -> None:
+        """Sync inventory of a Zabbix host with the inventory of the DB host."""
+        log = logger.bind(host=zabbix_host.host, hostid=zabbix_host.hostid)
+
+        if zabbix_host.inventory_mode != InventoryMode.AUTOMATIC:
+            self.set_inventory_mode(zabbix_host, InventoryMode.AUTOMATIC)
+
+        if db_host.inventory:
+            if zabbix_host.inventory:
+                changed_inventory = {
+                    k: v
+                    for k, v in db_host.inventory.items()
+                    if db_host.inventory[k] != zabbix_host.inventory.get(k, None)
+                }
+            else:
+                changed_inventory = db_host.inventory
+
+            if changed_inventory:
+                # inventory outside of zac management
+                ignored_inventory = {
+                    k: v
+                    for k, v in changed_inventory.items()
+                    if k not in self.zabbix_config.managed_inventory
+                }
+
+                # inventories managed by zac and to be updated
+                inventory = {
+                    k: v
+                    for k, v in changed_inventory.items()
+                    if k in self.zabbix_config.managed_inventory
+                }
+                if inventory:
+                    self.set_inventory(zabbix_host, inventory)
+                if ignored_inventory:
+                    log.warning(
+                        "Zac is not configured to manage inventory properties",
+                        ignored_inventory=ignored_inventory,
+                    )
+
+    def _update_host(
+        self, db_host: models.Host, zabbix_host: Host, zabbix_proxies: dict[str, Proxy]
+    ) -> None:
+        """Update a host in Zabbix to match merged DB host from sources."""
+        self._sync_proxy(db_host, zabbix_host, zabbix_proxies)
+        self._sync_interfaces(db_host, zabbix_host)
+        self._sync_tags(db_host, zabbix_host)
+        self._sync_inventory(db_host, zabbix_host)
+
     def do_update(self) -> None:
         db_hosts = self.get_db_hosts()
 
@@ -1419,6 +1785,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             db_host = db_hosts[hostname]
             self.enable_host(db_host)
 
+        # Update hosts that exist in both
         for hostname in hostnames_in_both:
             if self.stop_event.is_set():
                 logger.debug("Told to stop. Breaking")
@@ -1426,180 +1793,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
             db_host = db_hosts[hostname]
             zabbix_host = zabbix_hosts[hostname]
-
-            log = logger.bind(host=zabbix_host.host, hostid=zabbix_host.hostid)
-
-            # Check proxy. A host with proxy_pattern should get a proxy that matches the pattern.
-            zabbix_proxy_id = zabbix_host.proxyid
-            zabbix_proxy = [
-                proxy
-                for proxy in zabbix_proxies.values()
-                if proxy.proxyid == zabbix_proxy_id
-            ]
-            current_zabbix_proxy = zabbix_proxy[0] if zabbix_proxy else None
-            if db_host.proxy_pattern:
-                possible_proxies = [
-                    proxy
-                    for proxy in zabbix_proxies.values()
-                    if re.match(db_host.proxy_pattern, proxy.name)
-                ]
-                if not possible_proxies:
-                    log.error(
-                        "Proxy pattern doesn't match any proxies.",
-                        proxy_pattern=db_host.proxy_pattern,
-                    )
-                else:
-                    new_proxy = random.choice(possible_proxies)
-                    if current_zabbix_proxy and not re.match(
-                        db_host.proxy_pattern,
-                        current_zabbix_proxy.name,
-                    ):
-                        # Wrong proxy, set new
-                        self.set_proxy(zabbix_host, new_proxy)
-                    elif not current_zabbix_proxy:
-                        # Missing proxy, set new
-                        self.set_proxy(zabbix_host, new_proxy)
-            elif not db_host.proxy_pattern and current_zabbix_proxy:
-                # Should not have proxy, remove
-                self.clear_proxy(zabbix_host)
-
-            # Check the main/default interfaces
-            if db_host.interfaces:
-                zabbix_interfaces = zabbix_host.interfaces
-
-                # Create dict of main interfaces only
-                zabbix_interfaces = {
-                    i.type: i for i in zabbix_host.interfaces if i.main == 1
-                }
-
-                for interface in db_host.interfaces:
-                    log_if = log.bind(
-                        interface_type=interface.type,
-                        interface_endpoint=interface.endpoint,
-                    )
-                    # We assume that we're using an IP if the endpoint is a valid IP
-                    useip = utils.is_valid_ip(interface.endpoint)
-                    if zabbix_interface := zabbix_interfaces.get(interface.type):
-                        if useip and (
-                            zabbix_interface.ip != interface.endpoint
-                            or zabbix_interface.port != interface.port
-                            or zabbix_interface.useip != useip
-                        ):
-                            # This IP interface is configured wrong, set it
-                            self.set_interface(
-                                zabbix_host,
-                                interface,
-                                useip,
-                                zabbix_interface,
-                            )
-                        elif not useip and (
-                            zabbix_interface.dns != interface.endpoint
-                            or zabbix_interface.port != interface.port
-                            or zabbix_interface.useip != useip
-                        ):
-                            log_if.info("DNS interface is configured incorrectly")
-                            # This DNS interface is configured wrong, set it
-                            self.set_interface(
-                                zabbix_host,
-                                interface,
-                                useip,
-                                zabbix_interface,
-                            )
-                        if interface.type == 2 and interface.details:
-                            details_dict = zabbix_interface.details
-                            # Check that the interface details are correct.
-                            # Note that the Zabbix API response may include more
-                            # information than our back-end; ignore such keys.
-                            if not all(
-                                str(details_dict.get(k)) == str(v)
-                                for k, v in interface.details.items()
-                            ):
-                                log_if.info("SNMP interface is configured incorrectly")
-                                # This SNMP interface is configured wrong, set it.
-                                self.set_interface(
-                                    zabbix_host,
-                                    interface,
-                                    useip,
-                                    zabbix_interface,
-                                )
-                    else:
-                        # This interface is missing, set it
-                        self.set_interface(zabbix_host, interface, useip, None)
-
-            # Check current tags and apply db tags
-            other_zabbix_tags = utils.zabbix_tags2zac_tags(
-                [
-                    tag
-                    for tag in zabbix_host.tags
-                    if not tag.tag.startswith(self.zabbix_config.tags_prefix)
-                ]
-            )  # These are tags outside our namespace/prefix. Keep them.
-            current_tags = utils.zabbix_tags2zac_tags(
-                [
-                    tag
-                    for tag in zabbix_host.tags
-                    if tag.tag.startswith(self.zabbix_config.tags_prefix)
-                ]
-            )
-            db_tags = db_host.tags
-            ignored_tags = set(
-                filter(
-                    lambda tag: not tag[0].startswith(self.zabbix_config.tags_prefix),
-                    db_tags,
-                )
-            )
-            if ignored_tags:
-                db_tags = db_tags - ignored_tags
-                log.warning(
-                    "Ignoring tags not matching configured tag prefix",
-                    tags=ignored_tags,
-                    tag_prefix=self.zabbix_config.tags_prefix,
-                )
-
-            tags_to_remove = current_tags - db_tags
-            tags_to_add = db_tags - current_tags
-            tags = db_tags.union(other_zabbix_tags)
-            if tags_to_remove or tags_to_add:
-                if tags_to_remove:
-                    log.debug("Going to remove tags", tags=tags_to_remove)
-                if tags_to_add:
-                    log.debug("Going to add tags", tags=tags_to_add)
-                self.set_tags(zabbix_host, tags)
-
-            if zabbix_host.inventory_mode != InventoryMode.AUTOMATIC:
-                self.set_inventory_mode(zabbix_host, InventoryMode.AUTOMATIC)
-
-            if db_host.inventory:
-                if zabbix_host.inventory:
-                    changed_inventory = {
-                        k: v
-                        for k, v in db_host.inventory.items()
-                        if db_host.inventory[k] != zabbix_host.inventory.get(k, None)
-                    }
-                else:
-                    changed_inventory = db_host.inventory
-
-                if changed_inventory:
-                    # inventory outside of zac management
-                    ignored_inventory = {
-                        k: v
-                        for k, v in changed_inventory.items()
-                        if k not in self.zabbix_config.managed_inventory
-                    }
-
-                    # inventories managed by zac and to be updated
-                    inventory = {
-                        k: v
-                        for k, v in changed_inventory.items()
-                        if k in self.zabbix_config.managed_inventory
-                    }
-                    if inventory:
-                        self.set_inventory(zabbix_host, inventory)
-                    if ignored_inventory:
-                        log.warning(
-                            "Zac is not configured to manage inventory properties",
-                            ignored_inventory=ignored_inventory,
-                        )
+            self._update_host(db_host, zabbix_host, zabbix_proxies)
 
 
 class ZabbixTemplateUpdater(ZabbixUpdater):

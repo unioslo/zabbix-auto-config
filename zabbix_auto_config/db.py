@@ -131,6 +131,24 @@ class PostgresDBInitializer:
                 )
                 conn.commit()
 
+                # Create hosts_pending_deletion table
+                log.debug(
+                    "Creating table if it doesn't exist",
+                    table=self.config.zac.db.tables.hosts_source,
+                )
+                cur.execute(
+                    sql.SQL("""
+                    CREATE TABLE IF NOT EXISTS {} (
+                        host_id     TEXT        PRIMARY KEY,
+                        hostname    TEXT        NOT NULL,
+                        disabled_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """).format(
+                        sql.Identifier(self.config.zac.db.tables.hosts_pending_deletion)
+                    )
+                )
+                conn.commit()
+
 
 def init_db(config: Settings) -> None:
     """Initialize Postgres database and tables idempotently.
