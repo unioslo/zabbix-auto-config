@@ -1075,7 +1075,7 @@ class ZabbixGarbageCollector(ZabbixUpdater):
         at the start of the next cycle by prune_pending_hosts.
         """
         if not hosts:
-            logger.debug("No hosts to delete")
+            logger.info("No hosts to delete")
             return
 
         host_ids = [host.hostid for host in hosts]
