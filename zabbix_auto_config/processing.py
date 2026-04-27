@@ -967,10 +967,10 @@ class ZabbixGarbageCollector(ZabbixUpdater):
 
         # Compile a list of expired hosts to delete from Zabbix
         for host in disabled_hosts:
-            # Host must already be pending deletion before we can try to delete it
-            pending_host = pending_hosts.get(host.hostid)
             log = logger.bind(host=host.host, hostid=host.hostid)
 
+            # Host must already be pending deletion before we can try to delete it
+            pending_host = pending_hosts.get(host.hostid)
             if not pending_host:
                 log.info(
                     "Scheduling host for deletion in the future",
