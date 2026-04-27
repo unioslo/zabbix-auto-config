@@ -984,7 +984,7 @@ class ZabbixGarbageCollector(ZabbixUpdater):
             deletion_date = pending_host.disabled_at + timedelta(
                 days=self.gc_config.hosts.retention_days
             )
-            if deletion_date <= datetime.now():
+            if deletion_date <= datetime.now(deletion_date.tzinfo):  # tz-aware
                 to_delete.append(host)
                 log.debug("Host is past retention period, will be deleted")
             else:
