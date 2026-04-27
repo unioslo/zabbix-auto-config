@@ -708,16 +708,24 @@ In order to update snapshots, run:
 pytest --inline-snapshot=review
 ```
 
-### Pre-commit
+## Pre-commit Hooks
 
-We use [pre-commit](https://pre-commit.com/) to manage pre-commit hooks. Install the hooks with:
+This project uses `prek` to manage pre-commit hooks for code quality and formatting. To set up the pre-commit hooks, run the following command:
 
 ```bash
-pre-commit install
+uv tool install prek
 ```
 
-This will install the hooks in the `.git/hooks` directory. The hooks will run automatically when you commit changes. If you want to run the hooks manually, you can do so with:
+Then, install the pre-commit hooks with:
 
 ```bash
-pre-commit run --all-files
+prek install
+```
+
+Run the pre-commit checks manually with:
+
+```bash
+prek run
+# Optionally for all files:
+prek run --all-files
 ```
