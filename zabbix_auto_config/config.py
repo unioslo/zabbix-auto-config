@@ -719,7 +719,10 @@ def get_config(path: Optional[Path] = None) -> Settings:
         except ConfigFileNotFoundError as e:
             logger.debug(str(e), file=str(path))
         except ConfigValidationError as e:
-            logger.error(str(e), file=str(path))
+            logger.error("Config validation error", file=str(path), error=str(e))
+            raise ConfigValidationError(
+                f"Configuration file {path} is invalid: {e}"
+            ) from e
     raise FileNotFoundError(f"No valid configuration file found in {CONFIG_PATHS}")
 
 
