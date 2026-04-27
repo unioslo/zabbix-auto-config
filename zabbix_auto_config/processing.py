@@ -863,8 +863,7 @@ class ZabbixGarbageCollector(ZabbixUpdater):
             logger.debug("Garbage collection is disabled")
             return
         # Get all disabled hosts
-        disabled_hosts = self.api.get_hosts(status=MonitoringStatus.OFF)
-        disabled_hosts = list(disabled_hosts)  # consume iterator
+        disabled_hosts = list(self.api.get_hosts(status=MonitoringStatus.OFF))
         if self.gc_config.maintenances.enabled:
             self.cleanup_maintenances(disabled_hosts)
         if self.gc_config.hosts.enabled:
