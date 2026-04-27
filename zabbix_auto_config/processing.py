@@ -963,36 +963,33 @@ class ZabbixGarbageCollector(ZabbixUpdater):
         # by diffing against the current list of disabled hosts.
         self.prune_pending_hosts(disabled_hosts)
 
-        to_schedule: list[Host] = []
-        """Disabled hosts not yet scheduled for deletion."""
+        to_schedule: list[Host] = []  # Unscheduled disabled hosts
+        to_delete: list[Host] = []  # Disabled hosts to delete
 
-        to_delete: list[Host] = []
-        """Disabled hosts to delete."""
+        pending_hosts = {
+            host.host_id: host for host in self.get_hosts_pending_deletion()
+        }
 
-        pending_hosts = self.get_hosts_pending_deletion()
-        pending_host_map = {host.host_id: host for host in pending_hosts}
-
-        # Avoid recomputing for each host
-        current_time = datetime.now()
-
+        # Compile a list of expired hosts to delete from Zabbix
         for host in disabled_hosts:
             # Host must already be pending deletion before we can try to delete it
-            pending_host = pending_host_map.get(host.hostid)
+            pending_host = pending_hosts.get(host.hostid)
             log = logger.bind(host=host.host, hostid=host.hostid)
+
             if not pending_host:
                 log.info(
                     "Scheduling host for deletion in the future",
                     retention_days=self.gc_config.hosts.retention_days,
                 )
                 to_schedule.append(host)
-                continue
+                continue  # nothing else to do
 
             log = logger.bind(disabled_at=pending_host.disabled_at)
 
             deletion_date = pending_host.disabled_at + timedelta(
                 days=self.gc_config.hosts.retention_days
             )
-            if deletion_date <= current_time:
+            if deletion_date <= datetime.now():
                 to_delete.append(host)
                 log.debug("Host is past retention period, will be deleted")
             else:
@@ -1009,11 +1006,24 @@ class ZabbixGarbageCollector(ZabbixUpdater):
 
         These hosts have either been re-enabled or deleted from Zabbix.
 
-        If `disabled_hosts` is empty, all pending hosts are cleared, as this means
-        there are no disabled hosts in Zabbix.
+        NOTE: If `disabled_hosts` is empty, all pending hosts are cleared,
+        as this means there are no disabled hosts in Zabbix.
+        There is a minor possibility that the API returned an empty list
+        due to an error or misconfiguration, in which case we would end up
+        deleting the entire table. On paper, this is intended behavior,
+        but it's important to log when this happens.
         """
+        if not disabled_hosts:
+            logger.warning(
+                "No disabled hosts in Zabbix. Clearing GC pending hosts table"
+            )
+
         with self.db_connection, self.db_connection.cursor() as cursor:
             cursor.execute(
+                # NOTE: This array unpacking is roughly equal to `WHERE host_id NOT IN (...)`
+                #       which means if the list is empty, we delete _all_ hosts.
+                #       This is intended, because it means we have no disabled hosts in Zabbix,
+                #       thus no Zabbix deletions should take place by the GC.
                 sql.SQL("DELETE FROM {} WHERE host_id != ALL(%s::text[])").format(
                     self.pending_hosts_table
                 ),
