@@ -1079,7 +1079,7 @@ class ZabbixGarbageCollector(ZabbixUpdater):
             return
 
         host_ids = [host.hostid for host in hosts]
-        log = logger.bind(hosts=host_ids)
+        log = logger.bind(hosts=[host.host for host in hosts])
         if self.zabbix_config.dryrun:
             log.info("DRYRUN: Deleting expired disabled hosts")
             return
