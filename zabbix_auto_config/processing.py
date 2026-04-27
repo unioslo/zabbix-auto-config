@@ -875,6 +875,7 @@ class ZabbixGarbageCollector(ZabbixUpdater):
     #######################
 
     def cleanup_maintenances(self, disabled_hosts: list[Host]) -> None:
+        """Remove disabled hosts from maintenances in Zabbix."""
         maintenances = self.api.get_maintenances(
             hosts=disabled_hosts, select_hosts=True
         )
@@ -954,8 +955,8 @@ class ZabbixGarbageCollector(ZabbixUpdater):
 
         The pending deletion table is kept in sync by pruning hosts that are no
         longer disabled at the start of each cycle. This means hosts deleted from
-        Zabbix (whether by this process or externally) are removed from the table
-        on the _following_ cycle, not immediately after deletion.
+        Zabbix (whether by the GC or by other means) are removed from the GC hosts
+        table on the _following_ cycle, not immediately after deletion.
         """
         # NOTE: IMPORTANT: Remove hosts that were removed in the previous cycle
         # OR were re-enabled at some point after being added to the pending DB
@@ -997,7 +998,7 @@ class ZabbixGarbageCollector(ZabbixUpdater):
             else:
                 log.debug("Host is within retention period, skipping deletion")
 
-        # Delete hosts that are past their retention period
+        # Delete hosts from zabbix that are past their retention period
         self.delete_hosts(to_delete)
 
         # Schedule newly disabled hosts for deletion
