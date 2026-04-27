@@ -871,7 +871,7 @@ class ZabbixAPI:
 
         Parameters
         ----------
-        hosts : list[Host]
+        hosts : list[str] | str
             Host ID or list of Host IDs to delete.
 
         Returns
@@ -882,7 +882,7 @@ class ZabbixAPI:
         if isinstance(hosts, str):
             hosts = [hosts]
         try:
-            resp = self.host.delete(hosts)
+            resp = self.host.delete(*hosts)
         except ZabbixAPIException as e:
             raise ZabbixAPICallError(f"Failed to delete hosts {hosts}") from e
         if not resp or not resp.get("hostids"):
