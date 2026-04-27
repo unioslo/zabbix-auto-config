@@ -870,9 +870,7 @@ class ZabbixGarbageCollector(ZabbixUpdater):
         if self.gc_config.hosts.enabled:
             self.cleanup_disabled_hosts(disabled_hosts)
 
-    #######################
-    # Maintenance cleanup #
-    #######################
+    # --- Maintenance pruning ---
 
     def cleanup_maintenances(self, disabled_hosts: list[Host]) -> None:
         """Remove disabled hosts from maintenances in Zabbix."""
@@ -946,9 +944,7 @@ class ZabbixGarbageCollector(ZabbixUpdater):
         self.api.delete_maintenance(maintenance)
         log.info("Deleted maintenance")
 
-    #########################
-    # Disabled host cleanup #
-    #########################
+    # --- Host lifecycle ---
 
     def cleanup_disabled_hosts(self, disabled_hosts: list[Host]) -> None:
         """Delete disabled hosts that have exceeded their retention period.
