@@ -637,10 +637,10 @@ enabled = True
 
 #### Maintenance cleanup
 
-Under normal usage, hosts are automatically removed from maintenances when disabled by ZAC. However, if hosts are disabled outside of ZAC, they will not be removed from maintenances. The GC process removes these hosts from the maintenance, and optionally delete the maintenance altogether if it only contains disabled hosts.
+Under normal usage, hosts are automatically removed from maintenances when disabled by ZAC. However, if hosts are disabled outside of ZAC, they will not be removed from maintenances. The GC process removes these hosts from the maintenance, and optionally delete the maintenance altogether if it would be empty after the disabled hosts are removed.
 
 > [!IMPORTANT]
-> Only maintenances that contain disabled hosts are currently processed by the GC, so existing empty maintenances are unaffected. This may change in a future version.
+> Only maintenances that contain at least one disabled host are currently processed by the GC. This may change in a future version.
 
 ```toml
 [zac.process.garbage_collector.maintenances]
