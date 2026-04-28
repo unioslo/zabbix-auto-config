@@ -1003,6 +1003,7 @@ class ZabbixGarbageCollector(ZabbixUpdater):
 
         NOTE: If `disabled_hosts` is empty, all pending hosts are cleared,
         as this means there are no disabled hosts in Zabbix.
+
         There is a minor possibility that the API returned an empty list
         due to an error or misconfiguration, in which case we would end up
         deleting the entire table. On paper, this is intended behavior,
