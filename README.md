@@ -735,7 +735,7 @@ In order to update snapshots, run:
 pytest --inline-snapshot=review
 ```
 
-## Pre-commit Hooks
+### Pre-commit
 
 This project uses `prek` to manage pre-commit hooks for code quality and formatting. To set up the pre-commit hooks, run the following command:
 
