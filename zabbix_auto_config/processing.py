@@ -30,6 +30,7 @@ from pydantic import ValidationError
 from typing_extensions import override
 
 from zabbix_auto_config import compat
+from zabbix_auto_config import cron
 from zabbix_auto_config import db
 from zabbix_auto_config import models
 from zabbix_auto_config import utils
@@ -93,6 +94,10 @@ class BaseProcess(multiprocessing.Process):
             logger.error("Unable to connect to database.")
             raise ZACException(*e.args) from e
 
+    def get_next_update(self) -> datetime:
+        """Get the time the process should run next."""
+        return datetime.now() + timedelta(seconds=self.update_interval)
+
     def run(self) -> None:
         logger.debug("Process starting")
 
@@ -109,9 +114,7 @@ class BaseProcess(multiprocessing.Process):
                     continue
 
                 start_time = datetime.now()
-                self.next_update = datetime.now() + timedelta(
-                    seconds=self.update_interval
-                )
+                self.next_update = self.get_next_update()
 
                 try:
                     self.work()
@@ -856,6 +859,19 @@ class ZabbixGarbageCollector(ZabbixUpdater):
             self.config.zac.db.tables.hosts_pending_deletion
         )
         self.gc_config = self.config.zac.process.garbage_collector
+        if self.gc_config.schedule:
+            self.schedule = cron.get_iter(self.gc_config.schedule)
+            # Explictly set next update time so that BaseProcess.run()
+            # is aware of the schedule. Otherwise we would run on startup!
+            self.next_update = self.get_next_update()
+        else:
+            self.schedule = None
+
+    @override
+    def get_next_update(self) -> datetime:
+        if self.schedule:
+            return self.schedule.get_next()
+        return super().get_next_update()
 
     @override
     def do_update(self) -> None:

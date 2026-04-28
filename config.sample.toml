@@ -130,7 +130,7 @@ update_interval = 60
 #       - Delete maintenances if all hosts are disabled (optional)
 #   - Delete hosts that have been disabled for a long time (optional)
 enabled = false
-update_interval = 86400 # every 24 hours
+schedule = "0 0 * * *" # every day at midnight
 
 [zac.process.garbage_collector.maintenances]
 enabled = true # Enabled by default if GC is enabled.
