@@ -210,7 +210,7 @@ class GarbageCollectorSettings(ProcessSettings):
 
     @model_validator(mode="after")
     def validate_schedule_and_update_interval(self) -> Self:
-        """Unsets schedule if update_interval is set."""
+        """Unsets schedule if _only_ update_interval is set."""
         if (
             "update_interval" in self.model_fields_set
             and "schedule" not in self.model_fields_set
