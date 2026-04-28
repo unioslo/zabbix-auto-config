@@ -181,6 +181,10 @@ class GarbageCollectorSettings(ProcessSettings):
     enabled: bool = Field(
         default=False, description="Enable/disable all garbage collection features."
     )
+    schedule: Optional[str] = Field(
+        default="0 0 * * *",
+        description="Cron schedule for running the garbage collector.",
+    )
 
     hosts: HostGcSettings = Field(default_factory=HostGcSettings)
     maintenances: MaintenanceGcSettings = Field(default_factory=MaintenanceGcSettings)
@@ -194,8 +198,7 @@ class GarbageCollectorSettings(ProcessSettings):
     )
 
     @model_validator(mode="after")
-    def validate_model(self) -> Self:
-        # Handle deprecated fields
+    def validate_deprecated_field_delete_empty_maintenance(self) -> Self:
         if (
             "delete_empty_maintenance" in self.model_fields_set
             and "delete_empty" not in self.maintenances.model_fields_set
@@ -203,6 +206,16 @@ class GarbageCollectorSettings(ProcessSettings):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", DeprecationWarning)
                 self.maintenances.delete_empty = self.delete_empty_maintenance
+        return self
+
+    @model_validator(mode="after")
+    def validate_schedule_and_update_interval(self) -> Self:
+        """Unsets schedule if update_interval is set."""
+        if (
+            "update_interval" in self.model_fields_set
+            and "schedule" not in self.model_fields_set
+        ):
+            self.schedule = None
         return self
 
 
@@ -214,7 +227,7 @@ class ProcessesSettings(ConfigBaseModel):
     hostgroup_updater: HostGroupUpdaterSettings = HostGroupUpdaterSettings()
     template_updater: TemplateUpdaterSettings = TemplateUpdaterSettings()
     garbage_collector: GarbageCollectorSettings = GarbageCollectorSettings(
-        update_interval=86400  # every 24 hours
+        schedule="0 0 * * *"  # every 24 hours (cron format)
     )
 
 

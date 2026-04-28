@@ -35,6 +35,7 @@ dependencies = [
     "platformdirs>=4.3.7",
     "typer>=0.15.2",
     "structlog>=25.4.0",
+    "croniter>=6.2.2",
 ]
 
 

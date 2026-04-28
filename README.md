@@ -626,13 +626,17 @@ To enable garbage collection, add the following to your config:
 enabled = True
 ```
 
-By default, the garbage collector runs every 24 hours. This can be adjusted with the `update_interval` option:
+By default, the garbage collector runs immediately on startup, then every 24 hours. You can replace this with a cron schedule:
 
 ```toml
 [zac.process.garbage_collector]
-update_interval = 3600 # Run every hour
+schedule = "0 0 * * *" # every day at midnight
 enabled = True
 ```
+
+When a schedule is set, the garbage collector skips the immediate startup run and fires only when the cron expression matches.
+
+All cron expressions supported by [croniter](https://pypi.org/project/croniter/) are supported.
 
 
 #### Maintenance cleanup

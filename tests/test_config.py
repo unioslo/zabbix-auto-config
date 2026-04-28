@@ -236,8 +236,9 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
                     "hostgroup_updater": {"update_interval": 60},
                     "template_updater": {"update_interval": 60},
                     "garbage_collector": {
-                        "update_interval": 86400,
+                        "update_interval": 60,
                         "enabled": False,
+                        "schedule": "0 0 * * *",
                         "hosts": {"enabled": True, "retention_days": 90},
                         "maintenances": {"enabled": True, "delete_empty": False},
                     },
@@ -730,7 +731,7 @@ def test_dbtablesettings_empty_name() -> None:
         )
 
 
-def test_garbagecollectorsettings_deprecated_field():
+def test_garbagecollectorsettings_deprecated_maintenances_delete_empty():
     """Test that garbage collector settings handling deprecated field correctly."""
     # Setting only deprecated field assigns it to new field in subconfig
     settings = ZacSettings(
@@ -777,3 +778,36 @@ def test_garbagecollectorsettings_deprecated_field():
         ),
     )
     assert settings.process.garbage_collector.maintenances.delete_empty is True
+
+
+def test_garbagecollectorsettings_schedule_and_update_interval():
+    """Test that garbage collector settings handles schedule and update_interval correctly."""
+    # Setting schedule uses schedule
+    settings = GarbageCollectorSettings(
+        enabled=False,
+        schedule="0 0 * * *",
+    )
+    assert settings.schedule == snapshot("0 0 * * *")
+    assert settings.update_interval == snapshot(60)
+
+    # Setting update_interval unsets schedule
+    settings = GarbageCollectorSettings(
+        update_interval=86400,
+        enabled=False,
+    )
+    assert settings.schedule == snapshot(None)
+    assert settings.update_interval == snapshot(86400)
+
+    # Setting both uses schedule
+    settings = GarbageCollectorSettings(
+        update_interval=86400,
+        enabled=False,
+        schedule="0 0 * * *",
+    )
+    assert settings.schedule == snapshot("0 0 * * *")
+    assert settings.update_interval == snapshot(86400)
+
+    # Uses schedule by default
+    settings = GarbageCollectorSettings()
+    assert settings.schedule == snapshot("0 0 * * *")
+    assert settings.update_interval == snapshot(60)
