@@ -127,11 +127,18 @@ update_interval = 60
 [zac.process.garbage_collector]
 # Enable garbage collection, including:
 #   - Remove disabled hosts from maintenances
-#   - Delete maintenances if all hosts are disabled (optional)
+#       - Delete maintenances if all hosts are disabled (optional)
+#   - Delete hosts that have been disabled for a long time (optional)
 enabled = false
-delete_empty_maintenance = false # Delete maintenances if all its hosts are disabled
 update_interval = 86400 # every 24 hours
 
+[zac.process.garbage_collector.maintenances]
+enabled = true # Enabled by default if GC is enabled.
+delete_empty = false # Delete maintenances if all its hosts are disabled
+
+[zac.process.garbage_collector.hosts]
+enabled = true # Enabled by default if GC is enabled.
+retention_days = 90 # Number of days to keep disabled hosts before deleting them
 
 [zabbix]
 # Directory containing mapping files.

@@ -612,16 +612,18 @@ ZAC provides an optional Zabbix garbage collection module that cleans up stale d
 The garbage collector currently does the following:
 
 - Removes disabled hosts from maintenances.
-- Deletes maintenances that only contain disabled hosts.
+  - Deletes maintenances that only contain disabled hosts.
+- Deletes disabled hosts after a certain period of time (configurable).
 
-Under normal usage, hosts are removed from maintenances when being disabled by ZAC, but if hosts are disabled outside of ZAC, they will not be removed from maintenances. The GC module will remove these hosts, and optionally delete the maintenance altogether if it only contains disabled hosts.
+
+
+#### Configuration
 
 To enable garbage collection, add the following to your config:
 
 ```toml
 [zac.process.garbage_collector]
-enabled = true
-delete_empty_maintenance = true
+enabled = True
 ```
 
 By default, the garbage collector runs every 24 hours. This can be adjusted with the `update_interval` option:
@@ -629,6 +631,31 @@ By default, the garbage collector runs every 24 hours. This can be adjusted with
 ```toml
 [zac.process.garbage_collector]
 update_interval = 3600 # Run every hour
+enabled = True
+```
+
+
+#### Maintenance cleanup
+
+Under normal usage, hosts are automatically removed from maintenances when disabled by ZAC. However, if hosts are disabled outside of ZAC, they will not be removed from maintenances. The GC process removes these hosts from the maintenance, and optionally delete the maintenance altogether if it would be empty after the disabled hosts are removed.
+
+> [!IMPORTANT]
+> Only maintenances that contain at least one disabled host are currently processed by the GC. This may change in a future version.
+
+```toml
+[zac.process.garbage_collector.maintenances]
+enabled = true
+delete_empty = false
+```
+
+#### Host lifecycle management
+
+The garbage collector can be configured to delete hosts after a given period of inactivity after they were disabled by ZAC. The default retention period is 90 days.
+
+```toml
+[zac.process.garbage_collector.hosts]
+enabled = true
+retention_days = 90
 ```
 
 ----

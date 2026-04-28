@@ -16,8 +16,11 @@ from pydantic import ValidationError
 from zabbix_auto_config.config import DBSettings
 from zabbix_auto_config.config import DBTableSettings
 from zabbix_auto_config.config import FailureStrategy
+from zabbix_auto_config.config import GarbageCollectorSettings
 from zabbix_auto_config.config import LoggingSettings
 from zabbix_auto_config.config import LogLevel
+from zabbix_auto_config.config import MaintenanceGcSettings
+from zabbix_auto_config.config import ProcessesSettings
 from zabbix_auto_config.config import Settings
 from zabbix_auto_config.config import SourceCollectorSettings
 from zabbix_auto_config.config import ZabbixSettings
@@ -206,7 +209,11 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
                     "host": "db",
                     "port": 5432,
                     "connect_timeout": 2,
-                    "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+                    "tables": {
+                        "hosts": "hosts",
+                        "hosts_source": "hosts_source",
+                        "hosts_pending_deletion": "hosts_pending_deletion",
+                    },
                     "init": {"db": True, "tables": True},
                 },
                 "logging": {
@@ -231,7 +238,8 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
                     "garbage_collector": {
                         "update_interval": 86400,
                         "enabled": False,
-                        "delete_empty_maintenance": False,
+                        "hosts": {"enabled": True, "retention_days": 90},
+                        "maintenances": {"enabled": True, "delete_empty": False},
                     },
                 },
                 "db_uri": "",
@@ -490,7 +498,11 @@ def test_zacsettings_db_uri_all(config: Settings):
             "host": "localhost",
             "port": 5432,
             "connect_timeout": 2,
-            "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+            "tables": {
+                "hosts": "hosts",
+                "hosts_source": "hosts_source",
+                "hosts_pending_deletion": "hosts_pending_deletion",
+            },
             "init": {"db": True, "tables": True},
         }
     )
@@ -522,7 +534,11 @@ def test_zacsettings_db_uri_only_required(config: Settings):
             "host": "localhost",
             "port": 5432,
             "connect_timeout": 5,
-            "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+            "tables": {
+                "hosts": "hosts",
+                "hosts_source": "hosts_source",
+                "hosts_pending_deletion": "hosts_pending_deletion",
+            },
             "init": {"db": True, "tables": True},
         }
     )
@@ -554,7 +570,11 @@ def test_zacsettings_db_uri_extra(config: Settings):
             "host": "localhost",
             "port": 5432,
             "connect_timeout": 2,
-            "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+            "tables": {
+                "hosts": "hosts",
+                "hosts_source": "hosts_source",
+                "hosts_pending_deletion": "hosts_pending_deletion",
+            },
             "init": {"db": True, "tables": True},
         }
     )
@@ -586,7 +606,11 @@ def test_zacsettings_db_uri_empty_values_and_extras(config: Settings):
             "host": "localhost",
             "port": 5432,
             "connect_timeout": 5,
-            "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+            "tables": {
+                "hosts": "hosts",
+                "hosts_source": "hosts_source",
+                "hosts_pending_deletion": "hosts_pending_deletion",
+            },
             "init": {"db": True, "tables": True},
             "sslmode": "require",
             "passfile": "/path/to/passfile",
@@ -621,7 +645,11 @@ def test_zacsettings_db_uri_missing_all(config: Settings):
             "host": "localhost",
             "port": 5432,
             "connect_timeout": 2,
-            "tables": {"hosts": "hosts", "hosts_source": "hosts_source"},
+            "tables": {
+                "hosts": "hosts",
+                "hosts_source": "hosts_source",
+                "hosts_pending_deletion": "hosts_pending_deletion",
+            },
             "init": {"db": True, "tables": True},
         }
     )
@@ -700,3 +728,52 @@ def test_dbtablesettings_empty_name() -> None:
             hosts="",
             hosts_source="hosts_source",
         )
+
+
+def test_garbagecollectorsettings_deprecated_field():
+    """Test that garbage collector settings handling deprecated field correctly."""
+    # Setting only deprecated field assigns it to new field in subconfig
+    settings = ZacSettings(
+        source_collector_dir="",
+        host_modifier_dir="",
+        process=ProcessesSettings(
+            garbage_collector=GarbageCollectorSettings(
+                update_interval=86400,
+                enabled=False,
+                delete_empty_maintenance=False,
+            )
+        ),
+    )
+
+    # The subconfig should have been assigned the deprecated main config value
+    # because it was explicitly set, while the subconfig was not.
+    assert settings.process.garbage_collector.maintenances.delete_empty is False
+
+    # Setting both should use the new field and ignore the deprecated field
+    settings = ZacSettings(
+        source_collector_dir="",
+        host_modifier_dir="",
+        process=ProcessesSettings(
+            garbage_collector=GarbageCollectorSettings(
+                update_interval=86400,
+                enabled=False,
+                delete_empty_maintenance=False,
+                maintenances=MaintenanceGcSettings(delete_empty=True),
+            )
+        ),
+    )
+    assert settings.process.garbage_collector.maintenances.delete_empty is True
+
+    # Setting only new should use new (duh)
+    settings = ZacSettings(
+        source_collector_dir="",
+        host_modifier_dir="",
+        process=ProcessesSettings(
+            garbage_collector=GarbageCollectorSettings(
+                update_interval=86400,
+                enabled=False,
+                maintenances=MaintenanceGcSettings(delete_empty=True),
+            )
+        ),
+    )
+    assert settings.process.garbage_collector.maintenances.delete_empty is True

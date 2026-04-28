@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from pathlib import Path
 from typing import Annotated
 from typing import Any
@@ -168,3 +169,14 @@ def hosts_to_json(hosts: list[Host], indent: int = 2) -> str:
 def print_hosts(hosts: list[Host], indent: int = 2) -> None:
     """Print a list of Host objects to stdout as JSON."""
     print(hosts_to_json(hosts, indent=indent))
+
+
+class HostPendingDeletion(BaseModel):
+    """A disabled host that is pending deletion.
+
+    Used by garbage collector to keep track of disabled hosts and when to delete them.
+    """
+
+    host_id: str
+    hostname: str
+    disabled_at: datetime.datetime
