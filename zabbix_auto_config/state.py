@@ -30,6 +30,7 @@ class State(BaseModel):
         total_duration: Cumulative execution time of all runs.
         max_duration: Longest execution time observed.
         last_duration_warning: When the last warning about long execution was logged.
+        next_update: When the process is scheduled to run next.
     """
 
     # Error tracking
@@ -44,6 +45,7 @@ class State(BaseModel):
     total_duration: timedelta = Field(default_factory=timedelta)
     max_duration: timedelta = Field(default_factory=timedelta)
     last_duration_warning: Optional[datetime] = None
+    next_update: Optional[datetime] = None
 
     @field_serializer("total_duration", "max_duration", when_used="json")
     def _serialize_timedelta(self, value: timedelta) -> float:
@@ -75,15 +77,17 @@ class State(BaseModel):
         self.error_time = time.time()
         self.error_count += 1
 
-    def record_execution(self, duration: timedelta) -> None:
+    def record_execution(self, duration: timedelta, next_update: datetime) -> None:
         """Record metrics for a process execution.
 
         Args:
             duration (timedelta): The duration of the execution that just completed.
+            next_update (datetime): The time the process is scheduled to run next.
         """
         self.execution_count += 1
         self.total_duration += duration
         self.max_duration = max(self.max_duration, duration)
+        self.next_update = next_update
 
     @property
     def avg_duration(self) -> Optional[timedelta]:

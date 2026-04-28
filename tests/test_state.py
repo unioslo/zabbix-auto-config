@@ -159,6 +159,7 @@ def test_state_asdict_ok(use_manager: bool) -> None:
             "total_duration": 0.0,
             "max_duration": 0.0,
             "last_duration_warning": None,
+            "next_update": None,
         }
     )
 
@@ -194,6 +195,7 @@ def test_state_asdict_error(use_manager: bool) -> None:
             "total_duration": 0.0,
             "max_duration": 0.0,
             "last_duration_warning": None,
+            "next_update": None,
         }
     )
 
@@ -201,22 +203,24 @@ def test_state_asdict_error(use_manager: bool) -> None:
 def test_state_record_execution() -> None:
     state = State()
 
+    next_update = datetime.datetime(2021, 1, 1, 0, 0, 0)
+
     # Add 1 second execution
-    state.record_execution(datetime.timedelta(seconds=1))
+    state.record_execution(datetime.timedelta(seconds=1), next_update)
     assert state.execution_count == 1
     assert state.total_duration == datetime.timedelta(seconds=1)
     assert state.max_duration == datetime.timedelta(seconds=1)
     assert state.avg_duration == datetime.timedelta(seconds=1 / 1)
 
     # Add 2 second execution
-    state.record_execution(datetime.timedelta(seconds=2))
+    state.record_execution(datetime.timedelta(seconds=2), next_update)
     assert state.execution_count == 2
     assert state.total_duration == datetime.timedelta(seconds=3)
     assert state.max_duration == datetime.timedelta(seconds=2)
     assert state.avg_duration == datetime.timedelta(seconds=3 / 2)
 
     # Add 1 second execution
-    state.record_execution(datetime.timedelta(seconds=1))
+    state.record_execution(datetime.timedelta(seconds=1), next_update)
     assert state.execution_count == 3
     assert state.total_duration == datetime.timedelta(seconds=4)
     assert state.max_duration == datetime.timedelta(seconds=2)
