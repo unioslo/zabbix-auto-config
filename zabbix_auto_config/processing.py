@@ -101,6 +101,12 @@ class BaseProcess(multiprocessing.Process):
     def run(self) -> None:
         logger.debug("Process starting")
 
+        # NOTE: a bit awkward to manually assign this here
+        # but we need to assign it here because otherwise scheduled
+        # runs would not have their next_update time recorded until
+        # after they had run once!
+        self.state.next_update = self.next_update
+
         with SignalHandler(self.stop_event):
             while not self.stop_event.is_set():
                 parent_process = multiprocessing.parent_process()
@@ -144,7 +150,7 @@ class BaseProcess(multiprocessing.Process):
                     self.state.set_ok()
 
                 work_duration = datetime.now() - start_time
-                self.state.record_execution(work_duration)
+                self.state.record_execution(work_duration, self.next_update)
 
                 # Only warn about long-running tasks if:
                 # 1. Interval is non-zero (not continuous processing)
