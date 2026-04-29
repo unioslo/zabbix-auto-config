@@ -341,7 +341,7 @@ zac
 
 ### Mock environment
 
-A ZAC environment with a set of mock source collectors, host modifiers, and mapping files is included in the [examples](./examples) directory. The [sample config file](./config.sample.toml) comes pre-configured with these activated.
+A ZAC environment with a set of mock source collectors, host modifiers, and mapping files is included in the [example](./example) directory. The [sample config file](./config.sample.toml) comes pre-configured with these activated.
 
 Rename the sample config file to `config.toml` (and optionally move it to the configuration directory) to use it:
 
