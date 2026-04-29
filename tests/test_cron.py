@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
-
 from zabbix_auto_config.cron import get_iter
 
 START_TIME = datetime(2021, 1, 1, 0, 0, 0)  # Friday
