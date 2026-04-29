@@ -615,8 +615,6 @@ The garbage collector currently does the following:
   - Deletes maintenances that only contain disabled hosts.
 - Deletes disabled hosts after a certain period of time (configurable).
 
-
-
 #### Configuration
 
 To enable garbage collection, add the following to your config:
@@ -626,17 +624,23 @@ To enable garbage collection, add the following to your config:
 enabled = True
 ```
 
-By default, the garbage collector runs immediately on startup, then every 24 hours. You can replace this with a cron schedule:
+By default, the garbage collector runs every day at midnight. This can be configured with the `schedule` option, which accepts a cron expression:
 
 ```toml
 [zac.process.garbage_collector]
 schedule = "0 0 * * *" # every day at midnight
-enabled = True
 ```
 
 When a schedule is set, the garbage collector skips the immediate startup run and fires only when the cron expression matches.
 
-All cron expressions supported by [croniter](https://pypi.org/project/croniter/) are supported.
+Vixie cron-style expressions are also supported:
+
+```toml
+[zac.process.garbage_collector]
+schedule = "@weekly" # every sunday at midnight
+```
+
+All cron expressions supported by [croniter](https://pypi.org/project/croniter/) can be used. Refer to the croniter documentation for more information on supported cron expressions.
 
 
 #### Maintenance cleanup

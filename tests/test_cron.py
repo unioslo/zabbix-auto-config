@@ -81,8 +81,50 @@ START_TIME = datetime(2021, 1, 1, 0, 0, 0)  # Friday
                 datetime(2021, 1, 31, 6, 30, 0),
             ],
         ),
+        # NOTE: Testing 7 as Sunday behavior (should be supported)
+        (
+            "30 6 * * 7",  # every Sunday at 06:30; next Sunday from start is 2021-01-03
+            [
+                datetime(2021, 1, 3, 6, 30, 0),
+                datetime(2021, 1, 10, 6, 30, 0),
+                datetime(2021, 1, 17, 6, 30, 0),
+                datetime(2021, 1, 24, 6, 30, 0),
+                datetime(2021, 1, 31, 6, 30, 0),
+            ],
+        ),
         (
             "0 0 1 * *",  # first day of each month at midnight
+            [
+                datetime(2021, 2, 1, 0, 0, 0),
+                datetime(2021, 3, 1, 0, 0, 0),
+                datetime(2021, 4, 1, 0, 0, 0),
+                datetime(2021, 5, 1, 0, 0, 0),
+                datetime(2021, 6, 1, 0, 0, 0),
+            ],
+        ),
+        # Vixie Cron-style @ keywords
+        (
+            "@midnight",  # first day of each month at midnight
+            [
+                datetime(2021, 1, 2, 0, 0, 0),
+                datetime(2021, 1, 3, 0, 0, 0),
+                datetime(2021, 1, 4, 0, 0, 0),
+                datetime(2021, 1, 5, 0, 0, 0),
+                datetime(2021, 1, 6, 0, 0, 0),
+            ],
+        ),
+        (
+            "@weekly",  # Every week at Sunday midnight; next Sunday from start is 2021-01-03
+            [
+                datetime(2021, 1, 3, 0, 0, 0),
+                datetime(2021, 1, 10, 0, 0, 0),
+                datetime(2021, 1, 17, 0, 0, 0),
+                datetime(2021, 1, 24, 0, 0, 0),
+                datetime(2021, 1, 31, 0, 0, 0),
+            ],
+        ),
+        (
+            "@monthly",  # Every month at midnight; next month from start is 2021-02-01
             [
                 datetime(2021, 2, 1, 0, 0, 0),
                 datetime(2021, 3, 1, 0, 0, 0),
@@ -106,6 +148,9 @@ def test_get_iter(schedule: str, values: list[datetime]):
         "* * * *",  # too few fields
         "60 * * * *",  # minute out of range
         "* 25 * * *",  # hour out of range
+        "* * 32 * *",  # day of month out of range
+        "* * * 13 *",  # month out of range
+        "* * * * 8",  # day of week out of range
     ],
 )
 def test_get_iter_invalid(schedule: str):
