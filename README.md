@@ -607,7 +607,7 @@ Zac manages only inventory properties configured as `managed_inventory` in `conf
 
 ### Garbage Collection
 
-ZAC provides an optional Zabbix garbage collection module that cleans up stale data from Zabbix that is not otherwise managed by ZAC, such as maintenances.
+ZAC provides an optional Zabbix garbage collection module that cleans up stale data from Zabbix that is not otherwise managed by ZAC, such as maintenances and disabled hosts.
 
 The garbage collector currently does the following:
 
@@ -631,8 +631,6 @@ By default, the garbage collector runs every day at midnight. This can be config
 schedule = "0 0 * * *" # every day at midnight
 ```
 
-When a schedule is set, the garbage collector skips the immediate startup run and fires only when the cron expression matches.
-
 Vixie cron-style expressions are also supported:
 
 ```toml
@@ -641,6 +639,9 @@ schedule = "@weekly" # every sunday at midnight
 ```
 
 All cron expressions supported by [croniter](https://pypi.org/project/croniter/) can be used. Refer to the croniter documentation for more information on supported cron expressions.
+
+> [!WARNING]
+> If your garbage collector config uses `update_interval` from an older config, switch to `schedule` instead. `update_interval` is still supported for backwards compatibility, but may be removed in a future major version.
 
 
 #### Maintenance cleanup

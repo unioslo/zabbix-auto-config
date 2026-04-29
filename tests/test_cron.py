@@ -104,7 +104,7 @@ START_TIME = datetime(2021, 1, 1, 0, 0, 0)  # Friday
         ),
         # Vixie Cron-style @ keywords
         (
-            "@midnight",  # first day of each month at midnight
+            "@midnight",  # every day at midnight
             [
                 datetime(2021, 1, 2, 0, 0, 0),
                 datetime(2021, 1, 3, 0, 0, 0),
