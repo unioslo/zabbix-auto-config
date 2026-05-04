@@ -1726,6 +1726,48 @@ class ZabbixHostUpdater(ZabbixUpdater):
                         ignored_inventory=ignored_inventory,
                     )
 
+    def _sync_macros(self, db_host: models.Host, zabbix_host: Host) -> None:
+        """Sync macros of a Zabbix host with the macros defined on the DB host."""
+        log = logger.bind(host=zabbix_host.host, hostid=zabbix_host.hostid)
+        # HACK: in order to sync macros using the ZabbixHostGroupUpdater
+        # instead of making another process (i.e. ZabbixHostMacroUpdater),
+        # we determine macros here based on the mapping file, then compare them
+        # with the macros from the Zabbix host
+        current_macros = {macro.macro: macro for macro in zabbix_host.macros}
+        property_macros = get_property_macros(db_host.properties)
+
+        macros_to_remove = set(current_macros) - set(db_macros)
+        macros_to_add = set(db_macros) - set(current_macros)
+        macros_to_update = {
+            macro
+            for macro in set(db_macros).intersection(set(current_macros))
+            if db_host.macros[macro] != current_macros[macro].value
+        }
+
+        if macros_to_remove:
+            log.debug("Going to remove macros", macros=macros_to_remove)
+            self.api.delete_host_macro(
+                zabbix_host,
+                [current_macros[macro] for macro in macros_to_remove],
+            )
+        if macros_to_add:
+            log.debug("Going to add macros", macros=macros_to_add)
+            self.api.create_host_macro(
+                zabbix_host,
+                [
+                    HostMacro(macro=macro, value=db_host.macros[macro])
+                    for macro in macros_to_add
+                ],
+            )
+        if macros_to_update:
+            log.debug("Going to update macros", macros=macros_to_update)
+            for macro in macros_to_update:
+                self.api.update_host_macro(
+                    zabbix_host,
+                    current_macros[macro],
+                    value=db_host.macros[macro],
+                )
+
     def _update_host(
         self, db_host: models.Host, zabbix_host: Host, zabbix_proxies: dict[str, Proxy]
     ) -> None:
@@ -1734,6 +1776,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         self._sync_interfaces(db_host, zabbix_host)
         self._sync_tags(db_host, zabbix_host)
         self._sync_inventory(db_host, zabbix_host)
+        self._sync_macros(db_host, zabbix_host)
 
     def do_update(self) -> None:
         db_hosts = self.get_db_hosts()
@@ -1747,6 +1790,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             select_templates=True,
             select_tags=True,
             select_groups=True,
+            select_macros=True,
         )
         zabbix_hosts = {host.host: host for host in zhosts}
 

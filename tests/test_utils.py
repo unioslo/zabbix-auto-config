@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import timedelta
 from ipaddress import IPv4Address
 from ipaddress import IPv6Address
@@ -281,3 +282,63 @@ def test_mapping_values_with_prefix_no_prefix_separator(
 )
 def test_format_timedelta(inp: timedelta, expected: str):
     assert utils.format_timedelta(inp) == expected
+
+
+@pytest.mark.parametrize(
+    "macro_name,expected",
+    [
+        # Valid cases
+        ("{$MACRO}", True),
+        ("{$MACRO_2}", True),
+        ("{$MACRO_UNDERSCORE}", True),
+        ("{$MACRO_UNDERSCORE2}", True),
+        ("{$NAME_WITH_MANY_UNDERSCORES}", True),
+        # Edge cases (are valid, but probably shouldn't be!)
+        ("{$_}", True),
+        ("{$_____}", True),
+        ("{$._._._.}", True),
+        ("{$.}", True),
+        # Invalid cases
+        ("{$MACRO_FOREIGN_CHAR_Æ}", False),
+        ("{$ÆØÅ}", False),
+        ("{$MACRO-WITH-DASH}", False),
+        ("{$NO_ENDING_BRACE", False),
+        ("$NO_STARTING_BRACE}", False),
+        ("{NO_DOLLAR_SIGN}", False),
+        ("{$}", False),
+    ],
+)
+def test_is_valid_macro_name(macro_name: str, expected: bool):
+    assert utils.is_valid_macro_name(macro_name) == expected
+
+
+SAMPLE_PROPERTY_MACRO_MAP = """\
+text:
+  "{$OS}":
+    os_linux: Linux
+    os_windows: Windows
+  "{$ENV}":
+    env_prod: Production
+    env_dev: Development
+
+regex:
+  "{$SPAM}":
+    foo_prop: spam_val_1
+    bar_prop: spam_val_2
+  "{$INVALID_MACRO}":
+    invalid_value: Value
+  "{$MACRO_WITH_INVALID_REGEX}":
+    invalid_regex: "[a-z"
+"""
+
+
+def test_read_property_macro_map(
+    tmp_path: Path, log_output: structlog.testing.LogCapture
+):
+    tmpfile = tmp_path / "property_macro_map.txt"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        SAMPLE_PROPERTY_MACRO_MAP,
+        encoding="utf-8",
+    )
+    m = utils.read_property_macro_map(tmpfile)
+    assert asdict(m) == snapshot()
