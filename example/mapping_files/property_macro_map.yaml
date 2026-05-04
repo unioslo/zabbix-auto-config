@@ -1,0 +1,12 @@
+macros:
+  "{$ZAC.TEST.MACRO}":
+    combine: regex
+    properties:
+      pizza: "pizza value"
+      barry: "barry value"
+
+  "{$ZAC.OTHER.MACRO}":
+    combine: regex
+    description: "This one has a description!"
+    properties:
+      other: "other value"
