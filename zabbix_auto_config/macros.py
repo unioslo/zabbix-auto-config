@@ -252,9 +252,11 @@ class PropertyMacroMapping(BaseModel):
 
         Returned dict is keyed by the Zabbix macro string (including context).
         """
+        # Mapping of macro identity to its definition and all contributing property->value pairs
         per_identity: dict[
             MacroIdentity, tuple[MacroDefinition, list[tuple[str, MacroValue]]]
         ] = {}
+
         seen_props: set[str] = set()
         for prop in properties:
             if prop in seen_props:
@@ -269,9 +271,15 @@ class PropertyMacroMapping(BaseModel):
 
         result: dict[str, ResolvedMacro] = {}
         for identity, (defn, contributions) in per_identity.items():
-            contributions.sort(key=lambda c: c[0])
+            if not contributions:  # safety
+                continue
+
+            # NOTE: the two different sorting calls within each if-branch are a
+            # code smell, but we need to deduplicate values for regex combine,
+            # which would break the sorting order if we sorted before deduplication.
 
             if defn.combine == CombineStrategy.TEXT:
+                contributions.sort(key=lambda c: c[1].value)
                 winning_prop, mv = contributions[0]
                 if len(contributions) > 1:
                     logger.warning(
@@ -283,7 +291,8 @@ class PropertyMacroMapping(BaseModel):
                 resolved_value = mv.value
                 description = mv.description or defn.description
             else:  # REGEX
-                values = [mv.value for _, mv in contributions]
+                # Deduplicate values
+                values = sorted({mv.value for _, mv in contributions})
                 resolved_value = (
                     f"({'|'.join(values)})" if len(values) > 1 else values[0]
                 )
