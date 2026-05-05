@@ -163,14 +163,17 @@ class PropertyValueIn(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _coerce_scalar(cls, data: Any) -> Any:
-        """Coerce a single scalar value to the expanded form with a 'value' key."""
-        if isinstance(data, (str, int, float, bool)):
+        """Coerce a single scalar value to the expanded form with a 'value' key.
+
+        Allows property values to be defined as a single value or as
+        a mapping with additional metadata like description."""
+        if isinstance(data, (str, int, float, bool)):  # no None handling
             return {"value": str(data)}
         return data
 
 
 class MacroContextIn(BaseModel):
-    """A non-default-context variant of a macro definition."""
+    """Macro context from mapping file."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -188,7 +191,7 @@ class MacroContextIn(BaseModel):
 
 
 class MacroDefIn(BaseModel):
-    """Top-level macro definition entry."""
+    """Top-level macro definition entry from mapping file."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -206,7 +209,10 @@ class MacroDefIn(BaseModel):
 
 
 class MacroMapFileIn(BaseModel):
-    """Top-level YAML schema for property-macro mapping files."""
+    """Top-level YAML schema for property-macro mapping files.
+
+    Used for input validation of the property:macro mapping YAML file.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -228,9 +234,18 @@ class PropertyMacroMapping(BaseModel):
     """All macro definitions, indexed by the property names that contribute to them."""
 
     definitions: list[MacroDefinition] = Field(default_factory=list)
+    """List of all macro definitions."""
+
     _by_property: dict[str, list[MacroDefinition]] = PrivateAttr(
         default_factory=lambda: defaultdict(list)
     )
+    """Macros indexed by properties that contribute to them.
+
+    This mapping is populated manually as definitions are added. It is not
+    ideal, as it opens up for inconsistency between the list of macros
+    and the index, but it is necessary to have efficient lookup when dealing
+    with thousands of hosts.
+    """
 
     def add(self, definition: MacroDefinition) -> None:
         self.definitions.append(definition)
