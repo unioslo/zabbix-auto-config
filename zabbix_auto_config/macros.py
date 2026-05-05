@@ -15,7 +15,6 @@ from typing import Union
 import structlog.stdlib
 import yaml
 from pydantic import BaseModel
-from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import PrivateAttr
 from pydantic import field_validator
@@ -155,8 +154,6 @@ class ResolvedMacro:
 class PropertyValueIn(BaseModel):
     """Per-property value entry. Accepts scalar shorthand or expanded form."""
 
-    model_config = ConfigDict(extra="forbid")
-
     value: str
     description: Optional[str] = None
 
@@ -175,8 +172,6 @@ class PropertyValueIn(BaseModel):
 class MacroContextIn(BaseModel):
     """Macro context from mapping file."""
 
-    model_config = ConfigDict(extra="forbid")
-
     context: str
     context_type: ContextType = ContextType.STATIC
     combine: CombineStrategy = CombineStrategy.TEXT
@@ -192,8 +187,6 @@ class MacroContextIn(BaseModel):
 
 class MacroDefIn(BaseModel):
     """Top-level macro definition entry from mapping file."""
-
-    model_config = ConfigDict(extra="forbid")
 
     description: Optional[str] = None
     type: MacroType = MacroType.TEXT
@@ -214,8 +207,6 @@ class MacroMapFileIn(BaseModel):
     Used for input validation of the property:macro mapping YAML file.
     """
 
-    model_config = ConfigDict(extra="forbid")
-
     macros: dict[str, MacroDefIn] = Field(default_factory=dict)
 
     @field_validator("macros")
@@ -233,6 +224,7 @@ class MacroMapFileIn(BaseModel):
 class PropertyMacroMapping(BaseModel):
     """All macro definitions, indexed by the property names that contribute to them."""
 
+    # TODO: remove this list!! It's unused!
     definitions: list[MacroDefinition] = Field(default_factory=list)
     """List of all macro definitions."""
 
