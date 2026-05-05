@@ -181,7 +181,7 @@ class MacroContextIn(BaseModel):
     context_type: ContextType = ContextType.STATIC
     combine: CombineStrategy = CombineStrategy.TEXT
     description: Optional[str] = None
-    properties: dict[str, PropertyValueIn]
+    properties: dict[str, PropertyValueIn] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _validate_regex_context(self) -> MacroContextIn:
@@ -396,6 +396,15 @@ def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
             )
 
         for variant in macro_def.contexts:
+            if not variant.properties:
+                logger.warning(
+                    "Macro context variant has no properties; skipping",
+                    file=str(path),
+                    macro_name=name,
+                    context=variant.context,
+                )
+                continue
+
             register(
                 MacroDefinition(
                     identity=MacroIdentity(

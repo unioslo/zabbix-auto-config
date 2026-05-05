@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import structlog
 from inline_snapshot import snapshot
+from zabbix_auto_config.macros import ContextType
 from zabbix_auto_config.macros import MacroIdentity
 from zabbix_auto_config.macros import ResolvedMacro
 from zabbix_auto_config.macros import is_valid_macro_name
@@ -80,15 +80,8 @@ def sample_property_macro_map_path(tmp_path: Path):
     yield p
 
 
-def test_read_property_macro_map(
-    tmp_path: Path, log_output: structlog.testing.LogCapture
-):
-    tmpfile = tmp_path / "property_macro_map.txt"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
-        SAMPLE_PROPERTY_MACRO_MAP,
-        encoding="utf-8",
-    )
-    m = read_property_macro_map(tmpfile)
+def test_read_property_macro_map(sample_property_macro_map_path: Path):
+    m = read_property_macro_map(sample_property_macro_map_path)
 
     # Dump internal representation of the property macro map
     assert m.model_dump_json(indent=2) == snapshot("""\
@@ -239,6 +232,63 @@ def test_property_macro_map_get_macros(sample_property_macro_map_path: Path):
         {
             "{$SPAM}": ResolvedMacro(
                 identity=MacroIdentity(name="{$SPAM}"), value="(spam_val_1|spam_val_2)"
+            )
+        }
+    )
+    # Macros with text context
+    assert m.get_macros(["role_app"]) == snapshot(
+        {
+            "{$LOW_SPACE_LIMIT:/tmp}": ResolvedMacro(
+                identity=MacroIdentity(name="{$LOW_SPACE_LIMIT}", context="/tmp"),
+                value="20",
+                description="Low disk space % threshold",
+            )
+        }
+    )
+    # Macros with regex context
+    assert m.get_macros(["baz_prop"]) == snapshot(
+        {
+            '{$LOW_SPACE_LIMIT:regex:"^/var/log/.*$"}': ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$LOW_SPACE_LIMIT}",
+                    context="^/var/log/.*$",
+                    context_type=ContextType.REGEX,
+                ),
+                value="30",
+                description="Low disk space % threshold",
+            )
+        }
+    )
+    # Macros with two different contexts (text and regex)
+    assert m.get_macros(["role_app", "baz_prop"]) == snapshot(
+        {
+            "{$LOW_SPACE_LIMIT:/tmp}": ResolvedMacro(
+                identity=MacroIdentity(name="{$LOW_SPACE_LIMIT}", context="/tmp"),
+                value="20",
+                description="Low disk space % threshold",
+            ),
+            '{$LOW_SPACE_LIMIT:regex:"^/var/log/.*$"}': ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$LOW_SPACE_LIMIT}",
+                    context="^/var/log/.*$",
+                    context_type=ContextType.REGEX,
+                ),
+                value="30",
+                description="Low disk space % threshold",
+            ),
+        }
+    )
+    # Macros with two regex contexts with different values
+    assert m.get_macros(["baz_prop", "gux_prop"]) == snapshot(
+        {
+            '{$LOW_SPACE_LIMIT:regex:"^/var/log/.*$"}': ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$LOW_SPACE_LIMIT}",
+                    context="^/var/log/.*$",
+                    context_type=ContextType.REGEX,
+                ),
+                value="(30|40)",
+                description="Low disk space % threshold",
             )
         }
     )
