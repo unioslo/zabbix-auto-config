@@ -243,16 +243,6 @@ class PropertyMacroMapping(BaseModel):
         for prop in definition.properties:
             self._by_property[prop].append(definition)
 
-    def get_zabbix_macros(self, properties: Iterable[str]) -> dict[str, str]:
-        """Resolve final macros for the given property set.
-
-        Returned dict is keyed by the Zabbix macro string (including context)
-        and valued by the resolved final macro value (e.g. "foo" or "(v1|v2)"),
-        ready to be sent to Zabbix API.
-        """
-        resolved_map = self.get_macros(properties)
-        return {m.name: m.value for m in resolved_map.values()}
-
     def get_macros(self, properties: Iterable[str]) -> dict[str, ResolvedMacro]:
         """Resolve final macros for the given property set.
 

@@ -293,27 +293,8 @@ def test_property_macro_map_get_macros(sample_property_macro_map_path: Path):
         }
     )
 
-
-def test_property_macro_map_get_zabbix_macros(sample_property_macro_map_path: Path):
-    m = read_property_macro_map(sample_property_macro_map_path)
-    assert m.get_zabbix_macros(["os_linux"]) == snapshot(
-        {
-            "{$OS}": "Linux",
-        }
-    )
-    assert m.get_zabbix_macros(["os_linux", "os_bsd"]) == snapshot(
-        {
-            "{$OS}": "BSD",
-        }
-    )
-    assert m.get_zabbix_macros(["foo_prop", "bar_prop"]) == snapshot(
-        {
-            "{$SPAM}": "(spam_val_1|spam_val_2)",
-        }
-    )
-
     # Combine everything
-    assert m.get_zabbix_macros(
+    assert m.get_macros(
         [
             "os_linux",
             "os_bsd",
@@ -325,24 +306,46 @@ def test_property_macro_map_get_zabbix_macros(sample_property_macro_map_path: Pa
         ]
     ) == snapshot(
         {
-            "{$OS}": "BSD",
-            "{$SPAM}": "(spam_val_1|spam_val_2)",
-            "{$LOW_SPACE_LIMIT}": "10",
-            "{$LOW_SPACE_LIMIT:/tmp}": "20",
-            '{$LOW_SPACE_LIMIT:regex:"^/var/log/.*$"}': "40",
+            "{$OS}": ResolvedMacro(
+                identity=MacroIdentity(name="{$OS}"),
+                value="BSD",
+                description="BSD override",
+            ),
+            "{$SPAM}": ResolvedMacro(
+                identity=MacroIdentity(name="{$SPAM}"), value="(spam_val_1|spam_val_2)"
+            ),
+            "{$LOW_SPACE_LIMIT}": ResolvedMacro(
+                identity=MacroIdentity(name="{$LOW_SPACE_LIMIT}"),
+                value="10",
+                description="Low disk space % threshold",
+            ),
+            "{$LOW_SPACE_LIMIT:/tmp}": ResolvedMacro(
+                identity=MacroIdentity(name="{$LOW_SPACE_LIMIT}", context="/tmp"),
+                value="20",
+                description="Low disk space % threshold",
+            ),
+            '{$LOW_SPACE_LIMIT:regex:"^/var/log/.*$"}': ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$LOW_SPACE_LIMIT}",
+                    context="^/var/log/.*$",
+                    context_type=ContextType.REGEX,
+                ),
+                value="40",
+                description="Low disk space % threshold",
+            ),
         }
     )
 
 
-def contains_valid_regex(macros: dict[str, str]) -> bool:
+def contains_valid_regex(macros: dict[str, ResolvedMacro]) -> bool:
     """Ensure mapping contains valid regex patterns for all macros (if any)."""
     import re
 
-    for macro, pattern in macros.items():
+    for name, macro in macros.items():
         try:
-            re.compile(pattern)
+            re.compile(macro.value)
         except re.error:
-            pytest.fail(f"Invalid regex pattern for macro {macro}: {pattern}")
+            pytest.fail(f"Invalid regex pattern for macro {name}: {macro.value}")
     return True
 
 
@@ -364,14 +367,26 @@ macros:
     m = read_property_macro_map(tmpfile)
 
     # Resolve to single value
-    macros = m.get_zabbix_macros(["default_db", "is_pgsql_server"])
-    assert macros == snapshot({"{$SYSTEMD.NAME.SERVICE.MATCHES}": "postgresql"})
+    macros = m.get_macros(["default_db", "is_pgsql_server"])
+    assert macros == snapshot(
+        {
+            "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
+                identity=MacroIdentity(name="{$SYSTEMD.NAME.SERVICE.MATCHES}"),
+                value="postgresql",
+            )
+        }
+    )
     assert contains_valid_regex(macros)
 
     # Resolve to simple OR regex pattern
-    macros = m.get_zabbix_macros(["default_db", "is_pgsql_server", "zabbix_agent"])
+    macros = m.get_macros(["default_db", "is_pgsql_server", "zabbix_agent"])
     assert macros == snapshot(
-        {"{$SYSTEMD.NAME.SERVICE.MATCHES}": "(postgresql|zabbix-agent)"}
+        {
+            "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
+                identity=MacroIdentity(name="{$SYSTEMD.NAME.SERVICE.MATCHES}"),
+                value="(postgresql|zabbix-agent)",
+            )
+        }
     )
     assert contains_valid_regex(macros)
 
@@ -393,10 +408,13 @@ macros:
     m = read_property_macro_map(tmpfile)
 
     # Test that duplicate values are deduplicated for regex macros
-    macros = m.get_zabbix_macros(["default_db", "is_pgsql_server", "zabbix_agent"])
+    macros = m.get_macros(["default_db", "is_pgsql_server", "zabbix_agent"])
     assert macros == snapshot(
         {
-            "{$SYSTEMD.NAME.SERVICE.MATCHES}": "(^postgresql(\\d+)?$|^zabbix-agent(\\d+)?$)"
+            "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
+                identity=MacroIdentity(name="{$SYSTEMD.NAME.SERVICE.MATCHES}"),
+                value="(^postgresql(\\d+)?$|^zabbix-agent(\\d+)?$)",
+            )
         }
     )
     assert contains_valid_regex(macros)
@@ -421,8 +439,15 @@ macros:
     m = read_property_macro_map(tmpfile)
 
     # Test that duplicate values are deduplicated for regex macros
-    macros = m.get_zabbix_macros(["default_db", "is_pgsql_server"])
-    assert macros == snapshot({"{$SYSTEMD.NAME.SERVICE.MATCHES}": "postgresql"})
+    macros = m.get_macros(["default_db", "is_pgsql_server"])
+    assert macros == snapshot(
+        {
+            "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
+                identity=MacroIdentity(name="{$SYSTEMD.NAME.SERVICE.MATCHES}"),
+                value="postgresql",
+            )
+        }
+    )
     assert contains_valid_regex(macros)
 
 
@@ -444,33 +469,58 @@ macros:
     m = read_property_macro_map(tmpfile)
 
     # Combinations of regex patterns
-    macros = m.get_zabbix_macros(["is_pgsql_server", "zabbix_agent"])
+    macros = m.get_macros(["is_pgsql_server", "zabbix_agent"])
     assert macros == snapshot(
         {
-            "{$SYSTEMD.NAME.SERVICE.MATCHES}": "(^postgresql(\\d+)?$|^zabbix-agent(\\d+)?$)"
+            "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
+                identity=MacroIdentity(name="{$SYSTEMD.NAME.SERVICE.MATCHES}"),
+                value="(^postgresql(\\d+)?$|^zabbix-agent(\\d+)?$)",
+            )
         }
     )
     assert contains_valid_regex(macros)
 
-    macros = m.get_zabbix_macros(["zabbix_agent", "use_zabbix_agent2"])
+    macros = m.get_macros(["zabbix_agent", "use_zabbix_agent2"])
     assert macros == snapshot(
-        {"{$SYSTEMD.NAME.SERVICE.MATCHES}": "(^zabbix-agent(\\d+)?$|^zabbix-agent2$)"}
+        {
+            "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
+                identity=MacroIdentity(name="{$SYSTEMD.NAME.SERVICE.MATCHES}"),
+                value="(^zabbix-agent(\\d+)?$|^zabbix-agent2$)",
+            )
+        }
     )
     assert contains_valid_regex(macros)
 
     # Individual regex patterns
-    macros = m.get_zabbix_macros(["zabbix_agent"])
+    macros = m.get_macros(["zabbix_agent"])
     assert macros == snapshot(
-        {"{$SYSTEMD.NAME.SERVICE.MATCHES}": "^zabbix-agent(\\d+)?$"}
+        {
+            "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
+                identity=MacroIdentity(name="{$SYSTEMD.NAME.SERVICE.MATCHES}"),
+                value="^zabbix-agent(\\d+)?$",
+            )
+        }
     )
     assert contains_valid_regex(macros)
 
-    macros = m.get_zabbix_macros(["use_zabbix_agent2"])
-    assert macros == snapshot({"{$SYSTEMD.NAME.SERVICE.MATCHES}": "^zabbix-agent2$"})
+    macros = m.get_macros(["use_zabbix_agent2"])
+    assert macros == snapshot(
+        {
+            "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
+                identity=MacroIdentity(name="{$SYSTEMD.NAME.SERVICE.MATCHES}"),
+                value="^zabbix-agent2$",
+            )
+        }
+    )
     assert contains_valid_regex(macros)
 
-    macros = m.get_zabbix_macros(["is_pgsql_server"])
+    macros = m.get_macros(["is_pgsql_server"])
     assert macros == snapshot(
-        {"{$SYSTEMD.NAME.SERVICE.MATCHES}": "^postgresql(\\d+)?$"}
+        {
+            "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
+                identity=MacroIdentity(name="{$SYSTEMD.NAME.SERVICE.MATCHES}"),
+                value="^postgresql(\\d+)?$",
+            )
+        }
     )
     assert contains_valid_regex(macros)
