@@ -10,3 +10,19 @@ macros:
     description: "This one has a description!"
     properties:
       other: "other value"
+
+  "{$ZAC.OPTIONAL.CONTEXT.MACRO}":
+    description: "This macro has contexts, but is optional"
+    properties:
+      role_default: "default value for role context"
+      role_web: "value for web role context"
+    contexts:
+      - context: "/tmp" # text context (exact match)
+        properties:
+          role_app: 20
+      - context: "^/var/log/.*$" # regex context
+        context_type: regex # marks the context as regex
+        combine: regex # combine strategy
+        properties:
+          baz_prop: 30
+          gux_prop: 40
