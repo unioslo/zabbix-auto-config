@@ -167,7 +167,7 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
       },
       "description": "Low disk space % threshold",
       "macro_type": "text",
-      "combine": "regex",
+      "combine": "text",
       "properties": {
         "baz_prop": {
           "value": "30",
@@ -287,7 +287,7 @@ def test_property_macro_map_get_macros(sample_property_macro_map_path: Path):
                     context="^/var/log/.*$",
                     context_type=ContextType.REGEX,
                 ),
-                value="(30|40)",
+                value="30",
                 description="Low disk space % threshold",
             )
         }

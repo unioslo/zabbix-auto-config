@@ -174,7 +174,6 @@ class MacroContextIn(BaseModel):
 
     context: str
     context_type: ContextType = ContextType.STATIC
-    combine: CombineStrategy = CombineStrategy.TEXT
     description: Optional[str] = None
     properties: dict[str, PropertyValueIn] = Field(default_factory=dict)
 
@@ -328,7 +327,7 @@ class PropertyMacroMapping(BaseModel):
 
 
 def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
-    """Load and validate a Shape-B property-macro YAML mapping file."""
+    """Load and validate a property:macro YAML mapping file."""
     try:
         with open(path) as f:
             data = yaml.load(f, Loader=_YamlLoader)
@@ -405,8 +404,8 @@ def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
                         context_type=variant.context_type,
                     ),
                     description=variant.description or macro_def.description,
-                    macro_type=macro_def.type,
-                    combine=variant.combine,
+                    macro_type=macro_def.type,  # inherit from parent macro
+                    combine=macro_def.combine,  # inherit from parent macro
                     properties={
                         p: MacroValue(value=pv.value, description=pv.description)
                         for p, pv in variant.properties.items()
