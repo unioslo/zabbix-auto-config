@@ -1384,7 +1384,9 @@ class ZabbixAPI:
 
         return [GlobalMacro(**macro) for macro in result]
 
-    def create_macro(self, host: Host, macro: str, value: str) -> str:
+    def create_macro(
+        self, host: Host, macro: str, value: str, description: str | None = None
+    ) -> str:
         """Create a macro given a host ID, macro name and value."""
         try:
             resp = self.usermacro.create(hostid=host.hostid, macro=macro, value=value)
@@ -1410,10 +1412,15 @@ class ZabbixAPI:
             )
         return resp["globalmacroids"][0]
 
-    def update_macro(self, macroid: str, value: str) -> str:
+    def update_macro(
+        self, macroid: str, value: str, description: str | None = None
+    ) -> str:
         """Update a macro given a macro ID and value."""
+        params: ParamsType = {"hostmacroid": macroid, "value": value}
+        if description is not None:
+            params["description"] = description
         try:
-            resp = self.usermacro.update(hostmacroid=macroid, value=value)
+            resp = self.usermacro.update(**params)
         except ZabbixAPIException as e:
             raise ZabbixAPICallError(f"Failed to update macro with ID {macroid}") from e
         if not resp or not resp.get("hostmacroids"):
@@ -1421,6 +1428,15 @@ class ZabbixAPI:
                 f"No macro ID returned when updating macro with ID {macroid}"
             )
         return resp["hostmacroids"][0]
+
+    def delete_macro(self, macroid: list[str] | str) -> None:
+        """Delete a host macro given its ID."""
+        if isinstance(macroid, str):
+            macroid = [macroid]
+        try:
+            self.usermacro.delete(*macroid)
+        except ZabbixAPIException as e:
+            raise ZabbixAPICallError(f"Failed to delete macro with ID {macroid}") from e
 
     def update_host_inventory(self, host: Host, inventory: dict[str, str]) -> str:
         """Update a host inventory given a host and inventory."""

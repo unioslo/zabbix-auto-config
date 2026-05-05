@@ -95,6 +95,9 @@ class ZabbixSettings(ConfigBaseModel):
 
     tags_prefix: str = "zac_"
     managed_inventory: list[str] = []
+
+    macro_description_prefix: str = "[ZAC]"
+
     failsafe: int = 20
 
     hostgroup_all: str = "All-hosts"

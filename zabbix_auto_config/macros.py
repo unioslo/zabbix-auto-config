@@ -78,7 +78,7 @@ class CombineStrategy(str, Enum):
     """Strategy for combining multiple property contributions to the same macro identity."""
 
     TEXT = "text"  # alphabetically first contributing property wins
-    REGEX = "regex"  # values join into (v1|v2|...)
+    REGEX = "regex"  # values join into (v1|v2|...), values can be regex patterns
 
 
 class MacroType(str, Enum):
@@ -133,6 +133,10 @@ class MacroDefinition:
     combine: CombineStrategy = CombineStrategy.TEXT
     properties: dict[str, MacroValue] = field(default_factory=dict)
 
+    @property
+    def macro(self) -> str:
+        return self.identity.to_zabbix()
+
 
 @dataclass
 class ResolvedMacro:
@@ -144,7 +148,7 @@ class ResolvedMacro:
     macro_type: MacroType = MacroType.TEXT
 
     @property
-    def name(self) -> str:
+    def macro(self) -> str:
         return self.identity.to_zabbix()
 
 
