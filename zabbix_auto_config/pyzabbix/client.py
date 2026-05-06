@@ -1403,18 +1403,6 @@ class ZabbixAPI:
             )
         return resp["hostmacroids"][0]
 
-    def create_global_macro(self, macro: str, value: str) -> str:
-        """Create a global macro given a macro name and value."""
-        try:
-            resp = self.usermacro.createglobal(macro=macro, value=value)
-        except ZabbixAPIException as e:
-            raise ZabbixAPICallError(f"Failed to create global macro {macro!r}.") from e
-        if not resp or not resp.get("globalmacroids"):
-            raise ZabbixNotFoundError(
-                f"No macro ID returned when creating global macro {macro!r}."
-            )
-        return resp["globalmacroids"][0]
-
     def update_macro(
         self, macroid: str, value: str, description: str | None = None
     ) -> str:
@@ -1454,6 +1442,18 @@ class ZabbixAPI:
                 f"No host ID returned when updating inventory for host {host.host!r} (ID {host.hostid})"
             )
         return resp["hostids"][0]
+
+    def create_global_macro(self, macro: str, value: str) -> str:
+        """Create a global macro given a macro name and value."""
+        try:
+            resp = self.usermacro.createglobal(macro=macro, value=value)
+        except ZabbixAPIException as e:
+            raise ZabbixAPICallError(f"Failed to create global macro {macro!r}.") from e
+        if not resp or not resp.get("globalmacroids"):
+            raise ZabbixNotFoundError(
+                f"No macro ID returned when creating global macro {macro!r}."
+            )
+        return resp["globalmacroids"][0]
 
     def update_host_proxy(self, host: Host, proxy: Proxy) -> str:
         """Update a host's proxy."""
