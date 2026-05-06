@@ -51,8 +51,10 @@ macros:
 
   # Macros with context are also supported, and are defined similarly to
   # regular macros, but with an additional "contexts" section.
+  # Context docs: <https://www.zabbix.com/documentation/current/en/manual/config/macros/user_macros_context>
+  #
   # Each context must match one or more properties.
-  # By default, contexts are treated as `combine:text`.
+  # By default, contexts use `combine: text`, just like regular macro definitions.
   #
   # To illustrate:
   # With property "spam", the following macros are created for the host from this definition:
