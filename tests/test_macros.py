@@ -39,37 +39,14 @@ def test_is_valid_macro_name(macro_name: str, expected: bool):
     assert is_valid_macro_name(macro_name) == expected
 
 
-SAMPLE_PROPERTY_MACRO_MAP = """\
-macros:
-  "{$OS}": # non-regex macro with multiple properties
-    description: "Operating system identifier" # custom description
-    properties:
-      os_linux: Linux
-      os_bsd:
-        value: BSD
-        description: "BSD override"
-
-  "{$SPAM}": # regex macro with multiple properties
-    combine: regex
-    properties:
-      foo_prop: spam_val_1
-      bar_prop: spam_val_2
-
-  "{$LOW_SPACE_LIMIT}": # Contains macros with contexts
-    description: "Low disk space % threshold"
-    properties:
-      role_default: 10
-    contexts:
-      - context: "/tmp"
-        properties:
-          role_app: 20
-      - context: "^/var/log/.*$"
-        context_type: regex
-        combine: regex
-        properties:
-          baz_prop: 30
-          gux_prop: 40
-"""
+# Read example mapping file so we know our examples
+# are always up-to-date and are valid.
+SAMPLE_PROPERTY_MACRO_MAP = (
+    Path(__file__).parent.parent
+    / "example"
+    / "mapping_files"
+    / "property_macro_map.yaml"
+).read_text(encoding="utf-8")
 
 
 @pytest.fixture(scope="function")
@@ -89,92 +66,112 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
   "definitions": [
     {
       "identity": {
-        "name": "{$OS}",
-        "context": null,
-        "context_type": "static"
-      },
-      "description": "Operating system identifier",
-      "macro_type": "text",
-      "combine": "text",
-      "properties": {
-        "os_linux": {
-          "value": "Linux",
-          "description": null
-        },
-        "os_bsd": {
-          "value": "BSD",
-          "description": "BSD override"
-        }
-      }
-    },
-    {
-      "identity": {
-        "name": "{$SPAM}",
+        "name": "{$ZAC.TEXT_MACRO}",
         "context": null,
         "context_type": "static"
       },
       "description": null,
       "macro_type": "text",
-      "combine": "regex",
+      "combine": "text",
       "properties": {
-        "foo_prop": {
-          "value": "spam_val_1",
+        "barry": {
+          "value": "barry value",
           "description": null
         },
-        "bar_prop": {
-          "value": "spam_val_2",
+        "pizza": {
+          "value": "pizza value",
+          "description": null
+        },
+        "spam": {
+          "value": "spam value",
           "description": null
         }
       }
     },
     {
       "identity": {
-        "name": "{$LOW_SPACE_LIMIT}",
+        "name": "{$ZAC.REGEX_MACRO}",
         "context": null,
         "context_type": "static"
       },
-      "description": "Low disk space % threshold",
+      "description": "This one has a description!",
+      "macro_type": "text",
+      "combine": "regex",
+      "properties": {
+        "spam": {
+          "value": "spam value",
+          "description": null
+        },
+        "baz": {
+          "value": "bazinga",
+          "description": null
+        },
+        "grok": {
+          "value": "^grok value$",
+          "description": "We can override the description for individual properties as well"
+        }
+      }
+    },
+    {
+      "identity": {
+        "name": "{$ZAC.OPTIONAL_CONTEXT}",
+        "context": null,
+        "context_type": "static"
+      },
+      "description": "This macro has contexts, but is optional",
       "macro_type": "text",
       "combine": "text",
       "properties": {
-        "role_default": {
-          "value": "10",
+        "spam": {
+          "value": "value for non-context spam",
+          "description": null
+        },
+        "eggs": {
+          "value": "value for non-context eggs",
           "description": null
         }
       }
     },
     {
       "identity": {
-        "name": "{$LOW_SPACE_LIMIT}",
+        "name": "{$ZAC.OPTIONAL_CONTEXT}",
         "context": "/tmp",
         "context_type": "static"
       },
-      "description": "Low disk space % threshold",
+      "description": "Description for /tmp context used here",
       "macro_type": "text",
       "combine": "text",
       "properties": {
-        "role_app": {
+        "spam": {
           "value": "20",
+          "description": null
+        },
+        "foo": {
+          "value": "30",
           "description": null
         }
       }
     },
     {
       "identity": {
-        "name": "{$LOW_SPACE_LIMIT}",
+        "name": "{$ZAC.OPTIONAL_CONTEXT}",
         "context": "^/var/log/.*$",
         "context_type": "regex"
       },
-      "description": "Low disk space % threshold",
+      "description": "This macro has contexts, but is optional",
       "macro_type": "text",
       "combine": "text",
       "properties": {
-        "baz_prop": {
+        "spam": {
           "value": "30",
           "description": null
         },
-        "gux_prop": {
+        "bar": {
           "value": "40",
+          "description": null
+        },
+        "gux": {
+          "value": "50",
           "description": null
         }
       }
@@ -186,109 +183,101 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
 
 def test_property_macro_map_get_macros(sample_property_macro_map_path: Path):
     m = read_property_macro_map(sample_property_macro_map_path)
-    assert m.get_macros(["os_linux"]) == snapshot(
-        {
-            "{$OS}": ResolvedMacro(
-                identity=MacroIdentity(name="{$OS}"),
-                value="Linux",
-                description="Operating system identifier",
-            )
-        }
-    )
 
     # Single value for regular non-regex macro
-    assert m.get_macros(["os_linux"]) == snapshot(
+    assert m.get_macros(["pizza"]) == snapshot(
         {
-            "{$OS}": ResolvedMacro(
-                identity=MacroIdentity(name="{$OS}"),
-                value="Linux",
-                description="Operating system identifier",
+            "{$ZAC.TEXT_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.TEXT_MACRO}"), value="pizza value"
             )
         }
     )
 
     # Multiple values for regular non-regex macro - should not combine, since it's not a regex macro
-    assert m.get_macros(["os_linux", "os_bsd"]) == snapshot(
+    assert m.get_macros(["pizza", "barry"]) == snapshot(
         {
-            "{$OS}": ResolvedMacro(
-                identity=MacroIdentity(name="{$OS}"),
-                value="BSD",
-                description="BSD override",
+            "{$ZAC.TEXT_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.TEXT_MACRO}"), value="barry value"
             )
         }
     )
 
     # Single value for macro with regex support
-    assert m.get_macros(["foo_prop"]) == snapshot(
+    assert m.get_macros(["baz"]) == snapshot(
         {
-            "{$SPAM}": ResolvedMacro(
-                identity=MacroIdentity(name="{$SPAM}"), value="spam_val_1"
+            "{$ZAC.REGEX_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.REGEX_MACRO}"),
+                value="bazinga",
+                description="This one has a description!",
             )
         }
     )
 
     # Multiple values for macro with regex support
-    assert m.get_macros(["foo_prop", "bar_prop"]) == snapshot(
+    assert m.get_macros(["baz", "grok"]) == snapshot(
         {
-            "{$SPAM}": ResolvedMacro(
-                identity=MacroIdentity(name="{$SPAM}"), value="(spam_val_1|spam_val_2)"
+            "{$ZAC.REGEX_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.REGEX_MACRO}"),
+                value="(^grok value$|bazinga)",
+                description="We can override the description for individual properties as well",
             )
         }
     )
     # Macros with text context
-    assert m.get_macros(["role_app"]) == snapshot(
+    assert m.get_macros(["foo"]) == snapshot(
         {
-            "{$LOW_SPACE_LIMIT:/tmp}": ResolvedMacro(
-                identity=MacroIdentity(name="{$LOW_SPACE_LIMIT}", context="/tmp"),
-                value="20",
-                description="Low disk space % threshold",
+            "{$ZAC.OPTIONAL_CONTEXT:/tmp}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.OPTIONAL_CONTEXT}", context="/tmp"),
+                value="30",
+                description="Description for /tmp context used here",
             )
         }
     )
     # Macros with regex context
-    assert m.get_macros(["baz_prop"]) == snapshot(
+    assert m.get_macros(["bar"]) == snapshot(
         {
-            '{$LOW_SPACE_LIMIT:regex:"^/var/log/.*$"}': ResolvedMacro(
+            '{$ZAC.OPTIONAL_CONTEXT:regex:"^/var/log/.*$"}': ResolvedMacro(
                 identity=MacroIdentity(
-                    name="{$LOW_SPACE_LIMIT}",
+                    name="{$ZAC.OPTIONAL_CONTEXT}",
                     context="^/var/log/.*$",
                     context_type=ContextType.REGEX,
                 ),
-                value="30",
-                description="Low disk space % threshold",
+                value="40",
+                description="This macro has contexts, but is optional",
             )
         }
     )
     # Macros with two different contexts (text and regex)
-    assert m.get_macros(["role_app", "baz_prop"]) == snapshot(
+    assert m.get_macros(["foo", "bar"]) == snapshot(
         {
-            "{$LOW_SPACE_LIMIT:/tmp}": ResolvedMacro(
-                identity=MacroIdentity(name="{$LOW_SPACE_LIMIT}", context="/tmp"),
-                value="20",
-                description="Low disk space % threshold",
+            "{$ZAC.OPTIONAL_CONTEXT:/tmp}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.OPTIONAL_CONTEXT}", context="/tmp"),
+                value="30",
+                description="Description for /tmp context used here",
             ),
-            '{$LOW_SPACE_LIMIT:regex:"^/var/log/.*$"}': ResolvedMacro(
+            '{$ZAC.OPTIONAL_CONTEXT:regex:"^/var/log/.*$"}': ResolvedMacro(
                 identity=MacroIdentity(
-                    name="{$LOW_SPACE_LIMIT}",
+                    name="{$ZAC.OPTIONAL_CONTEXT}",
                     context="^/var/log/.*$",
                     context_type=ContextType.REGEX,
                 ),
-                value="30",
-                description="Low disk space % threshold",
+                value="40",
+                description="This macro has contexts, but is optional",
             ),
         }
     )
-    # Macros with two regex contexts with different values
-    assert m.get_macros(["baz_prop", "gux_prop"]) == snapshot(
+    # Macros with two regex contexts with different values for a text macro
+    # (alphabetically first is chosen -> "bar" chosen over "gux")
+    assert m.get_macros(["bar", "gux"]) == snapshot(
         {
-            '{$LOW_SPACE_LIMIT:regex:"^/var/log/.*$"}': ResolvedMacro(
+            '{$ZAC.OPTIONAL_CONTEXT:regex:"^/var/log/.*$"}': ResolvedMacro(
                 identity=MacroIdentity(
-                    name="{$LOW_SPACE_LIMIT}",
+                    name="{$ZAC.OPTIONAL_CONTEXT}",
                     context="^/var/log/.*$",
                     context_type=ContextType.REGEX,
                 ),
-                value="30",
-                description="Low disk space % threshold",
+                value="40",
+                description="This macro has contexts, but is optional",
             )
         }
     )
@@ -296,42 +285,44 @@ def test_property_macro_map_get_macros(sample_property_macro_map_path: Path):
     # Combine everything
     assert m.get_macros(
         [
-            "os_linux",
-            "os_bsd",
-            "foo_prop",
-            "bar_prop",
-            "role_default",
-            "role_app",
-            "gux_prop",
+            "pizza",
+            "barry",
+            "spam",
+            "eggs",
+            "ham",
+            "grok",
+            "foo",
+            "bar",
+            "baz",
         ]
     ) == snapshot(
         {
-            "{$OS}": ResolvedMacro(
-                identity=MacroIdentity(name="{$OS}"),
-                value="BSD",
-                description="BSD override",
+            "{$ZAC.TEXT_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.TEXT_MACRO}"), value="barry value"
             ),
-            "{$SPAM}": ResolvedMacro(
-                identity=MacroIdentity(name="{$SPAM}"), value="(spam_val_1|spam_val_2)"
+            "{$ZAC.REGEX_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.REGEX_MACRO}"),
+                value="(^grok value$|bazinga|spam value)",
+                description="We can override the description for individual properties as well",
             ),
-            "{$LOW_SPACE_LIMIT}": ResolvedMacro(
-                identity=MacroIdentity(name="{$LOW_SPACE_LIMIT}"),
-                value="10",
-                description="Low disk space % threshold",
+            "{$ZAC.OPTIONAL_CONTEXT}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.OPTIONAL_CONTEXT}"),
+                value="value for non-context eggs",
+                description="This macro has contexts, but is optional",
             ),
-            "{$LOW_SPACE_LIMIT:/tmp}": ResolvedMacro(
-                identity=MacroIdentity(name="{$LOW_SPACE_LIMIT}", context="/tmp"),
+            "{$ZAC.OPTIONAL_CONTEXT:/tmp}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.OPTIONAL_CONTEXT}", context="/tmp"),
                 value="20",
-                description="Low disk space % threshold",
+                description="Description for /tmp context used here",
             ),
-            '{$LOW_SPACE_LIMIT:regex:"^/var/log/.*$"}': ResolvedMacro(
+            '{$ZAC.OPTIONAL_CONTEXT:regex:"^/var/log/.*$"}': ResolvedMacro(
                 identity=MacroIdentity(
-                    name="{$LOW_SPACE_LIMIT}",
+                    name="{$ZAC.OPTIONAL_CONTEXT}",
                     context="^/var/log/.*$",
                     context_type=ContextType.REGEX,
                 ),
-                value="40",
-                description="Low disk space % threshold",
+                value="30",
+                description="This macro has contexts, but is optional",
             ),
         }
     )

@@ -197,12 +197,6 @@ class MacroDefIn(BaseModel):
     properties: dict[str, PropertyValueIn] = Field(default_factory=dict)
     contexts: list[MacroContextIn] = Field(default_factory=list)
 
-    @model_validator(mode="after")
-    def _require_some_mapping(self) -> MacroDefIn:
-        if not self.properties and not self.contexts:
-            raise ValueError("Macro must define `properties` or `contexts`")
-        return self
-
 
 class MacroMapFileIn(BaseModel):
     """Top-level YAML schema for property-macro mapping files.
@@ -238,8 +232,8 @@ class PropertyMacroMapping(BaseModel):
 
     This mapping is populated manually as definitions are added. It is not
     ideal, as it opens up for inconsistency between the list of macros
-    and the index, but it is necessary to have efficient lookup when dealing
-    with thousands of hosts.
+    and the index, but it is necessary to have efficient lookup by name
+    when dealing with thousands of hosts.
     """
 
     def add(self, definition: MacroDefinition) -> None:
@@ -366,29 +360,33 @@ def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
             )
             continue
 
-        if macro_def.properties:
-            register(
-                MacroDefinition(
-                    identity=MacroIdentity(name=name),
-                    description=macro_def.description,
-                    macro_type=macro_def.type,
-                    combine=macro_def.combine,
-                    properties={
-                        p: MacroValue(value=pv.value, description=pv.description)
-                        for p, pv in macro_def.properties.items()
-                    },
-                )
+        # Register macro
+        if not macro_def.properties:
+            logger.warning(
+                "Macro definition has no properties. Will be used for removal only.",
+                macro_name=name,
             )
+        register(
+            MacroDefinition(
+                identity=MacroIdentity(name=name),
+                description=macro_def.description,
+                macro_type=macro_def.type,
+                combine=macro_def.combine,
+                properties={
+                    p: MacroValue(value=pv.value, description=pv.description)
+                    for p, pv in macro_def.properties.items()
+                },
+            )
+        )
 
+        # Register macro variants with contexts
         for variant in macro_def.contexts:
             if not variant.properties:
                 logger.warning(
-                    "Macro context variant has no properties; skipping",
-                    file=str(path),
+                    "Macro context variant has no properties. Will be used for removal only.",
                     macro_name=name,
                     context=variant.context,
                 )
-                continue
 
             register(
                 MacroDefinition(
