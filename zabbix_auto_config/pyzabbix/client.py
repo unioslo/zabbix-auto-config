@@ -1388,8 +1388,11 @@ class ZabbixAPI:
         self, host: Host, macro: str, value: str, description: str | None = None
     ) -> str:
         """Create a macro given a host ID, macro name and value."""
+        params: ParamsType = {"hostid": host.hostid, "macro": macro, "value": value}
+        if description is not None:
+            params["description"] = description
         try:
-            resp = self.usermacro.create(hostid=host.hostid, macro=macro, value=value)
+            resp = self.usermacro.create(**params)
         except ZabbixAPIException as e:
             raise ZabbixAPICallError(
                 f"Failed to create macro {macro!r} for host {host}"

@@ -1759,9 +1759,11 @@ class ZabbixHostUpdater(ZabbixUpdater):
         # HACK: in order to sync macros using the ZabbixHostGroupUpdater
         # instead of making another process (i.e. ZabbixHostMacroUpdater),
         # we determine macros here based on the mapping file, then compare them
-        # with the macros from the Zabbix host
+        # with the macros from the Zabbix host. Macros are thus NOT synced
+        # to the DB host, and we instead just calculate the desired macro
+        # state here.
 
-        # Only include managed macros
+        # Only include managed macros (macros that are defined in the mapping)
         current_macros = {
             macro.macro: macro
             for macro in zabbix_host.macros
