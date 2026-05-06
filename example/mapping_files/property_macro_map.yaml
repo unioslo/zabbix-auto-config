@@ -1,28 +1,45 @@
 macros:
-  "{$ZAC.TEST.MACRO}":
-    combine: regex
+  "{$ZAC.TEXT_MACRO}":
+    combine: text
     properties:
-      pizza: "pizza value"
       barry: "barry value"
+      pizza: "pizza value"
+      spam: "spam value"
 
-  "{$ZAC.OTHER.MACRO}":
+  "{$ZAC.REGEX_MACRO}":
     combine: regex
     description: "This one has a description!"
     properties:
-      other: "other value"
+      spam: "spam value" # this property is shared by all macros
+      baz: "bazinga"
+      grok:
+        value: "^grok value$" # can be regex pattern
+        description: "We can override the description for individual properties as well"
+  # The mapping supports macros with contexts, which are generated
+  # based on matching properties.
+  # Each context must match one or more properties.
+  # By default, contexts are treated as text, but can also be set to regex.
+  #
+  # To illustrate:
+  # With property "spam", the following macros are created for the host from this definition:
+  # - {$ZAC.OPTIONAL_CONTEXT} -> "value for non-context spam"
+  # - {$ZAC.OPTIONAL_CONTEXT:/tmp} -> 20
+  # - {$ZAC.OPTIONAL_CONTEXT:regex:"^/var/log/.*$"} -> 30
 
-  "{$ZAC.OPTIONAL.CONTEXT.MACRO}":
+  "{$ZAC.OPTIONAL_CONTEXT}":
     description: "This macro has contexts, but is optional"
     properties:
-      role_default: "default value for role context"
-      role_web: "value for web role context"
+      spam: "value for non-context spam"
+      eggs: "value for non-context eggs"
     contexts:
       - context: "/tmp" # text context (exact match)
+        description: "Description for /tmp context used here"
         properties:
-          role_app: 20
+          spam: 20
+          foo: 30 # only used here
       - context: "^/var/log/.*$" # regex context
         context_type: regex # marks the context as regex
-        combine: regex # combine strategy
         properties:
-          baz_prop: 30
-          gux_prop: 40
+          spam: 30
+          bar: 40 # only used here
+          gux: 50 # only used here
