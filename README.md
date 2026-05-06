@@ -699,8 +699,32 @@ Given a host with the properties `is_pgsql_server` and `use_zabbix_agent2`, the 
 
 ##### Macro templates
 
-Some macros require a value such as a DNS name. In these cases, the mapping file can specify a template for how the macro value should be constructed using the `template` field. TODO!
+Some macros require a value such as a DNS name (for all intents and purposes, this is a hostname in Zabbix context). In these cases, the mapping file can specify a template for how the macro value should be constructed using the `template` field.
 
+```yaml
+  "{$NODE.DASHBOARD}":
+    template: "https://grafana.example.com/d/node?var-host={{hostname}}"
+    properties:
+      dashboard_node: # no need to specify a value
+```
+
+More advanced templates are also supported, with multiple placeholders. Each placeholder must have a default defined in the `defaults` field, and can optionally be overridden per property:
+
+```yaml
+  # More advanced patterns can also be defined where each property can
+  # define their own template values. The definition _must_ define
+  # defaults for all template variables used in the macro template.
+  "{$AGENT.URL}":
+    description: "Agent scrape URL"
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+    defaults:
+      port: 9100 # required
+      endpoint: metrics # required
+    properties:
+      monitored_node:           # uses default port 9100
+      legacy_exporter:
+        port: 9101              # overrides default port
+```
 
 ##### Macros with context
 

@@ -8,22 +8,31 @@ from dataclasses import field
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
+from typing import Annotated
 from typing import Any
 from typing import Optional
+from typing import TypedDict
 from typing import Union
 
 import structlog.stdlib
 import yaml
 from pydantic import BaseModel
+from pydantic import BeforeValidator
+from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import PrivateAttr
 from pydantic import field_validator
 from pydantic import model_validator
+from typing_extensions import Self
 
 try:
     from yaml import CSafeLoader as _YamlLoader
 except ImportError:
     from yaml import SafeLoader as _YamlLoader  # type: ignore[assignment]
+
+if TYPE_CHECKING:
+    from zabbix_auto_config.models import Host
 
 logger = structlog.stdlib.get_logger(__name__)
 
@@ -115,12 +124,33 @@ class MacroIdentity:
         return f"{base}:{ctx}" + "}"
 
 
+def validate_template_macro_values(v: Any) -> dict[str, str]:
+    """Coerce a dict of template macro values to string values."""
+    if not isinstance(v, dict):
+        raise ValueError("Expected a dict of template macro values")
+
+    ret: dict[str, str] = {}
+    for k, val in v.items():
+        if not isinstance(val, (str, int, float)):
+            raise ValueError(
+                f"Template macro values must be scalar (str, int, float): {val!r}"
+            )
+        ret[str(k)] = str(val)
+    return ret
+
+
+TemplateMacroValues = Annotated[
+    dict[str, str], BeforeValidator(validate_template_macro_values)
+]
+
+
 @dataclass
 class MacroValue:
     """Value contribution from one property mapping."""
 
-    value: str
+    value: Optional[str] = None
     description: Optional[str] = None
+    extras: TemplateMacroValues = field(default_factory=dict)
 
 
 @dataclass
@@ -131,6 +161,8 @@ class MacroDefinition:
     description: Optional[str] = None
     macro_type: MacroType = MacroType.TEXT
     combine: CombineStrategy = CombineStrategy.TEXT
+    template: Optional[str] = None
+    defaults: TemplateMacroValues = field(default_factory=dict)
     properties: dict[str, MacroValue] = field(default_factory=dict)
 
     @property
@@ -158,8 +190,14 @@ class ResolvedMacro:
 class PropertyValueIn(BaseModel):
     """Per-property value entry. Accepts scalar shorthand or expanded form."""
 
-    value: str
+    value: Optional[str] = None
     description: Optional[str] = None
+
+    model_config = ConfigDict(extra="allow")
+
+    def get_extra_values(self) -> dict[str, Any]:
+        """Get the dict of values to be used for macro resolution."""
+        return self.model_extra or {}
 
     @model_validator(mode="before")
     @classmethod
@@ -168,9 +206,95 @@ class PropertyValueIn(BaseModel):
 
         Allows property values to be defined as a single value or as
         a mapping with additional metadata like description."""
-        if isinstance(data, (str, int, float, bool)):  # no None handling
+        if isinstance(data, (str, int, float, bool)):
             return {"value": str(data)}
+        elif data is None:
+            return {"value": None}
         return data
+
+
+_PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
+
+
+def _apply_template(
+    template: str, subs: TemplateMacroValues, identity: MacroIdentity
+) -> str:
+    """Substitute `{{key}}` placeholders in template using subs."""
+
+    def _replace(m: re.Match[str]) -> str:
+        key = m.group(1)
+        if key in subs:
+            return subs[key]
+        logger.warning(
+            "Unknown template placeholder; leaving as-is",
+            macro=identity.to_zabbix(),
+            placeholder=key,
+        )
+        return m.group(0)
+
+    return _PLACEHOLDER_RE.sub(_replace, template)
+
+
+def _validate_template_props(
+    template: Optional[str],
+    defaults: TemplateMacroValues,
+    properties: dict[str, PropertyValueIn],
+) -> None:
+    """Validate template/defaults/properties consistency.
+
+    Raises ValueError if validation fails. Should only be called by validators that
+    run when the mapping file is read! We don't want to raise ValueErrors
+    during macro resolution for individual hosts.
+    """
+    # Detect if values are defined on macro with no template
+    if template is None:
+        if defaults:
+            raise ValueError("'defaults' set but no 'template' defined")
+        missing = [p for p, pv in properties.items() if pv.value is None]
+        if missing:
+            raise ValueError(
+                f"Properties missing value (no template defined): {missing}"
+            )
+        with_extras = {
+            p: list(pv.get_extra_values())
+            for p, pv in properties.items()
+            if pv.model_extra  # leaking abstraction here... alternative is calling pv.get_extra_values() twice
+        }
+        if with_extras:
+            raise ValueError(
+                f"Properties have extra keys but no template defined: {with_extras}"
+            )
+        return
+
+    # Detect collisions with reserved keys
+    bad_defaults = sorted(k for k in defaults if k in RESERVED_HOST_FACT_KEYS)
+    if bad_defaults:
+        raise ValueError(
+            f"'defaults' keys collide with reserved host facts: {bad_defaults}"
+        )
+    for p, pv in properties.items():
+        if pv.value is not None:
+            raise ValueError(
+                f"Property {p!r} uses scalar shorthand; not allowed with template"
+            )
+        bad_extras = sorted(
+            k for k in pv.get_extra_values() if k in RESERVED_HOST_FACT_KEYS
+        )
+        if bad_extras:
+            raise ValueError(
+                f"Property {p!r} extras collide with reserved host facts: {bad_extras}"
+            )
+
+    # Detect placeholders with no defaults
+    placeholders = set(_PLACEHOLDER_RE.findall(template))
+    missing_per_prop: dict[str, list[str]] = {}
+    for p, pv in properties.items():
+        resolved = set(defaults) | set(pv.get_extra_values()) | RESERVED_HOST_FACT_KEYS
+        missing = sorted(placeholders - resolved)
+        if missing:
+            missing_per_prop[p] = missing
+    if missing_per_prop:
+        raise ValueError(f"Template placeholders not satisfied: {missing_per_prop}")
 
 
 class MacroContextIn(BaseModel):
@@ -179,12 +303,15 @@ class MacroContextIn(BaseModel):
     context: str
     context_type: ContextType = ContextType.STATIC
     description: Optional[str] = None
+    template: Optional[str] = None
+    defaults: TemplateMacroValues = Field(default_factory=dict)
     properties: dict[str, PropertyValueIn] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def _validate_regex_context(self) -> MacroContextIn:
+    def _validate(self) -> Self:
         if self.context_type == ContextType.REGEX and not validate_regexp(self.context):
             raise ValueError(f"Invalid regex context: {self.context!r}")
+        _validate_template_props(self.template, self.defaults, self.properties)
         return self
 
 
@@ -194,8 +321,23 @@ class MacroDefIn(BaseModel):
     description: Optional[str] = None
     type: MacroType = MacroType.TEXT
     combine: CombineStrategy = CombineStrategy.TEXT
+    template: Optional[str] = None
+    defaults: TemplateMacroValues = Field(default_factory=dict)
     properties: dict[str, PropertyValueIn] = Field(default_factory=dict)
     contexts: list[MacroContextIn] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_template(self) -> Self:
+        if self.template is not None and self.combine != CombineStrategy.TEXT:
+            raise ValueError("template macros only support combine=text")
+        for v in self.contexts:
+            if v.template is not None and self.combine != CombineStrategy.TEXT:
+                raise ValueError(
+                    f"context variant {v.context!r} uses template; "
+                    "parent must be combine=text"
+                )
+        _validate_template_props(self.template, self.defaults, self.properties)
+        return self
 
 
 class MacroMapFileIn(BaseModel):
@@ -216,6 +358,27 @@ class MacroMapFileIn(BaseModel):
 
 
 # ----- Property-to-macro mapping (resolved, public API) -----
+
+
+class HostFacts(TypedDict):
+    """Facts about the hosts to construct macros for.
+
+    Used to provide values for templates.
+    """
+
+    hostname: str
+    # future: proxy: NotRequired[str], etc.
+
+
+RESERVED_HOST_FACT_KEYS = frozenset(HostFacts.__annotations__)
+
+
+def get_host_facts(host: Host) -> HostFacts:
+    """Extract host facts from a Host model instance for use in template macros."""
+    return {
+        "hostname": host.hostname,
+        # future: "proxy": host.proxy_pattern, etc.
+    }
 
 
 class PropertyMacroMapping(BaseModel):
@@ -241,7 +404,11 @@ class PropertyMacroMapping(BaseModel):
         for prop in definition.properties:
             self._by_property[prop].append(definition)
 
-    def get_macros(self, properties: Iterable[str]) -> dict[str, ResolvedMacro]:
+    def get_macros(
+        self,
+        properties: Iterable[str],
+        host_facts: HostFacts,
+    ) -> dict[str, ResolvedMacro]:
         """Resolve final macros for the given property set.
 
         Returned dict is keyed by the Zabbix macro string (including context).
@@ -273,7 +440,10 @@ class PropertyMacroMapping(BaseModel):
             # which would break the sorting order if we sorted before deduplication.
 
             if defn.combine == CombineStrategy.TEXT:
-                contributions.sort(key=lambda c: c[1].value)
+                if defn.template is not None:
+                    contributions.sort(key=lambda c: c[0])
+                else:
+                    contributions.sort(key=lambda c: c[1].value or "")
                 winning_prop, mv = contributions[0]
                 if len(contributions) > 1:
                     logger.warning(
@@ -282,11 +452,23 @@ class PropertyMacroMapping(BaseModel):
                         winning_property=winning_prop,
                         ignored_properties=[c[0] for c in contributions[1:]],
                     )
-                resolved_value = mv.value
+                if defn.template is not None:
+                    subs: TemplateMacroValues = {
+                        k: str(v) for k, v in host_facts.items()
+                    }
+                    subs.update(defn.defaults)
+                    subs.update(mv.extras)
+                    resolved_value = _apply_template(defn.template, subs, identity)
+                else:
+                    resolved_value = mv.value or ""
                 description = mv.description or defn.description
             else:  # REGEX
-                # Deduplicate values
-                values = sorted({mv.value for _, mv in contributions})
+                # Deduplicate values (validator guarantees no None values for regex)
+                values = sorted(
+                    {mv.value for _, mv in contributions if mv.value is not None}
+                )
+                if not values:
+                    continue
                 resolved_value = (
                     f"({'|'.join(values)})" if len(values) > 1 else values[0]
                 )
@@ -372,8 +554,14 @@ def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
                 description=macro_def.description,
                 macro_type=macro_def.type,
                 combine=macro_def.combine,
+                template=macro_def.template,
+                defaults=dict(macro_def.defaults),
                 properties={
-                    p: MacroValue(value=pv.value, description=pv.description)
+                    p: MacroValue(
+                        value=pv.value,
+                        description=pv.description,
+                        extras={k: str(v) for k, v in pv.get_extra_values().items()},
+                    )
                     for p, pv in macro_def.properties.items()
                 },
             )
@@ -398,8 +586,16 @@ def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
                     description=variant.description or macro_def.description,
                     macro_type=macro_def.type,  # inherit from parent macro
                     combine=macro_def.combine,  # inherit from parent macro
+                    template=variant.template,
+                    defaults=dict(variant.defaults),
                     properties={
-                        p: MacroValue(value=pv.value, description=pv.description)
+                        p: MacroValue(
+                            value=pv.value,
+                            description=pv.description,
+                            extras={
+                                k: str(v) for k, v in pv.get_extra_values().items()
+                            },
+                        )
                         for p, pv in variant.properties.items()
                     },
                 )

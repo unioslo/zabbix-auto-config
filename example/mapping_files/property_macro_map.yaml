@@ -15,10 +15,11 @@ macros:
       grok:
         value: "^grok value$" # can be regex pattern
         description: "We can override the description for individual properties as well"
-  # The mapping supports macros with contexts, which are generated
-  # based on matching properties.
+
+  # Macros with context are also supported, and are defined similarly to
+  # regular macros, but with an additional "contexts" section.
   # Each context must match one or more properties.
-  # By default, contexts are treated as text, but can also be set to regex.
+  # By default, contexts are treated as `combine:text`.
   #
   # To illustrate:
   # With property "spam", the following macros are created for the host from this definition:
@@ -43,3 +44,23 @@ macros:
           spam: 30
           bar: 40 # only used here
           gux: 50 # only used here
+
+  # Macros can also be rendered using templates, which allows for more complex
+  # macros where value substitution based on the host or per-property is required.
+  "{$NODE.DASHBOARD}":
+    template: "https://grafana.example.com/d/node?var-host={{hostname}}"
+    properties:
+      dashboard_node: # no values to substitute, just uses hostname
+
+  # More advanced patterns can also be defined where each property can
+  # define their own template values. The definition _must_ define
+  # defaults for all template variables used in the macro template.
+  "{$AGENT.URL}":
+    description: "Agent scrape URL"
+    template: "https://{{hostname}}:{{port}}/metrics"
+    defaults:
+      port: 9100 # must be specified in defaults since `{{port}}` is used in the template
+    properties:
+      monitored_node:           # uses default port 9100
+      legacy_exporter:
+        port: 9101              # overrides default

@@ -54,6 +54,7 @@ from zabbix_auto_config.exceptions import ZabbixNotFoundError
 from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.failsafe import check_failsafe
 from zabbix_auto_config.macros import ResolvedMacro
+from zabbix_auto_config.macros import get_host_facts
 from zabbix_auto_config.macros import read_property_macro_map
 from zabbix_auto_config.pyzabbix.client import ZabbixAPI
 from zabbix_auto_config.pyzabbix.enums import InterfaceType
@@ -1769,7 +1770,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
             for macro in zabbix_host.macros
             if macro.macro in self.managed_macros
         }
-        property_macros = self.property_macro_map.get_macros(db_host.properties)
+        property_macros = self.property_macro_map.get_macros(
+            db_host.properties, get_host_facts(db_host)
+        )
 
         # NOTE: we use dicts to store the macros to add/update/remove
         # which goes some way in preventing duplication issues.

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 from inline_snapshot import snapshot
+from pydantic import ValidationError
+from pytest import TempPathFactory
 from zabbix_auto_config.macros import ContextType
+from zabbix_auto_config.macros import HostFacts
 from zabbix_auto_config.macros import MacroIdentity
+from zabbix_auto_config.macros import PropertyMacroMapping
 from zabbix_auto_config.macros import ResolvedMacro
 from zabbix_auto_config.macros import is_valid_macro_name
 from zabbix_auto_config.macros import read_property_macro_map
@@ -39,6 +44,9 @@ def test_is_valid_macro_name(macro_name: str, expected: bool):
     assert is_valid_macro_name(macro_name) == expected
 
 
+DEFAULT_FACTS = HostFacts(hostname="testhost.example.com")
+
+
 # Read example mapping file so we know our examples
 # are always up-to-date and are valid.
 SAMPLE_PROPERTY_MACRO_MAP = (
@@ -49,12 +57,18 @@ SAMPLE_PROPERTY_MACRO_MAP = (
 ).read_text(encoding="utf-8")
 
 
-@pytest.fixture(scope="function")
-def sample_property_macro_map_path(tmp_path: Path):
+@pytest.fixture(scope="session")
+def sample_property_macro_map_path(tmp_path_factory: TempPathFactory):
     """Creates a sample property macro map file for testing."""
+    tmp_path = tmp_path_factory.mktemp("data")
     p = tmp_path / "property_macro_map.yaml"
     p.write_text(SAMPLE_PROPERTY_MACRO_MAP, encoding="utf-8")
     yield p
+
+
+@pytest.fixture(scope="session")
+def macro_map(sample_property_macro_map_path: Path) -> PropertyMacroMapping:
+    return read_property_macro_map(sample_property_macro_map_path)
 
 
 def test_read_property_macro_map(sample_property_macro_map_path: Path):
@@ -73,18 +87,23 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
       "description": null,
       "macro_type": "text",
       "combine": "text",
+      "template": null,
+      "defaults": {},
       "properties": {
         "barry": {
           "value": "barry value",
-          "description": null
+          "description": null,
+          "extras": {}
         },
         "pizza": {
           "value": "pizza value",
-          "description": null
+          "description": null,
+          "extras": {}
         },
         "spam": {
           "value": "spam value",
-          "description": null
+          "description": null,
+          "extras": {}
         }
       }
     },
@@ -97,18 +116,23 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
       "description": "This one has a description!",
       "macro_type": "text",
       "combine": "regex",
+      "template": null,
+      "defaults": {},
       "properties": {
         "spam": {
           "value": "spam value",
-          "description": null
+          "description": null,
+          "extras": {}
         },
         "baz": {
           "value": "bazinga",
-          "description": null
+          "description": null,
+          "extras": {}
         },
         "grok": {
           "value": "^grok value$",
-          "description": "We can override the description for individual properties as well"
+          "description": "We can override the description for individual properties as well",
+          "extras": {}
         }
       }
     },
@@ -121,14 +145,18 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
       "description": "This macro has contexts, but is optional",
       "macro_type": "text",
       "combine": "text",
+      "template": null,
+      "defaults": {},
       "properties": {
         "spam": {
           "value": "value for non-context spam",
-          "description": null
+          "description": null,
+          "extras": {}
         },
         "eggs": {
           "value": "value for non-context eggs",
-          "description": null
+          "description": null,
+          "extras": {}
         }
       }
     },
@@ -141,14 +169,18 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
       "description": "Description for /tmp context used here",
       "macro_type": "text",
       "combine": "text",
+      "template": null,
+      "defaults": {},
       "properties": {
         "spam": {
           "value": "20",
-          "description": null
+          "description": null,
+          "extras": {}
         },
         "foo": {
           "value": "30",
-          "description": null
+          "description": null,
+          "extras": {}
         }
       }
     },
@@ -161,18 +193,70 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
       "description": "This macro has contexts, but is optional",
       "macro_type": "text",
       "combine": "text",
+      "template": null,
+      "defaults": {},
       "properties": {
         "spam": {
           "value": "30",
-          "description": null
+          "description": null,
+          "extras": {}
         },
         "bar": {
           "value": "40",
-          "description": null
+          "description": null,
+          "extras": {}
         },
         "gux": {
           "value": "50",
-          "description": null
+          "description": null,
+          "extras": {}
+        }
+      }
+    },
+    {
+      "identity": {
+        "name": "{$NODE.DASHBOARD}",
+        "context": null,
+        "context_type": "static"
+      },
+      "description": null,
+      "macro_type": "text",
+      "combine": "text",
+      "template": "https://grafana.example.com/d/node?var-host={{hostname}}",
+      "defaults": {},
+      "properties": {
+        "dashboard_node": {
+          "value": null,
+          "description": null,
+          "extras": {}
+        }
+      }
+    },
+    {
+      "identity": {
+        "name": "{$AGENT.URL}",
+        "context": null,
+        "context_type": "static"
+      },
+      "description": "Agent scrape URL",
+      "macro_type": "text",
+      "combine": "text",
+      "template": "https://{{hostname}}:{{port}}/metrics",
+      "defaults": {
+        "port": "9100"
+      },
+      "properties": {
+        "monitored_node": {
+          "value": null,
+          "description": null,
+          "extras": {}
+        },
+        "legacy_exporter": {
+          "value": null,
+          "description": null,
+          "extras": {
+            "port": "9101"
+          }
         }
       }
     }
@@ -181,11 +265,9 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
 """)
 
 
-def test_property_macro_map_get_macros(sample_property_macro_map_path: Path):
-    m = read_property_macro_map(sample_property_macro_map_path)
-
+def test_property_macro_map_text_single(macro_map: PropertyMacroMapping):
     # Single value for regular non-regex macro
-    assert m.get_macros(["pizza"]) == snapshot(
+    assert macro_map.get_macros(["pizza"], DEFAULT_FACTS) == snapshot(
         {
             "{$ZAC.TEXT_MACRO}": ResolvedMacro(
                 identity=MacroIdentity(name="{$ZAC.TEXT_MACRO}"), value="pizza value"
@@ -193,8 +275,10 @@ def test_property_macro_map_get_macros(sample_property_macro_map_path: Path):
         }
     )
 
+
+def test_property_macro_map_text_multiple(macro_map: PropertyMacroMapping):
     # Multiple values for regular non-regex macro - should not combine, since it's not a regex macro
-    assert m.get_macros(["pizza", "barry"]) == snapshot(
+    assert macro_map.get_macros(["pizza", "barry"], DEFAULT_FACTS) == snapshot(
         {
             "{$ZAC.TEXT_MACRO}": ResolvedMacro(
                 identity=MacroIdentity(name="{$ZAC.TEXT_MACRO}"), value="barry value"
@@ -202,8 +286,10 @@ def test_property_macro_map_get_macros(sample_property_macro_map_path: Path):
         }
     )
 
+
+def test_property_macro_map_regex_single(macro_map: PropertyMacroMapping):
     # Single value for macro with regex support
-    assert m.get_macros(["baz"]) == snapshot(
+    assert macro_map.get_macros(["baz"], DEFAULT_FACTS) == snapshot(
         {
             "{$ZAC.REGEX_MACRO}": ResolvedMacro(
                 identity=MacroIdentity(name="{$ZAC.REGEX_MACRO}"),
@@ -213,8 +299,10 @@ def test_property_macro_map_get_macros(sample_property_macro_map_path: Path):
         }
     )
 
+
+def test_property_macro_map_regex_multiple(macro_map: PropertyMacroMapping):
     # Multiple values for macro with regex support
-    assert m.get_macros(["baz", "grok"]) == snapshot(
+    assert macro_map.get_macros(["baz", "grok"], DEFAULT_FACTS) == snapshot(
         {
             "{$ZAC.REGEX_MACRO}": ResolvedMacro(
                 identity=MacroIdentity(name="{$ZAC.REGEX_MACRO}"),
@@ -223,8 +311,11 @@ def test_property_macro_map_get_macros(sample_property_macro_map_path: Path):
             )
         }
     )
+
+
+def test_property_macro_map_contexts(macro_map: PropertyMacroMapping):
     # Macros with text context
-    assert m.get_macros(["foo"]) == snapshot(
+    assert macro_map.get_macros(["foo"], DEFAULT_FACTS) == snapshot(
         {
             "{$ZAC.OPTIONAL_CONTEXT:/tmp}": ResolvedMacro(
                 identity=MacroIdentity(name="{$ZAC.OPTIONAL_CONTEXT}", context="/tmp"),
@@ -233,42 +324,11 @@ def test_property_macro_map_get_macros(sample_property_macro_map_path: Path):
             )
         }
     )
+
+
+def test_property_macro_map_contexts_regex(macro_map: PropertyMacroMapping):
     # Macros with regex context
-    assert m.get_macros(["bar"]) == snapshot(
-        {
-            '{$ZAC.OPTIONAL_CONTEXT:regex:"^/var/log/.*$"}': ResolvedMacro(
-                identity=MacroIdentity(
-                    name="{$ZAC.OPTIONAL_CONTEXT}",
-                    context="^/var/log/.*$",
-                    context_type=ContextType.REGEX,
-                ),
-                value="40",
-                description="This macro has contexts, but is optional",
-            )
-        }
-    )
-    # Macros with two different contexts (text and regex)
-    assert m.get_macros(["foo", "bar"]) == snapshot(
-        {
-            "{$ZAC.OPTIONAL_CONTEXT:/tmp}": ResolvedMacro(
-                identity=MacroIdentity(name="{$ZAC.OPTIONAL_CONTEXT}", context="/tmp"),
-                value="30",
-                description="Description for /tmp context used here",
-            ),
-            '{$ZAC.OPTIONAL_CONTEXT:regex:"^/var/log/.*$"}': ResolvedMacro(
-                identity=MacroIdentity(
-                    name="{$ZAC.OPTIONAL_CONTEXT}",
-                    context="^/var/log/.*$",
-                    context_type=ContextType.REGEX,
-                ),
-                value="40",
-                description="This macro has contexts, but is optional",
-            ),
-        }
-    )
-    # Macros with two regex contexts with different values for a text macro
-    # (alphabetically first is chosen -> "bar" chosen over "gux")
-    assert m.get_macros(["bar", "gux"]) == snapshot(
+    assert macro_map.get_macros(["bar"], DEFAULT_FACTS) == snapshot(
         {
             '{$ZAC.OPTIONAL_CONTEXT:regex:"^/var/log/.*$"}': ResolvedMacro(
                 identity=MacroIdentity(
@@ -282,8 +342,104 @@ def test_property_macro_map_get_macros(sample_property_macro_map_path: Path):
         }
     )
 
+
+def test_property_macro_map_contexts_multiple(macro_map: PropertyMacroMapping):
+    # Macros with two different contexts (text and regex)
+    assert macro_map.get_macros(["foo", "bar"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$ZAC.OPTIONAL_CONTEXT:/tmp}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.OPTIONAL_CONTEXT}", context="/tmp"),
+                value="30",
+                description="Description for /tmp context used here",
+            ),
+            '{$ZAC.OPTIONAL_CONTEXT:regex:"^/var/log/.*$"}': ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.OPTIONAL_CONTEXT}",
+                    context="^/var/log/.*$",
+                    context_type=ContextType.REGEX,
+                ),
+                value="40",
+                description="This macro has contexts, but is optional",
+            ),
+        }
+    )
+
+
+def test_property_macro_map_contexts_multiple_regex(macro_map: PropertyMacroMapping):
+    # Macros with two regex contexts with different values for a text macro
+    # (alphabetically first is chosen -> "bar" chosen over "gux")
+    assert macro_map.get_macros(["bar", "gux"], DEFAULT_FACTS) == snapshot(
+        {
+            '{$ZAC.OPTIONAL_CONTEXT:regex:"^/var/log/.*$"}': ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.OPTIONAL_CONTEXT}",
+                    context="^/var/log/.*$",
+                    context_type=ContextType.REGEX,
+                ),
+                value="40",
+                description="This macro has contexts, but is optional",
+            )
+        }
+    )
+
+
+def test_template_macro_simple(macro_map: PropertyMacroMapping):
+    # Test simple templated macro with no extra values - just host facts
+    assert macro_map.get_macros(["dashboard_node"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$NODE.DASHBOARD}": ResolvedMacro(
+                identity=MacroIdentity(name="{$NODE.DASHBOARD}"),
+                value="https://grafana.example.com/d/node?var-host=testhost.example.com",
+            )
+        }
+    )
+
+
+def test_template_macro_extra_placeholders_default(macro_map: PropertyMacroMapping):
+    # Test templated macro with extra placeholders
+    assert macro_map.get_macros(["monitored_node"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$AGENT.URL}": ResolvedMacro(
+                identity=MacroIdentity(name="{$AGENT.URL}"),
+                value="https://testhost.example.com:9100/metrics",
+                description="Agent scrape URL",
+            )
+        }
+    )
+
+
+def test_template_macro_extra_placeholders_override(macro_map: PropertyMacroMapping):
+    # Test templated macro with extra placeholders
+    assert macro_map.get_macros(["legacy_exporter"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$AGENT.URL}": ResolvedMacro(
+                identity=MacroIdentity(name="{$AGENT.URL}"),
+                value="https://testhost.example.com:9101/metrics",
+                description="Agent scrape URL",
+            )
+        }
+    )
+
+
+def test_template_macro_extra_placeholders_multiple(macro_map: PropertyMacroMapping):
+    # Test templated macro with extra placeholders (resolve to `legacy_exporter` because of alphabetical order)
+    assert macro_map.get_macros(
+        ["monitored_node", "legacy_exporter"], DEFAULT_FACTS
+    ) == snapshot(
+        {
+            "{$AGENT.URL}": ResolvedMacro(
+                identity=MacroIdentity(name="{$AGENT.URL}"),
+                value="https://testhost.example.com:9101/metrics",
+                description="Agent scrape URL",
+            )
+        }
+    )
+
+
+def test_property_macro_map_combined(macro_map: PropertyMacroMapping):
+    # Macro with multiple properties, some of which are shared between macros
     # Combine everything
-    assert m.get_macros(
+    assert macro_map.get_macros(
         [
             "pizza",
             "barry",
@@ -294,7 +450,11 @@ def test_property_macro_map_get_macros(sample_property_macro_map_path: Path):
             "foo",
             "bar",
             "baz",
-        ]
+            "dashboard_node",
+            "monitored_node",
+            "legacy_exporter",
+        ],
+        DEFAULT_FACTS,
     ) == snapshot(
         {
             "{$ZAC.TEXT_MACRO}": ResolvedMacro(
@@ -323,6 +483,15 @@ def test_property_macro_map_get_macros(sample_property_macro_map_path: Path):
                 ),
                 value="30",
                 description="This macro has contexts, but is optional",
+            ),
+            "{$AGENT.URL}": ResolvedMacro(
+                identity=MacroIdentity(name="{$AGENT.URL}"),
+                value="https://testhost.example.com:9101/metrics",
+                description="Agent scrape URL",
+            ),
+            "{$NODE.DASHBOARD}": ResolvedMacro(
+                identity=MacroIdentity(name="{$NODE.DASHBOARD}"),
+                value="https://grafana.example.com/d/node?var-host=testhost.example.com",
             ),
         }
     )
@@ -358,7 +527,7 @@ macros:
     m = read_property_macro_map(tmpfile)
 
     # Resolve to single value
-    macros = m.get_macros(["default_db", "is_pgsql_server"])
+    macros = m.get_macros(["default_db", "is_pgsql_server"], DEFAULT_FACTS)
     assert macros == snapshot(
         {
             "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
@@ -370,7 +539,9 @@ macros:
     assert contains_valid_regex(macros)
 
     # Resolve to simple OR regex pattern
-    macros = m.get_macros(["default_db", "is_pgsql_server", "zabbix_agent"])
+    macros = m.get_macros(
+        ["default_db", "is_pgsql_server", "zabbix_agent"], DEFAULT_FACTS
+    )
     assert macros == snapshot(
         {
             "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
@@ -399,7 +570,9 @@ macros:
     m = read_property_macro_map(tmpfile)
 
     # Test that duplicate values are deduplicated for regex macros
-    macros = m.get_macros(["default_db", "is_pgsql_server", "zabbix_agent"])
+    macros = m.get_macros(
+        ["default_db", "is_pgsql_server", "zabbix_agent"], DEFAULT_FACTS
+    )
     assert macros == snapshot(
         {
             "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
@@ -430,7 +603,7 @@ macros:
     m = read_property_macro_map(tmpfile)
 
     # Test that duplicate values are deduplicated for regex macros
-    macros = m.get_macros(["default_db", "is_pgsql_server"])
+    macros = m.get_macros(["default_db", "is_pgsql_server"], DEFAULT_FACTS)
     assert macros == snapshot(
         {
             "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
@@ -460,7 +633,7 @@ macros:
     m = read_property_macro_map(tmpfile)
 
     # Combinations of regex patterns
-    macros = m.get_macros(["is_pgsql_server", "zabbix_agent"])
+    macros = m.get_macros(["is_pgsql_server", "zabbix_agent"], DEFAULT_FACTS)
     assert macros == snapshot(
         {
             "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
@@ -471,7 +644,7 @@ macros:
     )
     assert contains_valid_regex(macros)
 
-    macros = m.get_macros(["zabbix_agent", "use_zabbix_agent2"])
+    macros = m.get_macros(["zabbix_agent", "use_zabbix_agent2"], DEFAULT_FACTS)
     assert macros == snapshot(
         {
             "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
@@ -483,7 +656,7 @@ macros:
     assert contains_valid_regex(macros)
 
     # Individual regex patterns
-    macros = m.get_macros(["zabbix_agent"])
+    macros = m.get_macros(["zabbix_agent"], DEFAULT_FACTS)
     assert macros == snapshot(
         {
             "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
@@ -494,7 +667,7 @@ macros:
     )
     assert contains_valid_regex(macros)
 
-    macros = m.get_macros(["use_zabbix_agent2"])
+    macros = m.get_macros(["use_zabbix_agent2"], DEFAULT_FACTS)
     assert macros == snapshot(
         {
             "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
@@ -505,7 +678,7 @@ macros:
     )
     assert contains_valid_regex(macros)
 
-    macros = m.get_macros(["is_pgsql_server"])
+    macros = m.get_macros(["is_pgsql_server"], DEFAULT_FACTS)
     assert macros == snapshot(
         {
             "{$SYSTEMD.NAME.SERVICE.MATCHES}": ResolvedMacro(
@@ -515,3 +688,56 @@ macros:
         }
     )
     assert contains_valid_regex(macros)
+
+
+def test_get_macros_template_no_defaults(tmp_path: Path):
+    """Test that template macros without a `defaults` section fails"""
+    tmpfile = tmp_path / "property_macro_map.txt"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        r"""
+macros:
+  "{$AGENT.URL}":
+    description: "Agent scrape URL"
+    template: "https://{{hostname}}:{{port}}/metrics"
+    properties:
+      monitored_node:           # uses default port 9100
+      legacy_exporter:
+        port: 9101              # overrides default
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValidationError,
+        match=re.escape(
+            "Template placeholders not satisfied: {'monitored_node': ['port']}"
+        ),
+    ):
+        _ = read_property_macro_map(tmpfile)
+
+
+def test_get_macros_template_incomplete_defaults(tmp_path: Path):
+    """Test that template macros without a complete `defaults` section fails."""
+    tmpfile = tmp_path / "property_macro_map.txt"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        r"""
+macros:
+    "{$AGENT.URL}":
+      description: "Agent scrape URL"
+      template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+      defaults:
+        port: 9100
+        # missing `endpoint`
+      properties:
+        monitored_node:           # uses default port 9100
+        legacy_exporter:
+          port: 9101              # overrides default
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValidationError,
+        match=re.escape(
+            "Template placeholders not satisfied: {'monitored_node': ['endpoint'], 'legacy_exporter': ['endpoint']}"
+        ),
+    ):
+        _ = read_property_macro_map(tmpfile)

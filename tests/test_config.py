@@ -255,6 +255,7 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
                 "verify_ssl": True,
                 "tags_prefix": "zac_",
                 "managed_inventory": ["location"],
+                "macro_description_prefix": "[ZAC]",
                 "failsafe": 20,
                 "hostgroup_all": "All-hosts",
                 "hostgroup_manual": "All-manual-hosts",
