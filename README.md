@@ -711,9 +711,6 @@ Some macros require a value such as a DNS name (for all intents and purposes, th
 More advanced templates are also supported, with multiple placeholders. Each placeholder must have a default defined in the `defaults` field, and can optionally be overridden per property:
 
 ```yaml
-  # More advanced patterns can also be defined where each property can
-  # define their own template values. The definition _must_ define
-  # defaults for all template variables used in the macro template.
   "{$AGENT.URL}":
     description: "Agent scrape URL"
     template: "https://{{hostname}}:{{port}}/{{endpoint}}"

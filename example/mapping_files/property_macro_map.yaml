@@ -16,6 +16,29 @@ macros:
         value: "^grok value$" # can be regex pattern
         description: "We can override the description for individual properties as well"
 
+  # Macros can also be rendered using templates that have placeholders.
+  # This allows for more complex macros where value substitution based on
+  # information about the host is needed.
+  "{$ZAC.BASIC_TEMPLATE_MACRO}":
+    template: "https://grafana.example.com/d/node?var-host={{hostname}}"
+    properties:
+      dashboard_node: # no values to substitute, just uses hostname
+
+  # More advanced template patterns can also be defined where each property can
+  # define their own template values. The top-level definition _must_ define
+  # defaults for all template variables used in the macro template.
+  "{$ZAC.ADVANCED_TEMPLATE_MACRO}":
+    description: "Agent scrape URL"
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+    defaults:
+      port: 9100 # must be specified in defaults since `{{port}}` is used in the template
+      endpoint: metrics # ditto for `{{endpoint}}`
+    properties:
+      monitored_node:           # uses default port 9100
+      legacy_exporter:
+        port: 9101              # overrides default
+
+
   # Macros with context are also supported, and are defined similarly to
   # regular macros, but with an additional "contexts" section.
   # Each context must match one or more properties.
@@ -44,23 +67,3 @@ macros:
           spam: 30
           bar: 40 # only used here
           gux: 50 # only used here
-
-  # Macros can also be rendered using templates, which allows for more complex
-  # macros where value substitution based on the host or per-property is required.
-  "{$NODE.DASHBOARD}":
-    template: "https://grafana.example.com/d/node?var-host={{hostname}}"
-    properties:
-      dashboard_node: # no values to substitute, just uses hostname
-
-  # More advanced patterns can also be defined where each property can
-  # define their own template values. The definition _must_ define
-  # defaults for all template variables used in the macro template.
-  "{$AGENT.URL}":
-    description: "Agent scrape URL"
-    template: "https://{{hostname}}:{{port}}/metrics"
-    defaults:
-      port: 9100 # must be specified in defaults since `{{port}}` is used in the template
-    properties:
-      monitored_node:           # uses default port 9100
-      legacy_exporter:
-        port: 9101              # overrides default

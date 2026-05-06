@@ -138,6 +138,54 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
     },
     {
       "identity": {
+        "name": "{$ZAC.BASIC_TEMPLATE_MACRO}",
+        "context": null,
+        "context_type": "static"
+      },
+      "description": null,
+      "macro_type": "text",
+      "combine": "text",
+      "template": "https://grafana.example.com/d/node?var-host={{hostname}}",
+      "defaults": {},
+      "properties": {
+        "dashboard_node": {
+          "value": null,
+          "description": null,
+          "extras": {}
+        }
+      }
+    },
+    {
+      "identity": {
+        "name": "{$ZAC.ADVANCED_TEMPLATE_MACRO}",
+        "context": null,
+        "context_type": "static"
+      },
+      "description": "Agent scrape URL",
+      "macro_type": "text",
+      "combine": "text",
+      "template": "https://{{hostname}}:{{port}}/{{endpoint}}",
+      "defaults": {
+        "port": "9100",
+        "endpoint": "metrics"
+      },
+      "properties": {
+        "monitored_node": {
+          "value": null,
+          "description": null,
+          "extras": {}
+        },
+        "legacy_exporter": {
+          "value": null,
+          "description": null,
+          "extras": {
+            "port": "9101"
+          }
+        }
+      }
+    },
+    {
+      "identity": {
         "name": "{$ZAC.OPTIONAL_CONTEXT}",
         "context": null,
         "context_type": "static"
@@ -210,53 +258,6 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "value": "50",
           "description": null,
           "extras": {}
-        }
-      }
-    },
-    {
-      "identity": {
-        "name": "{$NODE.DASHBOARD}",
-        "context": null,
-        "context_type": "static"
-      },
-      "description": null,
-      "macro_type": "text",
-      "combine": "text",
-      "template": "https://grafana.example.com/d/node?var-host={{hostname}}",
-      "defaults": {},
-      "properties": {
-        "dashboard_node": {
-          "value": null,
-          "description": null,
-          "extras": {}
-        }
-      }
-    },
-    {
-      "identity": {
-        "name": "{$AGENT.URL}",
-        "context": null,
-        "context_type": "static"
-      },
-      "description": "Agent scrape URL",
-      "macro_type": "text",
-      "combine": "text",
-      "template": "https://{{hostname}}:{{port}}/metrics",
-      "defaults": {
-        "port": "9100"
-      },
-      "properties": {
-        "monitored_node": {
-          "value": null,
-          "description": null,
-          "extras": {}
-        },
-        "legacy_exporter": {
-          "value": null,
-          "description": null,
-          "extras": {
-            "port": "9101"
-          }
         }
       }
     }
@@ -387,8 +388,8 @@ def test_template_macro_simple(macro_map: PropertyMacroMapping):
     # Test simple templated macro with no extra values - just host facts
     assert macro_map.get_macros(["dashboard_node"], DEFAULT_FACTS) == snapshot(
         {
-            "{$NODE.DASHBOARD}": ResolvedMacro(
-                identity=MacroIdentity(name="{$NODE.DASHBOARD}"),
+            "{$ZAC.BASIC_TEMPLATE_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.BASIC_TEMPLATE_MACRO}"),
                 value="https://grafana.example.com/d/node?var-host=testhost.example.com",
             )
         }
@@ -399,8 +400,8 @@ def test_template_macro_extra_placeholders_default(macro_map: PropertyMacroMappi
     # Test templated macro with extra placeholders
     assert macro_map.get_macros(["monitored_node"], DEFAULT_FACTS) == snapshot(
         {
-            "{$AGENT.URL}": ResolvedMacro(
-                identity=MacroIdentity(name="{$AGENT.URL}"),
+            "{$ZAC.ADVANCED_TEMPLATE_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.ADVANCED_TEMPLATE_MACRO}"),
                 value="https://testhost.example.com:9100/metrics",
                 description="Agent scrape URL",
             )
@@ -412,8 +413,8 @@ def test_template_macro_extra_placeholders_override(macro_map: PropertyMacroMapp
     # Test templated macro with extra placeholders
     assert macro_map.get_macros(["legacy_exporter"], DEFAULT_FACTS) == snapshot(
         {
-            "{$AGENT.URL}": ResolvedMacro(
-                identity=MacroIdentity(name="{$AGENT.URL}"),
+            "{$ZAC.ADVANCED_TEMPLATE_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.ADVANCED_TEMPLATE_MACRO}"),
                 value="https://testhost.example.com:9101/metrics",
                 description="Agent scrape URL",
             )
@@ -427,8 +428,8 @@ def test_template_macro_extra_placeholders_multiple(macro_map: PropertyMacroMapp
         ["monitored_node", "legacy_exporter"], DEFAULT_FACTS
     ) == snapshot(
         {
-            "{$AGENT.URL}": ResolvedMacro(
-                identity=MacroIdentity(name="{$AGENT.URL}"),
+            "{$ZAC.ADVANCED_TEMPLATE_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.ADVANCED_TEMPLATE_MACRO}"),
                 value="https://testhost.example.com:9101/metrics",
                 description="Agent scrape URL",
             )
@@ -484,14 +485,14 @@ def test_property_macro_map_combined(macro_map: PropertyMacroMapping):
                 value="30",
                 description="This macro has contexts, but is optional",
             ),
-            "{$AGENT.URL}": ResolvedMacro(
-                identity=MacroIdentity(name="{$AGENT.URL}"),
+            "{$ZAC.BASIC_TEMPLATE_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.BASIC_TEMPLATE_MACRO}"),
+                value="https://grafana.example.com/d/node?var-host=testhost.example.com",
+            ),
+            "{$ZAC.ADVANCED_TEMPLATE_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.ADVANCED_TEMPLATE_MACRO}"),
                 value="https://testhost.example.com:9101/metrics",
                 description="Agent scrape URL",
-            ),
-            "{$NODE.DASHBOARD}": ResolvedMacro(
-                identity=MacroIdentity(name="{$NODE.DASHBOARD}"),
-                value="https://grafana.example.com/d/node?var-host=testhost.example.com",
             ),
         }
     )
