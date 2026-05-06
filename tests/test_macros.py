@@ -119,13 +119,13 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
       "template": null,
       "defaults": {},
       "properties": {
-        "spam": {
-          "value": "spam value",
+        "baz": {
+          "value": "bazinga",
           "description": null,
           "extras": {}
         },
-        "baz": {
-          "value": "bazinga",
+        "spam": {
+          "value": "spam value",
           "description": null,
           "extras": {}
         },

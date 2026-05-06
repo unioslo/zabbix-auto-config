@@ -1,17 +1,28 @@
 macros:
+  # Basic plain text macro that only matches a single property.
+  # If a host has the property `barry`:
+  # - {$ZAC.TEXT_MACRO} -> "barry value"
+  # If a host has the properties `barry` and `pizza`:
+  # - {$ZAC.TEXT_MACRO} -> "barry value" (since `barry` is alphabetically first)
   "{$ZAC.TEXT_MACRO}":
-    combine: text
+    combine: text # default, can be omitted
     properties:
       barry: "barry value"
       pizza: "pizza value"
       spam: "spam value"
 
+  # Regex macros are also supported, and can be used to create macros that
+  # combine values from multiple properties.
+  # I.e. a host with the properties `spam` and `baz`:
+  # - {$ZAC.REGEX_MACRO} -> "(bazinga|spam value)"
+  # With all matching properties:
+  # - {$ZAC.REGEX_MACRO} -> "(bazinga|spam value|^grok value$)"
   "{$ZAC.REGEX_MACRO}":
     combine: regex
     description: "This one has a description!"
     properties:
-      spam: "spam value" # this property is shared by all macros
       baz: "bazinga"
+      spam: "spam value"
       grok:
         value: "^grok value$" # can be regex pattern
         description: "We can override the description for individual properties as well"
@@ -37,7 +48,6 @@ macros:
       monitored_node:           # uses default port 9100
       legacy_exporter:
         port: 9101              # overrides default
-
 
   # Macros with context are also supported, and are defined similarly to
   # regular macros, but with an additional "contexts" section.
