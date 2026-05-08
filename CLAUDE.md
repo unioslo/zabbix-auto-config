@@ -20,7 +20,7 @@ pytest --inline-snapshot=report
 
 # Run tests and fix snapshots
 pytest --inline-snapshot=fix
-```
+
 
 # Run a single test file or test
 pytest tests/test_models.py
