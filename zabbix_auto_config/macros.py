@@ -97,6 +97,17 @@ class MacroType(str, Enum):
     SECRET = "secret"  # type=1
     VAULT = "vault"  # type=2
 
+    def to_zabbix(self) -> int:
+        """Convert to the integer type that Zabbix expects."""
+        if self.value == "text":
+            return 0
+        elif self.value == "secret":
+            return 1
+        elif self.value == "vault":
+            return 2
+        else:
+            raise ValueError(f"Unknown macro type: {self.value!r}")
+
 
 @dataclass(frozen=True)
 class MacroIdentity:

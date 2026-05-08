@@ -1796,9 +1796,13 @@ class ZabbixHostUpdater(ZabbixUpdater):
             current_macro = current_macros[macro_name]
             property_macro = property_macros[macro_name]
             if (
+                # Value
                 property_macro.value != current_macro.value
+                # Description
                 or self._get_macro_description(property_macro)
                 != current_macro.description
+                # Type
+                or current_macro.type != property_macro.macro_type.to_zabbix()
             ):
                 macros_to_update[macro_name] = (current_macro, property_macro)
 
@@ -1822,9 +1826,10 @@ class ZabbixHostUpdater(ZabbixUpdater):
         log = logger.bind(
             host=host.host,
             hostid=host.hostid,
-            macro=macro.macro,  # TODO: calculated here and in API call. Can be optimized
+            macro=macro.macro,  # TODO: property calculated here and in API call. Can be optimized
             value=macro.value,
             description=description,
+            type=macro.macro_type,  # show string representation
         )
         if self.zabbix_config.dryrun:
             log.info("DRYRUN: Adding macro to host")

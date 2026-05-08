@@ -1385,12 +1385,19 @@ class ZabbixAPI:
         return [GlobalMacro(**macro) for macro in result]
 
     def create_macro(
-        self, host: Host, macro: str, value: str, description: str | None = None
+        self,
+        host: Host,
+        macro: str,
+        value: str,
+        description: str | None = None,
+        type: Optional[int] = None,
     ) -> str:
         """Create a macro given a host ID, macro name and value."""
         params: ParamsType = {"hostid": host.hostid, "macro": macro, "value": value}
         if description is not None:
             params["description"] = description
+        if type is not None:
+            params["type"] = type
         try:
             resp = self.usermacro.create(**params)
         except ZabbixAPIException as e:
@@ -1404,12 +1411,18 @@ class ZabbixAPI:
         return resp["hostmacroids"][0]
 
     def update_macro(
-        self, macroid: str, value: str, description: str | None = None
+        self,
+        macroid: str,
+        value: str,
+        description: str | None = None,
+        type: Optional[int] = None,
     ) -> str:
         """Update a macro given a macro ID and value."""
         params: ParamsType = {"hostmacroid": macroid, "value": value}
         if description is not None:
             params["description"] = description
+        if type is not None:
+            params["type"] = type
         try:
             resp = self.usermacro.update(**params)
         except ZabbixAPIException as e:
