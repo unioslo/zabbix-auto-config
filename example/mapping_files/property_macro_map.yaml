@@ -1,27 +1,39 @@
 macros:
-  # Basic plain text macro that only matches a single property.
+  # Plain macro that matches one or more properties.
   # If a host has the property `barry`:
-  # - {$ZAC.TEXT_MACRO} -> "barry value"
+  # - {$ZAC.PLAIN_MACRO} -> "barry value"
   # If a host has the properties `barry` and `pizza`:
-  # - {$ZAC.TEXT_MACRO} -> "barry value" (since `barry` is alphabetically first)
-  "{$ZAC.TEXT_MACRO}":
-    combine: text # default, can be omitted
+  # - {$ZAC.PLAIN_MACRO} -> "barry value" (since `barry` is alphabetically first)
+  "{$ZAC.PLAIN_MACRO}":
+    resolve: first # default, can be omitted
     properties:
       barry: "barry value"
       pizza: "pizza value"
       spam: "spam value"
 
-  # Regex macros are also supported, and can be used to create macros that
-  # combine values from multiple properties.
-  # I.e. a host with the properties `spam` and `baz`:
+  # `resolve: last` picks the alphabetically last contributing property.
+  # Useful for tier-style overrides where the highest-priority property name
+  # is intentionally placed at the end of the alphabet.
+  # If a host has properties `tier_a` and `tier_z`:
+  # - {$ZAC.LAST_MACRO} -> "tier_z value"
+  "{$ZAC.LAST_MACRO}":
+    resolve: last
+    properties:
+      tier_a: "tier_a value"
+      tier_m: "tier_m value"
+      tier_z: "tier_z value"
+
+  # Regex macros are also supported, and can be used to combine values from
+  # multiple matching properties into a single regex alternation.
+  # I.e. a host with the properties `spam` and `bazinga`:
   # - {$ZAC.REGEX_MACRO} -> "(bazinga|spam value)"
   # With all matching properties:
   # - {$ZAC.REGEX_MACRO} -> "(bazinga|spam value|^grok value$)"
   "{$ZAC.REGEX_MACRO}":
-    combine: regex
+    resolve: regex
     description: "This one has a description!"
     properties:
-      baz: "bazinga"
+      bazinga: "bazinga"
       spam: "spam value"
       grok:
         value: "^grok value$" # can be regex pattern
@@ -49,12 +61,28 @@ macros:
       legacy_exporter:
         port: 9101              # overrides default
 
+  # `value_type` controls the Zabbix usermacro value type. Defaults to `text`.
+  # Use `secret` for values that should be masked in the Zabbix UI.
+  "{$ZAC.API_TOKEN}":
+    description: "API token used by monitoring scripts"
+    value_type: secret
+    properties:
+      has_api_integration: "s3cr3t-t0k3n"
+
+  # Use `vault` to reference a secret stored in an external vault.
+  # The macro value should be the vault path Zabbix will resolve at runtime.
+  "{$ZAC.DB_PASSWORD}":
+    description: "DB password fetched from Vault"
+    value_type: vault
+    properties:
+      uses_vault_secrets: "secret/zabbix/db:password"
+
   # Macros with context are also supported, and are defined similarly to
-  # regular macros, but with an additional "contexts" section.
+  # plain macros, but with an additional "contexts" section.
   # Context docs: <https://www.zabbix.com/documentation/current/en/manual/config/macros/user_macros_context>
   #
   # Each context must match one or more properties.
-  # By default, contexts use `combine: text`, just like regular macro definitions.
+  # By default, contexts use `resolve: first`, just like top-level macro definitions.
   #
   # To illustrate:
   # With property "spam", the following macros are created for the host from this definition:
@@ -73,6 +101,7 @@ macros:
         properties:
           spam: 20
           foo: 30 # only used here
+          baz: 40 # only used here
       - context: "^/var/log/.*$" # regex context
         context_type: regex # marks the context as regex
         properties:

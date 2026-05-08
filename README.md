@@ -654,13 +654,19 @@ The property-macro mapping file is used to define macros that should be set on h
 # property_macro_map.yaml
 
 macros:
-  "{$ZAC.TEXT_MACRO}":
+  "{$ZAC.PLAIN_MACRO}":
     properties:
       barry: "barry value"
       pizza: "pizza value"
 ```
 
-If a host has the property `barry`, the macro `{$ZAC.TEXT_MACRO}` will be set to `barry value`. If a host has the property `pizza`, the same macro will be set to `pizza value`. If a host has both properties, the macro will use the alphabetically first property name to determine the value, in this case `barry`.
+If a host has the property `barry`, the macro `{$ZAC.PLAIN_MACRO}` will be set to `barry value`. If a host has the property `pizza`, the same macro will be set to `pizza value`. If a host has both properties, the macro will use the alphabetically first property name to determine the value, in this case `barry`.
+
+When multiple properties contribute to the same macro, the `resolve` field controls the resolution strategy. Supported values:
+
+- `resolve: first` (default) — alphabetically first contributing property wins.
+- `resolve: last` — alphabetically last contributing property wins.
+- `resolve: regex` — values are joined into a regex alternation `(v1|v2|...)`. See [Regular expression macros](#regular-expression-macros).
 
 A default description can be defined for the macro using the `description` field. Furthermore, per-property descriptions can also be defined to override the default description when certain properties are matched.
 
@@ -668,7 +674,7 @@ A default description can be defined for the macro using the `description` field
 # property_macro_map.yaml
 
 macros:
-  "{$ZAC.TEXT_MACRO}":
+  "{$ZAC.PLAIN_MACRO}":
     description: "This is a default description for the macro"
     properties:
       barry:
@@ -681,14 +687,14 @@ macros:
 
 Some macros support regular expressions, and can thus combine multiple matching properties into a single regular expression. For example, the [Systemd monitoring with Agent 2](https://www.zabbix.com/integrations/systemd) integration uses the `{$SYSTEMD.NAME.SERVICE.MATCHES}` macro to determine which services to monitor.
 
-To specify a regex macro, use `combine: regex`.
+To specify a regex macro, use `resolve: regex`.
 
 ```yaml
 # property_macro_map.yaml
 macros:
   "{$SYSTEMD.NAME.SERVICE.MATCHES}":
     description: "Systemd service name matches regex"
-    combine: regex
+    resolve: regex
     properties:
       is_pgsql_server: postgresql
       zabbix_agent: zabbix-agent
@@ -761,9 +767,9 @@ All macros defined in the mapping file are considered "managed", and are thus re
 
 ```yaml
 macros:
-  "{$ZAC.TEXT_MACRO}":
+  "{$ZAC.PLAIN_MACRO}":
     properties:
-      # no properties will match this -> {$ZAC.TEXT_MACRO} removed from all hosts
+      # no properties will match this -> {$ZAC.PLAIN_MACRO} removed from all hosts
 ```
 
 

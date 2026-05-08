@@ -83,15 +83,16 @@ class ContextType(str, Enum):
     REGEX = "regex"
 
 
-class CombineStrategy(str, Enum):
-    """Strategy for combining multiple property contributions to the same macro identity."""
+class ResolveStrategy(str, Enum):
+    """Strategy for resolving multiple property contributions to the same macro identity."""
 
-    TEXT = "text"  # alphabetically first contributing property wins
+    FIRST = "first"  # alphabetically first contributing property wins
+    LAST = "last"  # alphabetically last contributing property wins
     REGEX = "regex"  # values join into (v1|v2|...), values can be regex patterns
 
 
-class MacroType(str, Enum):
-    """Macro value type."""
+class MacroValueType(str, Enum):
+    """Zabbix usermacro value type (text/secret/vault)."""
 
     TEXT = "text"  # Zabbix usermacro type=0
     SECRET = "secret"  # type=1
@@ -106,7 +107,17 @@ class MacroType(str, Enum):
         elif self.value == "vault":
             return 2
         else:
-            raise ValueError(f"Unknown macro type: {self.value!r}")
+            raise ValueError(f"Unknown macro value type: {self.value!r}")
+
+
+class MacroKind(str, Enum):
+    """Kind of macro: literal value or rendered template.
+
+    Derived during parse from presence of `template:` field; not a YAML field.
+    """
+
+    PLAIN = "plain"
+    TEMPLATE = "template"
 
 
 @dataclass(frozen=True)
@@ -170,8 +181,8 @@ class MacroDefinition:
 
     identity: MacroIdentity
     description: Optional[str] = None
-    macro_type: MacroType = MacroType.TEXT
-    combine: CombineStrategy = CombineStrategy.TEXT
+    value_type: MacroValueType = MacroValueType.TEXT
+    resolve: ResolveStrategy = ResolveStrategy.FIRST
     template: Optional[str] = None
     defaults: TemplateMacroValues = field(default_factory=dict)
     properties: dict[str, MacroValue] = field(default_factory=dict)
@@ -179,6 +190,10 @@ class MacroDefinition:
     @property
     def macro(self) -> str:
         return self.identity.to_zabbix()
+
+    @property
+    def kind(self) -> MacroKind:
+        return MacroKind.TEMPLATE if self.template is not None else MacroKind.PLAIN
 
 
 @dataclass
@@ -188,7 +203,7 @@ class ResolvedMacro:
     identity: MacroIdentity
     value: str
     description: Optional[str] = None
-    macro_type: MacroType = MacroType.TEXT
+    value_type: MacroValueType = MacroValueType.TEXT
 
     @property
     def macro(self) -> str:
@@ -330,8 +345,8 @@ class MacroDefIn(BaseModel):
     """Top-level macro definition entry from mapping file."""
 
     description: Optional[str] = None
-    type: MacroType = MacroType.TEXT
-    combine: CombineStrategy = CombineStrategy.TEXT
+    value_type: MacroValueType = MacroValueType.TEXT
+    resolve: ResolveStrategy = ResolveStrategy.FIRST
     template: Optional[str] = None
     defaults: TemplateMacroValues = Field(default_factory=dict)
     properties: dict[str, PropertyValueIn] = Field(default_factory=dict)
@@ -339,13 +354,13 @@ class MacroDefIn(BaseModel):
 
     @model_validator(mode="after")
     def _validate_template(self) -> Self:
-        if self.template is not None and self.combine != CombineStrategy.TEXT:
-            raise ValueError("template macros only support combine=text")
+        if self.template is not None and self.resolve == ResolveStrategy.REGEX:
+            raise ValueError("template macros do not support resolve=regex")
         for v in self.contexts:
-            if v.template is not None and self.combine != CombineStrategy.TEXT:
+            if v.template is not None and self.resolve == ResolveStrategy.REGEX:
                 raise ValueError(
                     f"context variant {v.context!r} uses template; "
-                    "parent must be combine=text"
+                    "parent must not use resolve=regex"
                 )
         _validate_template_props(self.template, self.defaults, self.properties)
         return self
@@ -447,21 +462,25 @@ class PropertyMacroMapping(BaseModel):
                 continue
 
             # NOTE: the two different sorting calls within each if-branch are a
-            # code smell, but we need to deduplicate values for regex combine,
+            # code smell, but we need to deduplicate values for resolve=regex,
             # which would break the sorting order if we sorted before deduplication.
 
-            if defn.combine == CombineStrategy.TEXT:
+            if defn.resolve in (ResolveStrategy.FIRST, ResolveStrategy.LAST):
                 if defn.template is not None:
                     contributions.sort(key=lambda c: c[0])
                 else:
                     contributions.sort(key=lambda c: c[1].value or "")
-                winning_prop, mv = contributions[0]
+                pick_idx = 0 if defn.resolve == ResolveStrategy.FIRST else -1
+                winning_prop, mv = contributions[pick_idx]
                 if len(contributions) > 1:
                     logger.warning(
-                        "Multiple text-combine values for macro; using alphabetically first property",
+                        "Multiple contributing properties for macro; resolved to single value",
                         macro=identity.to_zabbix(),
+                        resolve=defn.resolve.value,
                         winning_property=winning_prop,
-                        ignored_properties=[c[0] for c in contributions[1:]],
+                        ignored_properties=[
+                            c[0] for c in contributions if c[0] != winning_prop
+                        ],
                     )
                 if defn.template is not None:
                     subs: TemplateMacroValues = {
@@ -499,7 +518,7 @@ class PropertyMacroMapping(BaseModel):
                 identity=identity,
                 value=resolved_value,
                 description=description,
-                macro_type=defn.macro_type,
+                value_type=defn.value_type,
             )
         return result
 
@@ -563,8 +582,8 @@ def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
             MacroDefinition(
                 identity=MacroIdentity(name=name),
                 description=macro_def.description,
-                macro_type=macro_def.type,
-                combine=macro_def.combine,
+                value_type=macro_def.value_type,
+                resolve=macro_def.resolve,
                 template=macro_def.template,
                 defaults=dict(macro_def.defaults),
                 properties={
@@ -595,8 +614,8 @@ def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
                         context_type=variant.context_type,
                     ),
                     description=variant.description or macro_def.description,
-                    macro_type=macro_def.type,  # inherit from parent macro
-                    combine=macro_def.combine,  # inherit from parent macro
+                    value_type=macro_def.value_type,  # inherit from parent macro
+                    resolve=macro_def.resolve,  # inherit from parent macro
                     template=variant.template,
                     defaults=dict(variant.defaults),
                     properties={

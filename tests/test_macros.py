@@ -10,6 +10,7 @@ from pytest import TempPathFactory
 from zabbix_auto_config.macros import ContextType
 from zabbix_auto_config.macros import HostFacts
 from zabbix_auto_config.macros import MacroIdentity
+from zabbix_auto_config.macros import MacroValueType
 from zabbix_auto_config.macros import PropertyMacroMapping
 from zabbix_auto_config.macros import ResolvedMacro
 from zabbix_auto_config.macros import is_valid_macro_name
@@ -80,13 +81,13 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
   "definitions": [
     {
       "identity": {
-        "name": "{$ZAC.TEXT_MACRO}",
+        "name": "{$ZAC.PLAIN_MACRO}",
         "context": null,
         "context_type": "static"
       },
       "description": null,
-      "macro_type": "text",
-      "combine": "text",
+      "value_type": "text",
+      "resolve": "first",
       "template": null,
       "defaults": {},
       "properties": {
@@ -109,17 +110,46 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
     },
     {
       "identity": {
+        "name": "{$ZAC.LAST_MACRO}",
+        "context": null,
+        "context_type": "static"
+      },
+      "description": null,
+      "value_type": "text",
+      "resolve": "last",
+      "template": null,
+      "defaults": {},
+      "properties": {
+        "tier_a": {
+          "value": "tier_a value",
+          "description": null,
+          "extras": {}
+        },
+        "tier_m": {
+          "value": "tier_m value",
+          "description": null,
+          "extras": {}
+        },
+        "tier_z": {
+          "value": "tier_z value",
+          "description": null,
+          "extras": {}
+        }
+      }
+    },
+    {
+      "identity": {
         "name": "{$ZAC.REGEX_MACRO}",
         "context": null,
         "context_type": "static"
       },
       "description": "This one has a description!",
-      "macro_type": "text",
-      "combine": "regex",
+      "value_type": "text",
+      "resolve": "regex",
       "template": null,
       "defaults": {},
       "properties": {
-        "baz": {
+        "bazinga": {
           "value": "bazinga",
           "description": null,
           "extras": {}
@@ -143,8 +173,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "context_type": "static"
       },
       "description": null,
-      "macro_type": "text",
-      "combine": "text",
+      "value_type": "text",
+      "resolve": "first",
       "template": "https://grafana.example.com/d/node?var-host={{hostname}}",
       "defaults": {},
       "properties": {
@@ -162,8 +192,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "context_type": "static"
       },
       "description": "Agent scrape URL",
-      "macro_type": "text",
-      "combine": "text",
+      "value_type": "text",
+      "resolve": "first",
       "template": "https://{{hostname}}:{{port}}/{{endpoint}}",
       "defaults": {
         "port": "9100",
@@ -186,13 +216,51 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
     },
     {
       "identity": {
+        "name": "{$ZAC.API_TOKEN}",
+        "context": null,
+        "context_type": "static"
+      },
+      "description": "API token used by monitoring scripts",
+      "value_type": "secret",
+      "resolve": "first",
+      "template": null,
+      "defaults": {},
+      "properties": {
+        "has_api_integration": {
+          "value": "s3cr3t-t0k3n",
+          "description": null,
+          "extras": {}
+        }
+      }
+    },
+    {
+      "identity": {
+        "name": "{$ZAC.DB_PASSWORD}",
+        "context": null,
+        "context_type": "static"
+      },
+      "description": "DB password fetched from Vault",
+      "value_type": "vault",
+      "resolve": "first",
+      "template": null,
+      "defaults": {},
+      "properties": {
+        "uses_vault_secrets": {
+          "value": "secret/zabbix/db:password",
+          "description": null,
+          "extras": {}
+        }
+      }
+    },
+    {
+      "identity": {
         "name": "{$ZAC.OPTIONAL_CONTEXT}",
         "context": null,
         "context_type": "static"
       },
       "description": "This macro has contexts, but is optional",
-      "macro_type": "text",
-      "combine": "text",
+      "value_type": "text",
+      "resolve": "first",
       "template": null,
       "defaults": {},
       "properties": {
@@ -215,8 +283,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "context_type": "static"
       },
       "description": "Description for /tmp context used here",
-      "macro_type": "text",
-      "combine": "text",
+      "value_type": "text",
+      "resolve": "first",
       "template": null,
       "defaults": {},
       "properties": {
@@ -229,6 +297,11 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "value": "30",
           "description": null,
           "extras": {}
+        },
+        "baz": {
+          "value": "40",
+          "description": null,
+          "extras": {}
         }
       }
     },
@@ -239,8 +312,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "context_type": "regex"
       },
       "description": "This macro has contexts, but is optional",
-      "macro_type": "text",
-      "combine": "text",
+      "value_type": "text",
+      "resolve": "first",
       "template": null,
       "defaults": {},
       "properties": {
@@ -266,23 +339,51 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
 """)
 
 
-def test_property_macro_map_text_single(macro_map: PropertyMacroMapping):
-    # Single value for regular non-regex macro
+def test_property_macro_map_plain_single(macro_map: PropertyMacroMapping):
+    # Single value for plain macro
     assert macro_map.get_macros(["pizza"], DEFAULT_FACTS) == snapshot(
         {
-            "{$ZAC.TEXT_MACRO}": ResolvedMacro(
-                identity=MacroIdentity(name="{$ZAC.TEXT_MACRO}"), value="pizza value"
+            "{$ZAC.PLAIN_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.PLAIN_MACRO}"), value="pizza value"
             )
         }
     )
 
 
-def test_property_macro_map_text_multiple(macro_map: PropertyMacroMapping):
-    # Multiple values for regular non-regex macro - should not combine, since it's not a regex macro
+def test_property_macro_map_plain_multiple(macro_map: PropertyMacroMapping):
+    # Multiple values for resolve=first macro - should not combine, since it's not a regex macro
     assert macro_map.get_macros(["pizza", "barry"], DEFAULT_FACTS) == snapshot(
         {
-            "{$ZAC.TEXT_MACRO}": ResolvedMacro(
-                identity=MacroIdentity(name="{$ZAC.TEXT_MACRO}"), value="barry value"
+            "{$ZAC.PLAIN_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.PLAIN_MACRO}"), value="barry value"
+            )
+        }
+    )
+
+
+def test_property_macro_map_plain_single_resolve_last(
+    macro_map: PropertyMacroMapping,
+):
+    # Single value for resolve=last macro
+    assert macro_map.get_macros(["tier_m"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$ZAC.LAST_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.LAST_MACRO}"), value="tier_m value"
+            )
+        }
+    )
+
+
+def test_property_macro_map_plain_multiple_resolve_last(
+    macro_map: PropertyMacroMapping,
+):
+    # Multiple values for resolve=last macro - should pick the alphabetically last property
+    assert macro_map.get_macros(
+        ["tier_a", "tier_m", "tier_z"], DEFAULT_FACTS
+    ) == snapshot(
+        {
+            "{$ZAC.LAST_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.LAST_MACRO}"), value="tier_z value"
             )
         }
     )
@@ -290,7 +391,7 @@ def test_property_macro_map_text_multiple(macro_map: PropertyMacroMapping):
 
 def test_property_macro_map_regex_single(macro_map: PropertyMacroMapping):
     # Single value for macro with regex support
-    assert macro_map.get_macros(["baz"], DEFAULT_FACTS) == snapshot(
+    assert macro_map.get_macros(["bazinga"], DEFAULT_FACTS) == snapshot(
         {
             "{$ZAC.REGEX_MACRO}": ResolvedMacro(
                 identity=MacroIdentity(name="{$ZAC.REGEX_MACRO}"),
@@ -303,7 +404,7 @@ def test_property_macro_map_regex_single(macro_map: PropertyMacroMapping):
 
 def test_property_macro_map_regex_multiple(macro_map: PropertyMacroMapping):
     # Multiple values for macro with regex support
-    assert macro_map.get_macros(["baz", "grok"], DEFAULT_FACTS) == snapshot(
+    assert macro_map.get_macros(["bazinga", "grok"], DEFAULT_FACTS) == snapshot(
         {
             "{$ZAC.REGEX_MACRO}": ResolvedMacro(
                 identity=MacroIdentity(name="{$ZAC.REGEX_MACRO}"),
@@ -367,7 +468,7 @@ def test_property_macro_map_contexts_multiple(macro_map: PropertyMacroMapping):
 
 
 def test_property_macro_map_contexts_multiple_regex(macro_map: PropertyMacroMapping):
-    # Macros with two regex contexts with different values for a text macro
+    # Macros with two regex contexts with different values for a resolve=first macro
     # (alphabetically first is chosen -> "bar" chosen over "gux")
     assert macro_map.get_macros(["bar", "gux"], DEFAULT_FACTS) == snapshot(
         {
@@ -437,29 +538,66 @@ def test_template_macro_extra_placeholders_multiple(macro_map: PropertyMacroMapp
     )
 
 
+def test_property_macro_map_secret(macro_map: PropertyMacroMapping):
+    # Single value for secret macro
+    assert macro_map.get_macros(["has_api_integration"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$ZAC.API_TOKEN}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.API_TOKEN}"),
+                value="s3cr3t-t0k3n",
+                description="API token used by monitoring scripts",
+                value_type=MacroValueType.SECRET,
+            )
+        }
+    )
+
+
+def test_property_macro_map_vault(macro_map: PropertyMacroMapping):
+    # Single value for vault macro
+    assert macro_map.get_macros(["uses_vault_secrets"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$ZAC.DB_PASSWORD}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.DB_PASSWORD}"),
+                value="secret/zabbix/db:password",
+                description="DB password fetched from Vault",
+                value_type=MacroValueType.VAULT,
+            )
+        }
+    )
+
+
 def test_property_macro_map_combined(macro_map: PropertyMacroMapping):
     # Macro with multiple properties, some of which are shared between macros
     # Combine everything
     assert macro_map.get_macros(
         [
+            # Plain
             "pizza",
             "barry",
             "spam",
             "eggs",
             "ham",
             "grok",
+            "bazinga",
+            # Context
             "foo",
             "bar",
             "baz",
+            "gux",
+            # Template
             "dashboard_node",
             "monitored_node",
             "legacy_exporter",
+            # Secret
+            "has_api_integration",
+            # Vault
+            "uses_vault_secrets",
         ],
         DEFAULT_FACTS,
     ) == snapshot(
         {
-            "{$ZAC.TEXT_MACRO}": ResolvedMacro(
-                identity=MacroIdentity(name="{$ZAC.TEXT_MACRO}"), value="barry value"
+            "{$ZAC.PLAIN_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.PLAIN_MACRO}"), value="barry value"
             ),
             "{$ZAC.REGEX_MACRO}": ResolvedMacro(
                 identity=MacroIdentity(name="{$ZAC.REGEX_MACRO}"),
@@ -494,6 +632,18 @@ def test_property_macro_map_combined(macro_map: PropertyMacroMapping):
                 value="https://testhost.example.com:9101/metrics",
                 description="Agent scrape URL",
             ),
+            "{$ZAC.API_TOKEN}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.API_TOKEN}"),
+                value="s3cr3t-t0k3n",
+                description="API token used by monitoring scripts",
+                value_type=MacroValueType.SECRET,
+            ),
+            "{$ZAC.DB_PASSWORD}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.DB_PASSWORD}"),
+                value="secret/zabbix/db:password",
+                description="DB password fetched from Vault",
+                value_type=MacroValueType.VAULT,
+            ),
         }
     )
 
@@ -517,7 +667,7 @@ def test_get_macros_deduplication_regex_plain(tmp_path: Path):
         r"""
 macros:
   "{$SYSTEMD.NAME.SERVICE.MATCHES}":
-    combine: regex
+    resolve: regex
     properties:
       default_db: postgresql
       is_pgsql_server: postgresql
@@ -560,7 +710,7 @@ def test_get_macros_deduplication_regex_pattern(tmp_path: Path):
         r"""
 macros:
   "{$SYSTEMD.NAME.SERVICE.MATCHES}":
-    combine: regex
+    resolve: regex
     properties:
       default_db: ^postgresql(\d+)?$
       is_pgsql_server: ^postgresql(\d+)?$
@@ -592,7 +742,7 @@ def test_get_macros_deduplication_regex_mixed(tmp_path: Path):
         r"""
 macros:
   "{$SYSTEMD.NAME.SERVICE.MATCHES}":
-    combine: regex
+    resolve: regex
     properties:
       default_db: postgresql
       is_pgsql_server: postgresql
@@ -623,7 +773,7 @@ def test_get_macros_regex_patterns(tmp_path: Path):
         r"""
 macros:
   "{$SYSTEMD.NAME.SERVICE.MATCHES}":
-    combine: regex
+    resolve: regex
     properties:
       is_pgsql_server: ^postgresql(\d+)?$
       zabbix_agent: ^zabbix-agent(\d+)?$
@@ -740,5 +890,58 @@ macros:
         match=re.escape(
             "Template placeholders not satisfied: {'monitored_node': ['endpoint'], 'legacy_exporter': ['endpoint']}"
         ),
+    ):
+        _ = read_property_macro_map(tmpfile)
+
+
+def test_resolve_last(tmp_path: Path):
+    """`resolve: last` picks alphabetically last contributing property."""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$ZAC.LAST_MACRO}":
+    resolve: last
+    properties:
+      apple: "apple value"
+      banana: "banana value"
+      cherry: "cherry value"
+""",
+        encoding="utf-8",
+    )
+    m = read_property_macro_map(tmpfile)
+
+    # Single property -> that property's value
+    assert m.get_macros(["apple"], DEFAULT_FACTS) == {
+        "{$ZAC.LAST_MACRO}": ResolvedMacro(
+            identity=MacroIdentity(name="{$ZAC.LAST_MACRO}"), value="apple value"
+        )
+    }
+
+    # Multiple properties -> alphabetically last value wins
+    assert m.get_macros(["apple", "banana", "cherry"], DEFAULT_FACTS) == {
+        "{$ZAC.LAST_MACRO}": ResolvedMacro(
+            identity=MacroIdentity(name="{$ZAC.LAST_MACRO}"), value="cherry value"
+        )
+    }
+
+
+def test_template_macro_rejects_resolve_regex(tmp_path: Path):
+    """Template macros must not use `resolve: regex`."""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$ZAC.BAD}":
+    resolve: regex
+    template: "https://{{hostname}}/x"
+    properties:
+      foo:
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValidationError,
+        match=re.escape("template macros do not support resolve=regex"),
     ):
         _ = read_property_macro_map(tmpfile)
