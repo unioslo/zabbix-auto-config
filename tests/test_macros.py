@@ -333,6 +333,97 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "extras": {}
         }
       }
+    },
+    {
+      "identity": {
+        "name": "{$ZAC.TEMPLATE_AND_CONTEXT}",
+        "context": null,
+        "context_type": "static"
+      },
+      "description": "This macro has a template and contexts",
+      "value_type": "text",
+      "resolve": "first",
+      "template": "https://{{hostname}}:{{port}}/ctx/{{endpoint}}",
+      "defaults": {
+        "port": "9100",
+        "endpoint": "defaultendpoint"
+      },
+      "properties": {}
+    },
+    {
+      "identity": {
+        "name": "{$ZAC.TEMPLATE_AND_CONTEXT}",
+        "context": "internal",
+        "context_type": "static"
+      },
+      "description": "Description for internal context used here",
+      "value_type": "text",
+      "resolve": "first",
+      "template": "https://{{hostname}}:{{port}}/ctx/{{endpoint}}",
+      "defaults": {
+        "port": "9100",
+        "endpoint": "defaultendpoint"
+      },
+      "properties": {
+        "qux": {
+          "value": null,
+          "description": null,
+          "extras": {
+            "port": "20",
+            "endpoint": "quxpoint"
+          }
+        },
+        "quux": {
+          "value": null,
+          "description": null,
+          "extras": {
+            "endpoint": "quuxpoint"
+          }
+        },
+        "corge": {
+          "value": null,
+          "description": null,
+          "extras": {}
+        }
+      }
+    },
+    {
+      "identity": {
+        "name": "{$ZAC.TEMPLATE_AND_CONTEXT}",
+        "context": "^site:.*",
+        "context_type": "regex"
+      },
+      "description": "This macro has a template and contexts",
+      "value_type": "text",
+      "resolve": "first",
+      "template": "https://{{hostname}}:{{port}}/internal/{{ctxpoint}}",
+      "defaults": {
+        "ctxpoint": "regexpoint",
+        "port": "9100",
+        "endpoint": "defaultendpoint"
+      },
+      "properties": {
+        "waldo": {
+          "value": null,
+          "description": null,
+          "extras": {
+            "port": "30",
+            "ctxpoint": "waldopoint"
+          }
+        },
+        "plugh": {
+          "value": null,
+          "description": null,
+          "extras": {
+            "ctxpoint": "plughpoint"
+          }
+        },
+        "xyzzy": {
+          "value": null,
+          "description": null,
+          "extras": {}
+        }
+      }
     }
   ]
 }\
@@ -1140,18 +1231,17 @@ def test_context_macro_with_template_invalid(tmp_path: Path):
         """
 macros:
   "{$ZAC.CONTEXT_MACRO}":
-    resolve: first
-    template: "https://{{hostname}}/ctx/{{ctx}}"
-    defaults:
-      ctx: bar
+    resolve: regex
     contexts:
       - context: "plaintext"
         description: "Context description"
+        template: "https://{{hostname}}/ctx/{{ctx}}" # templates not allowed for context macros
         properties:
           foo:
             ctx: "foo value 123"
       - context: "^somepattern.*$"
         description: "Regex context description"
+        template: "https://{{hostname}}/ctx/{{ctx}}" # templates not allowed for context macros
         properties:
           foo:
             ctx: "foo value 456"
@@ -1160,6 +1250,6 @@ macros:
     )
     with pytest.raises(
         ValidationError,
-        match=re.escape("template macros do not support resolve=regex"),
+        match=re.escape("uses template; parent must not use resolve=regex"),
     ):
         _ = read_property_macro_map(tmpfile)
