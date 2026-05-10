@@ -108,3 +108,39 @@ macros:
           spam: 30
           bar: 40 # only used here
           gux: 50 # only used here
+  # We can define macros with contexts that are rendered using templates as well.
+  # In this case, the text context `internal` inherits the top-level template,
+  # while the regex context `^site:.*` defines its own template and new placeholders.
+  "{$ZAC.TEMPLATE_AND_CONTEXT}":
+    description: "This macro has a template and contexts"
+    template: "https://{{hostname}}:{{port}}/ctx/{{endpoint}}"
+    defaults:
+      port: 9100
+      endpoint: defaultendpoint
+    contexts:
+      - context: "internal" # text context (exact match)
+        # Template is automatically injected into the context
+        description: "Description for internal context used here"
+        properties:
+         # Full or partial overrides of template variables
+          qux:
+            port: 20
+            endpoint: "quxpoint"
+          quux:
+            endpoint: "quuxpoint"
+          corge:
+      - context: "^site:.*"
+        context_type: regex
+        # Contexts can also override the template itself and define new placeholders
+        template: "https://{{hostname}}:{{port}}/internal/{{ctxpoint}}"
+        # New defaults MUST be provided for any new placeholders!
+        defaults:
+          # inherits port from top-level
+          ctxpoint: "regexpoint"
+        properties:
+          waldo:
+            port: 30
+            ctxpoint: "waldopoint"
+          plugh:
+            ctxpoint: "plughpoint"
+          xyzzy:

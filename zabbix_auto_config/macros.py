@@ -268,9 +268,10 @@ def _validate_template_props(
 ) -> None:
     """Validate template/defaults/properties consistency.
 
-    Raises ValueError if validation fails. Should only be called by validators that
-    run when the mapping file is read! We don't want to raise ValueErrors
-    during macro resolution for individual hosts.
+    Raises ValueError if validation fails.
+
+    NOTE: this function should only be called when reading from the mapping file.
+    We do not want to raise exceptions when resolving macros for hosts!
     """
     # Detect if values are defined on macro with no template
     if template is None:
@@ -352,11 +353,48 @@ class MacroDefIn(BaseModel):
     properties: dict[str, PropertyValueIn] = Field(default_factory=dict)
     contexts: list[MacroContextIn] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _inject_template_to_contexts(cls, data: Any) -> Any:
+        """Inject top-level template and defaults to contexts if missing."""
+        # NOTE: this is kinda hacky, and we only have to do this because
+        # MacroContextIn calls _validate_template_props in its own validator,
+        # which requires the template to be present in the instance.
+        #
+        # We could refactor the validation to only be called once after all
+        # definitions have been fully constructed - instead of on a per-model basis.
+        if not isinstance(data, dict):
+            return data  # pydantic will handle the error
+        template = data.get("template")
+        contexts = data.get("contexts", [])
+        if template and isinstance(contexts, list):
+            defaults = data.get("defaults", {})
+            for ctx in contexts:
+                if isinstance(ctx, dict):
+                    # Inject template if missing
+                    if not ctx.get("template"):
+                        ctx["template"] = template
+
+                    # Inject defaults
+                    if not ctx.get("defaults"):
+                        ctx["defaults"] = defaults
+                    elif isinstance(ctx["defaults"], dict):
+                        # Some defaults missing
+                        for k, v in defaults.items():
+                            ctx["defaults"].setdefault(k, v)
+                    # Fall through if defaults is not a dict
+        return data
+
     @model_validator(mode="after")
     def _validate_template(self) -> Self:
         if self.template is not None and self.resolve == ResolveStrategy.REGEX:
             raise ValueError("template macros do not support resolve=regex")
         for v in self.contexts:
+            # NOTE: Should we actually forbid using regex resolution for contexts
+            # with templates? There's no technical reason to do so!
+            # It's only forbidden because the main use case for templates is
+            # rendering URLs with host facts, but that is not the _only_ use case.
+            # We should not be so opinionated!
             if v.template is not None and self.resolve == ResolveStrategy.REGEX:
                 raise ValueError(
                     f"context variant {v.context!r} uses template; "

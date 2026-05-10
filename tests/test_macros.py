@@ -538,6 +538,96 @@ def test_template_macro_extra_placeholders_multiple(macro_map: PropertyMacroMapp
     )
 
 
+def test_template_macro_with_context_text(macro_map: PropertyMacroMapping):
+    """Test template macro with text context."""
+
+    # Inherits no defaults - specifies all values itself
+    assert macro_map.get_macros(["qux"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$ZAC.TEMPLATE_AND_CONTEXT:internal}": ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.TEMPLATE_AND_CONTEXT}", context="internal"
+                ),
+                value="https://testhost.example.com:20/ctx/quxpoint",
+                description="Description for internal context used here",
+            )
+        }
+    )
+    # Inherits partial defaults - missing port
+    assert macro_map.get_macros(["quux"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$ZAC.TEMPLATE_AND_CONTEXT:internal}": ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.TEMPLATE_AND_CONTEXT}", context="internal"
+                ),
+                value="https://testhost.example.com:9100/ctx/quuxpoint",
+                description="Description for internal context used here",
+            )
+        }
+    )
+
+    # Inherits all defaults
+    assert macro_map.get_macros(["corge"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$ZAC.TEMPLATE_AND_CONTEXT:internal}": ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.TEMPLATE_AND_CONTEXT}", context="internal"
+                ),
+                value="https://testhost.example.com:9100/ctx/defaultendpoint",
+                description="Description for internal context used here",
+            )
+        }
+    )
+
+
+def test_template_macro_with_context_regex(macro_map: PropertyMacroMapping):
+    """Test template macro with regex context."""
+
+    # Inherits no defaults - specifies all values itself
+    assert macro_map.get_macros(["waldo"], DEFAULT_FACTS) == snapshot(
+        {
+            '{$ZAC.TEMPLATE_AND_CONTEXT:regex:"^site:.*"}': ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.TEMPLATE_AND_CONTEXT}",
+                    context="^site:.*",
+                    context_type=ContextType.REGEX,
+                ),
+                value="https://testhost.example.com:30/internal/waldopoint",
+                description="This macro has a template and contexts",
+            )
+        }
+    )
+    # Inherits partial defaults - missing port
+    assert macro_map.get_macros(["plugh"], DEFAULT_FACTS) == snapshot(
+        {
+            '{$ZAC.TEMPLATE_AND_CONTEXT:regex:"^site:.*"}': ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.TEMPLATE_AND_CONTEXT}",
+                    context="^site:.*",
+                    context_type=ContextType.REGEX,
+                ),
+                value="https://testhost.example.com:9100/internal/plughpoint",
+                description="This macro has a template and contexts",
+            )
+        }
+    )
+
+    # Inherits all defaults
+    assert macro_map.get_macros(["xyzzy"], DEFAULT_FACTS) == snapshot(
+        {
+            '{$ZAC.TEMPLATE_AND_CONTEXT:regex:"^site:.*"}': ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.TEMPLATE_AND_CONTEXT}",
+                    context="^site:.*",
+                    context_type=ContextType.REGEX,
+                ),
+                value="https://testhost.example.com:9100/internal/regexpoint",
+                description="This macro has a template and contexts",
+            )
+        }
+    )
+
+
 def test_property_macro_map_secret(macro_map: PropertyMacroMapping):
     # Single value for secret macro
     assert macro_map.get_macros(["has_api_integration"], DEFAULT_FACTS) == snapshot(
@@ -932,11 +1022,139 @@ def test_template_macro_rejects_resolve_regex(tmp_path: Path):
     tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
         """
 macros:
-  "{$ZAC.BAD}":
+  "{$ZAC.TEMPLATE_MACRO}":
     resolve: regex
     template: "https://{{hostname}}/x"
     properties:
       foo:
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValidationError,
+        match=re.escape("template macros do not support resolve=regex"),
+    ):
+        _ = read_property_macro_map(tmpfile)
+
+
+def test_context_macro_with_template(tmp_path: Path):
+    """Context macros must not use `resolve: regex`."""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$ZAC.CONTEXT_MACRO}":
+    resolve: first
+    template: "https://{{hostname}}/ctx/{{ctx}}"
+    defaults:
+      ctx: bar
+    contexts:
+      - context: "plaintext"
+        description: "Context description"
+        properties:
+          foo:
+            ctx: "foo value 123"
+      - context: "^somepattern.*$"
+        description: "Regex context description"
+        properties:
+          foo:
+            ctx: "foo value 456"
+""",
+        encoding="utf-8",
+    )
+    m = read_property_macro_map(tmpfile)
+    assert m.get_macros(["foo"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$ZAC.CONTEXT_MACRO:plaintext}": ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.CONTEXT_MACRO}", context="plaintext"
+                ),
+                value="https://testhost.example.com/ctx/foo value 123",
+                description="Context description",
+            ),
+            "{$ZAC.CONTEXT_MACRO:^somepattern.*$}": ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.CONTEXT_MACRO}", context="^somepattern.*$"
+                ),
+                value="https://testhost.example.com/ctx/foo value 456",
+                description="Regex context description",
+            ),
+        }
+    )
+
+
+def test_context_macro_with_overriden_template(tmp_path: Path):
+    """Context macro with template and contexts that override template + placeholders."""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$ZAC.TEMPLATE_AND_CONTEXT}":
+    template: "https://{{hostname}}:{{port}}/ctx/{{ctx}}"
+    defaults:
+      port: 9100
+      ctx: defaultctx
+    properties:
+      spam:
+    contexts:
+      - context: "^site:.*"
+        context_type: regex
+        template: "https://{{hostname}}:{{port}}/internal/{{blah}}" # can override top-level template
+        defaults:
+            # inherits port
+            blah: "blahval"
+        properties:
+          spam:
+            port: 30
+            blah: "bazinga"
+          bar:
+            blah: "barval"
+          gux:
+
+""",
+        encoding="utf-8",
+    )
+    m = read_property_macro_map(tmpfile)
+    assert m.get_macros(["spam"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$ZAC.TEMPLATE_AND_CONTEXT}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.TEMPLATE_AND_CONTEXT}"),
+                value="https://testhost.example.com:9100/ctx/defaultctx",
+            ),
+            '{$ZAC.TEMPLATE_AND_CONTEXT:regex:"^site:.*"}': ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.TEMPLATE_AND_CONTEXT}",
+                    context="^site:.*",
+                    context_type=ContextType.REGEX,
+                ),
+                value="https://testhost.example.com:30/internal/bazinga",
+            ),
+        }
+    )
+
+
+def test_context_macro_with_template_invalid(tmp_path: Path):
+    """Context macros with templates must not use `resolve: regex`."""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$ZAC.CONTEXT_MACRO}":
+    resolve: first
+    template: "https://{{hostname}}/ctx/{{ctx}}"
+    defaults:
+      ctx: bar
+    contexts:
+      - context: "plaintext"
+        description: "Context description"
+        properties:
+          foo:
+            ctx: "foo value 123"
+      - context: "^somepattern.*$"
+        description: "Regex context description"
+        properties:
+          foo:
+            ctx: "foo value 456"
 """,
         encoding="utf-8",
     )
