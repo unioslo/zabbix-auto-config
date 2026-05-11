@@ -1146,6 +1146,7 @@ macros:
           foo:
             ctx: "foo value 123"
       - context: "^somepattern.*$"
+        context_type: regex
         description: "Regex context description"
         properties:
           foo:
@@ -1163,9 +1164,11 @@ macros:
                 value="https://testhost.example.com/ctx/foo value 123",
                 description="Context description",
             ),
-            "{$ZAC.CONTEXT_MACRO:^somepattern.*$}": ResolvedMacro(
+            '{$ZAC.CONTEXT_MACRO:regex:"^somepattern.*$"}': ResolvedMacro(
                 identity=MacroIdentity(
-                    name="{$ZAC.CONTEXT_MACRO}", context="^somepattern.*$"
+                    name="{$ZAC.CONTEXT_MACRO}",
+                    context="^somepattern.*$",
+                    context_type=ContextType.REGEX,
                 ),
                 value="https://testhost.example.com/ctx/foo value 456",
                 description="Regex context description",
