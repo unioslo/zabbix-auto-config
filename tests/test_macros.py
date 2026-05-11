@@ -102,7 +102,7 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "extras": {}
         },
         "spam": {
-          "value": "spam value",
+          "value": "a spam value",
           "description": null,
           "extras": {}
         }
@@ -792,7 +792,7 @@ def test_property_macro_map_combined(macro_map: PropertyMacroMapping):
             ),
             "{$ZAC.OPTIONAL_CONTEXT:/tmp}": ResolvedMacro(
                 identity=MacroIdentity(name="{$ZAC.OPTIONAL_CONTEXT}", context="/tmp"),
-                value="20",
+                value="40",
                 description="Description for /tmp context used here",
             ),
             '{$ZAC.OPTIONAL_CONTEXT:regex:"^/var/log/.*$"}': ResolvedMacro(
@@ -801,7 +801,7 @@ def test_property_macro_map_combined(macro_map: PropertyMacroMapping):
                     context="^/var/log/.*$",
                     context_type=ContextType.REGEX,
                 ),
-                value="30",
+                value="40",
                 description="This macro has contexts, but is optional",
             ),
             "{$ZAC.BASIC_TEMPLATE_MACRO}": ResolvedMacro(

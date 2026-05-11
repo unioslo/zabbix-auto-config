@@ -3,13 +3,13 @@ macros:
   # If a host has the property `barry`:
   # - {$ZAC.PLAIN_MACRO} -> "barry value"
   # If a host has the properties `barry` and `pizza`:
-  # - {$ZAC.PLAIN_MACRO} -> "barry value" (since `barry` is alphabetically first)
+  # - {$ZAC.PLAIN_MACRO} -> "barry value" (since `barry` is the alphabetically first property)
   "{$ZAC.PLAIN_MACRO}":
     resolve: first # default, can be omitted
     properties:
       barry: "barry value"
       pizza: "pizza value"
-      spam: "spam value"
+      spam: "a spam value"
 
   # `resolve: last` picks the alphabetically last contributing property.
   # Useful for tier-style overrides where the highest-priority property name

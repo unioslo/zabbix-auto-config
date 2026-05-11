@@ -504,10 +504,8 @@ class PropertyMacroMapping(BaseModel):
             # which would break the sorting order if we sorted before deduplication.
 
             if defn.resolve in (ResolveStrategy.FIRST, ResolveStrategy.LAST):
-                if defn.template is not None:
-                    contributions.sort(key=lambda c: c[0])
-                else:
-                    contributions.sort(key=lambda c: c[1].value or "")
+                contributions.sort(key=lambda c: c[0])
+
                 pick_idx = 0 if defn.resolve == ResolveStrategy.FIRST else -1
                 winning_prop, mv = contributions[pick_idx]
                 if len(contributions) > 1:
