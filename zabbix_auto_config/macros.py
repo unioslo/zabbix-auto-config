@@ -482,21 +482,30 @@ class PropertyMacroMapping(BaseModel):
             MacroIdentity, tuple[MacroDefinition, list[tuple[str, MacroValue]]]
         ] = {}
 
+        # The property dedup code is overkill in practice!
+        # In tests, we call this method with a list of properties
+        # but in the actual ZAC code, we always pass in a set of properties
+        # making the deduplication part of this loop redundant.
+        # However, in order to ensure ordering in tests, it's very useful
+        # for this method to be able to take in lists... So we keep the dedup code.
+
+        # Get macros associated with each property
         seen_props: set[str] = set()
         for prop in properties:
             if prop in seen_props:
                 continue
             seen_props.add(prop)
             for defn in self._by_property.get(prop, []):
-                mv = defn.properties.get(prop)
-                if mv is None:
+                macro_value = defn.properties.get(prop)
+                if macro_value is None:
                     continue
                 slot = per_identity.setdefault(defn.identity, (defn, []))
-                slot[1].append((prop, mv))
+                slot[1].append((prop, macro_value))
 
+        # Resolve macro values
         result: dict[str, ResolvedMacro] = {}
         for identity, (defn, contributions) in per_identity.items():
-            if not contributions:  # safety
+            if not contributions:  # safety for 0-indexing
                 continue
 
             # NOTE: the two different sorting calls within each if-branch are a
@@ -507,7 +516,7 @@ class PropertyMacroMapping(BaseModel):
                 contributions.sort(key=lambda c: c[0])
 
                 pick_idx = 0 if defn.resolve == ResolveStrategy.FIRST else -1
-                winning_prop, mv = contributions[pick_idx]
+                winning_prop, macro_value = contributions[pick_idx]
                 if len(contributions) > 1:
                     logger.warning(
                         "Multiple contributing properties for macro; resolved to single value",
@@ -523,13 +532,13 @@ class PropertyMacroMapping(BaseModel):
                         k: str(v) for k, v in host_facts.items()
                     }
                     subs.update(defn.defaults)
-                    subs.update(mv.extras)
+                    subs.update(macro_value.extras)
                     resolved_value = _apply_template(defn.template, subs, identity)
                 else:
-                    resolved_value = mv.value or ""
-                description = mv.description or defn.description
+                    resolved_value = macro_value.value or ""
+                description = macro_value.description or defn.description
             else:  # REGEX
-                # Deduplicate values (validator guarantees no None values for regex)
+                # Deduplicate values (validator guarantees no None values for regex) is this true???
                 values = sorted(
                     {mv.value for _, mv in contributions if mv.value is not None}
                 )
