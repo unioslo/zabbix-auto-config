@@ -240,6 +240,7 @@ class PropertyValueIn(BaseModel):
 
 
 _PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
+RESERVED_PROPERTY_KEYS = frozenset(PropertyValueIn.__annotations__)
 
 
 def _apply_template(
@@ -323,6 +324,14 @@ def _validate_template_props(
     if missing_per_prop:
         raise ValueError(f"Template placeholders not satisfied: {missing_per_prop}")
 
+    # Detect placeholders that collide with property keys
+    collisions = placeholders & RESERVED_PROPERTY_KEYS
+    # TODO: check per-property template overrides as well!
+    if collisions:
+        raise ValueError(
+            f"Template placeholders collide with reserved property keys: {collisions}"
+        )
+
 
 class MacroContextIn(BaseModel):
     """Macro context from mapping file."""
@@ -357,7 +366,7 @@ class MacroDefIn(BaseModel):
     @classmethod
     def _inject_template_to_contexts(cls, data: Any) -> Any:
         """Inject top-level template and defaults to contexts if missing."""
-        # NOTE: this is kinda hacky, and we only have to do this because
+        # NOTE: this is hacky and overly dynamic, and we only have to do this because
         # MacroContextIn calls _validate_template_props in its own validator,
         # which requires the template to be present in the instance.
         #
@@ -527,6 +536,12 @@ class PropertyMacroMapping(BaseModel):
                             c[0] for c in contributions if c[0] != winning_prop
                         ],
                     )
+
+                # FIXME: Template rendering logic is contained within this
+                # block, which means we do not support template rendering
+                # for regex-resolved macro values. Even if we allow it in
+                # the main validators, we will only ever render the values here!
+                # Bug waiting to happen; should be generalized.
                 if defn.template is not None:
                     subs: TemplateMacroValues = {
                         k: str(v) for k, v in host_facts.items()

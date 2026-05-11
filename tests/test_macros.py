@@ -7,6 +7,8 @@ import pytest
 from inline_snapshot import snapshot
 from pydantic import ValidationError
 from pytest import TempPathFactory
+from zabbix_auto_config.macros import RESERVED_HOST_FACT_KEYS
+from zabbix_auto_config.macros import RESERVED_PROPERTY_KEYS
 from zabbix_auto_config.macros import ContextType
 from zabbix_auto_config.macros import HostFacts
 from zabbix_auto_config.macros import MacroIdentity
@@ -1256,3 +1258,67 @@ macros:
         match=re.escape("uses template; parent must not use resolve=regex"),
     ):
         _ = read_property_macro_map(tmpfile)
+
+
+def test_template_macro_reserved_placeholders_main_def(tmp_path: Path):
+    """Template in macro definition must not use reserved property keys as placeholders."""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$ZAC.TEMPLATE_MACRO}":
+    description: "Agent scrape URL"
+    template: "https://{{hostname}}:{{description}}/{{value}}"
+    defaults:
+      description: whatever
+      value: endpoint
+    properties:
+      monitored_node:
+      legacy_exporter:
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValidationError,
+        match=re.escape("Template placeholders collide with reserved property keys"),
+    ):
+        _ = read_property_macro_map(tmpfile)
+
+
+def test_template_macro_reserved_placeholders_properties(tmp_path: Path):
+    """Template in macro properties must not use reserved property keys as placeholders."""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$ZAC.TEMPLATE_MACRO}":
+    description: "Agent scrape URL"
+    template: "https://{{hostname}}:{{valid}}/{{placeholders}}"
+    defaults:
+      valid: whatever
+      placeholders: endpoint
+    properties:
+      monitored_node:
+        template: "https://{{hostname}}:{{description}}/{{value}}" # invalid
+        values:
+          description: desc for monitored_node
+          value: nodeendpoint
+      legacy_exporter:
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValidationError,
+        match=re.escape("Template placeholders collide with reserved property keys"),
+    ):
+        _ = read_property_macro_map(tmpfile)
+
+
+def test_reserved_host_fact_keys() -> None:
+    """Snapshot test for ensuring reserved host fact keys stay consistent."""
+    assert RESERVED_HOST_FACT_KEYS == snapshot(frozenset({"hostname"}))
+
+
+def test_reserved_property_keys() -> None:
+    """Snapshot test for ensuring reserved property keys stay consistent."""
+    assert RESERVED_PROPERTY_KEYS == snapshot(frozenset({"description", "value"}))
