@@ -96,17 +96,17 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "barry": {
           "value": "barry value",
           "description": null,
-          "extras": {}
+          "values": {}
         },
         "pizza": {
           "value": "pizza value",
           "description": null,
-          "extras": {}
+          "values": {}
         },
         "spam": {
           "value": "a spam value",
           "description": null,
-          "extras": {}
+          "values": {}
         }
       }
     },
@@ -125,17 +125,17 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "tier_a": {
           "value": "tier_a value",
           "description": null,
-          "extras": {}
+          "values": {}
         },
         "tier_m": {
           "value": "tier_m value",
           "description": null,
-          "extras": {}
+          "values": {}
         },
         "tier_z": {
           "value": "tier_z value",
           "description": null,
-          "extras": {}
+          "values": {}
         }
       }
     },
@@ -154,17 +154,17 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "bazinga": {
           "value": "bazinga",
           "description": null,
-          "extras": {}
+          "values": {}
         },
         "spam": {
           "value": "spam value",
           "description": null,
-          "extras": {}
+          "values": {}
         },
         "grok": {
           "value": "^grok value$",
           "description": "We can override the description for individual properties as well",
-          "extras": {}
+          "values": {}
         }
       }
     },
@@ -183,7 +183,7 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "dashboard_node": {
           "value": null,
           "description": null,
-          "extras": {}
+          "values": {}
         }
       }
     },
@@ -205,13 +205,50 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "monitored_node": {
           "value": null,
           "description": null,
-          "extras": {}
+          "values": {}
         },
         "legacy_exporter": {
           "value": null,
           "description": null,
-          "extras": {
-            "port": "9101"
+          "values": {
+            "port": "9101",
+            "endpoint": "metrics"
+          }
+        }
+      }
+    },
+    {
+      "identity": {
+        "name": "{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}",
+        "context": null,
+        "context_type": "static"
+      },
+      "description": "Ingestion endpoint",
+      "value_type": "text",
+      "resolve": "first",
+      "template": "https://{{hostname}}:{{port}}/{{endpoint}}",
+      "defaults": {
+        "port": "9100",
+        "endpoint": "ingestion"
+      },
+      "properties": {
+        "logs_ingestor": {
+          "value": null,
+          "description": null,
+          "values": {}
+        },
+        "legacy_ingestor": {
+          "value": null,
+          "description": null,
+          "values": {}
+        },
+        "older_legacy_ingestor": {
+          "value": null,
+          "description": null,
+          "values": {
+            "port": "9101",
+            "different_placeholder": "ingestor",
+            "endpoint": "ingestion"
           }
         }
       }
@@ -231,7 +268,7 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "has_api_integration": {
           "value": "s3cr3t-t0k3n",
           "description": null,
-          "extras": {}
+          "values": {}
         }
       }
     },
@@ -250,7 +287,7 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "uses_vault_secrets": {
           "value": "secret/zabbix/db:password",
           "description": null,
-          "extras": {}
+          "values": {}
         }
       }
     },
@@ -269,12 +306,12 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "spam": {
           "value": "value for non-context spam",
           "description": null,
-          "extras": {}
+          "values": {}
         },
         "eggs": {
           "value": "value for non-context eggs",
           "description": null,
-          "extras": {}
+          "values": {}
         }
       }
     },
@@ -293,17 +330,17 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "spam": {
           "value": "20",
           "description": null,
-          "extras": {}
+          "values": {}
         },
         "foo": {
           "value": "30",
           "description": null,
-          "extras": {}
+          "values": {}
         },
         "baz": {
           "value": "40",
           "description": null,
-          "extras": {}
+          "values": {}
         }
       }
     },
@@ -322,17 +359,17 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "spam": {
           "value": "30",
           "description": null,
-          "extras": {}
+          "values": {}
         },
         "bar": {
           "value": "40",
           "description": null,
-          "extras": {}
+          "values": {}
         },
         "gux": {
           "value": "50",
           "description": null,
-          "extras": {}
+          "values": {}
         }
       }
     },
@@ -370,7 +407,7 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "qux": {
           "value": null,
           "description": null,
-          "extras": {
+          "values": {
             "port": "20",
             "endpoint": "quxpoint"
           }
@@ -378,14 +415,14 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "quux": {
           "value": null,
           "description": null,
-          "extras": {
+          "values": {
             "endpoint": "quuxpoint"
           }
         },
         "corge": {
           "value": null,
           "description": null,
-          "extras": {}
+          "values": {}
         }
       }
     },
@@ -408,7 +445,7 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "waldo": {
           "value": null,
           "description": null,
-          "extras": {
+          "values": {
             "port": "30",
             "ctxpoint": "waldopoint"
           }
@@ -416,14 +453,14 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "plugh": {
           "value": null,
           "description": null,
-          "extras": {
+          "values": {
             "ctxpoint": "plughpoint"
           }
         },
         "xyzzy": {
           "value": null,
           "description": null,
-          "extras": {}
+          "values": {}
         }
       }
     }
@@ -432,6 +469,7 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
 """)
 
 
+## Tests for the example macro mapping: fetches by property when many macros are defined
 def test_property_macro_map_plain_single(macro_map: PropertyMacroMapping):
     # Single value for plain macro
     assert macro_map.get_macros(["pizza"], DEFAULT_FACTS) == snapshot(
@@ -1034,9 +1072,10 @@ macros:
     description: "Agent scrape URL"
     template: "https://{{hostname}}:{{port}}/metrics"
     properties:
-      monitored_node:           # uses default port 9100
+      monitored_node:
       legacy_exporter:
-        port: 9101              # overrides default
+        values:
+          port: 9101              # overrides default
 """,
         encoding="utf-8",
     )
@@ -1064,7 +1103,8 @@ macros:
       properties:
         monitored_node:           # uses default port 9100
         legacy_exporter:
-          port: 9101              # overrides default
+          values:
+            port: 9101              # overrides default
 """,
         encoding="utf-8",
     )
@@ -1146,13 +1186,15 @@ macros:
         description: "Context description"
         properties:
           foo:
-            ctx: "foo value 123"
+            values:
+                ctx: "foo value 123"
       - context: "^somepattern.*$"
         context_type: regex
         description: "Regex context description"
         properties:
           foo:
-            ctx: "foo value 456"
+            values:
+                ctx: "foo value 456"
 """,
         encoding="utf-8",
     )
@@ -1201,10 +1243,12 @@ macros:
             blah: "blahval"
         properties:
           spam:
-            port: 30
-            blah: "bazinga"
+            values:
+                port: 30
+                blah: "bazinga"
           bar:
-            blah: "barval"
+            values:
+              blah: "barval"
           gux:
 
 """,
@@ -1243,13 +1287,15 @@ macros:
         template: "https://{{hostname}}/ctx/{{ctx}}" # templates not allowed for context macros
         properties:
           foo:
-            ctx: "foo value 123"
+            values:
+              ctx: "foo value 123"
       - context: "^somepattern.*$"
         description: "Regex context description"
         template: "https://{{hostname}}/ctx/{{ctx}}" # templates not allowed for context macros
         properties:
           foo:
-            ctx: "foo value 456"
+            values:
+              ctx: "foo value 456"
 """,
         encoding="utf-8",
     )
@@ -1321,4 +1367,6 @@ def test_reserved_host_fact_keys() -> None:
 
 def test_reserved_property_keys() -> None:
     """Snapshot test for ensuring reserved property keys stay consistent."""
-    assert RESERVED_PROPERTY_KEYS == snapshot(frozenset({"description", "value"}))
+    assert RESERVED_PROPERTY_KEYS == snapshot(
+        frozenset({"description", "template", "value", "values"})
+    )

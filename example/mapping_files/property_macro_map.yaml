@@ -42,6 +42,9 @@ macros:
   # Macros can also be rendered using templates that have placeholders.
   # This allows for more complex macros where value substitution based on
   # information about the host is needed.
+  # The following placeholders values are always available:
+  # - `{{hostname}}` - the hostname of the host the macro is rendered for
+  # - `{{property}}` - the property that was chosen to resolve the macro value with
   "{$ZAC.BASIC_TEMPLATE_MACRO}":
     template: "https://grafana.example.com/d/node?var-host={{hostname}}"
     properties:
@@ -59,7 +62,29 @@ macros:
     properties:
       monitored_node:           # uses default port 9100
       legacy_exporter:
-        port: 9101              # overrides default
+        values:
+          port: 9101              # overrides default
+
+  # We can also override the template and defaults on a per-property basis if needed.
+  "{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}":
+    description: "Ingestion endpoint"
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+    defaults:
+      port: 9100
+      endpoint: ingestion
+    properties:
+      # inherits top-level template and defaults
+      logs_ingestor:
+      # Overrides template only (same placeholders)
+      legacy_ingestor:
+        template: "https://{{hostname}}:{{port}}/legacy/{{endpoint}}"
+      # Overrides template and placeholders
+      older_legacy_ingestor:
+        template: "https://{{hostname}}:{{port}}/legacy/{{different_placeholder}}"
+        values:
+          port: 9101 # also exists in top-level, redefined
+          different_placeholder: ingestor
+
 
   # `value_type` controls the Zabbix usermacro value type. Defaults to `text`.
   # Use `secret` for values that should be masked in the Zabbix UI.
@@ -124,10 +149,12 @@ macros:
         properties:
          # Full or partial overrides of template variables
           qux:
-            port: 20
-            endpoint: "quxpoint"
+            values:
+              port: 20
+              endpoint: "quxpoint"
           quux:
-            endpoint: "quuxpoint"
+            values:
+              endpoint: "quuxpoint"
           corge:
       - context: "^site:.*"
         context_type: regex
@@ -139,8 +166,10 @@ macros:
           ctxpoint: "regexpoint"
         properties:
           waldo:
-            port: 30
-            ctxpoint: "waldopoint"
+            values:
+              port: 30
+              ctxpoint: "waldopoint"
           plugh:
-            ctxpoint: "plughpoint"
+            values:
+              ctxpoint: "plughpoint"
           xyzzy:
