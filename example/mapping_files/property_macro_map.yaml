@@ -6,10 +6,14 @@ macros:
   # - {$ZAC.PLAIN_MACRO} -> "barry value" (since `barry` is the alphabetically first property)
   "{$ZAC.PLAIN_MACRO}":
     resolve: first # default, can be omitted
+    description: "Macro description" # can be omitted
     properties:
-      barry: "barry value"
+      barry: "barry value" # short form - inherits description
       pizza: "pizza value"
-      spam: "a spam value"
+      spam:
+        # Override the description for this property only
+        value: "a spam value"
+        description: "Custom spam description"
 
   # `resolve: last` picks the alphabetically last contributing property.
   # Useful for tier-style overrides where the highest-priority property name
@@ -31,13 +35,10 @@ macros:
   # - {$ZAC.REGEX_MACRO} -> "(bazinga|spam value|^grok value$)"
   "{$ZAC.REGEX_MACRO}":
     resolve: regex
-    description: "This one has a description!"
     properties:
       bazinga: "bazinga"
       spam: "spam value"
-      grok:
-        value: "^grok value$" # can be regex pattern
-        description: "We can override the description for individual properties as well"
+      grok: "^grok value$" # can be regex pattern
 
   # Macros can also be rendered using templates that have placeholders.
   # This allows for more complex macros where value substitution based on

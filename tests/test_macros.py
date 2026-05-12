@@ -88,7 +88,7 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "context": null,
         "context_type": "static"
       },
-      "description": null,
+      "description": "Macro description",
       "value_type": "text",
       "resolve": "first",
       "template": null,
@@ -108,7 +108,7 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         },
         "spam": {
           "value": "a spam value",
-          "description": null,
+          "description": "Custom spam description",
           "values": {},
           "template": null
         }
@@ -152,7 +152,7 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "context": null,
         "context_type": "static"
       },
-      "description": "This one has a description!",
+      "description": null,
       "value_type": "text",
       "resolve": "regex",
       "template": null,
@@ -172,7 +172,7 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         },
         "grok": {
           "value": "^grok value$",
-          "description": "We can override the description for individual properties as well",
+          "description": null,
           "values": {},
           "template": null
         }
@@ -510,7 +510,9 @@ def test_property_macro_map_plain_single(macro_map: PropertyMacroMapping):
     assert macro_map.get_macros(["pizza"], DEFAULT_FACTS) == snapshot(
         {
             "{$ZAC.PLAIN_MACRO}": ResolvedMacro(
-                identity=MacroIdentity(name="{$ZAC.PLAIN_MACRO}"), value="pizza value"
+                identity=MacroIdentity(name="{$ZAC.PLAIN_MACRO}"),
+                value="pizza value",
+                description="Macro description",
             )
         }
     )
@@ -521,7 +523,9 @@ def test_property_macro_map_plain_multiple(macro_map: PropertyMacroMapping):
     assert macro_map.get_macros(["pizza", "barry"], DEFAULT_FACTS) == snapshot(
         {
             "{$ZAC.PLAIN_MACRO}": ResolvedMacro(
-                identity=MacroIdentity(name="{$ZAC.PLAIN_MACRO}"), value="barry value"
+                identity=MacroIdentity(name="{$ZAC.PLAIN_MACRO}"),
+                value="barry value",
+                description="Macro description",
             )
         }
     )
@@ -560,9 +564,7 @@ def test_property_macro_map_regex_single(macro_map: PropertyMacroMapping):
     assert macro_map.get_macros(["bazinga"], DEFAULT_FACTS) == snapshot(
         {
             "{$ZAC.REGEX_MACRO}": ResolvedMacro(
-                identity=MacroIdentity(name="{$ZAC.REGEX_MACRO}"),
-                value="bazinga",
-                description="This one has a description!",
+                identity=MacroIdentity(name="{$ZAC.REGEX_MACRO}"), value="bazinga"
             )
         }
     )
@@ -575,7 +577,6 @@ def test_property_macro_map_regex_multiple(macro_map: PropertyMacroMapping):
             "{$ZAC.REGEX_MACRO}": ResolvedMacro(
                 identity=MacroIdentity(name="{$ZAC.REGEX_MACRO}"),
                 value="(^grok value$|bazinga)",
-                description="We can override the description for individual properties as well",
             )
         }
     )
@@ -902,12 +903,13 @@ def test_property_macro_map_combined(macro_map: PropertyMacroMapping):
     ) == snapshot(
         {
             "{$ZAC.PLAIN_MACRO}": ResolvedMacro(
-                identity=MacroIdentity(name="{$ZAC.PLAIN_MACRO}"), value="barry value"
+                identity=MacroIdentity(name="{$ZAC.PLAIN_MACRO}"),
+                value="barry value",
+                description="Macro description",
             ),
             "{$ZAC.REGEX_MACRO}": ResolvedMacro(
                 identity=MacroIdentity(name="{$ZAC.REGEX_MACRO}"),
                 value="(^grok value$|bazinga|spam value)",
-                description="We can override the description for individual properties as well",
             ),
             "{$ZAC.OPTIONAL_CONTEXT}": ResolvedMacro(
                 identity=MacroIdentity(name="{$ZAC.OPTIONAL_CONTEXT}"),

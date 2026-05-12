@@ -178,7 +178,10 @@ class MacroValue:
 
 @dataclass
 class MacroDefinition:
-    """All metadata for one macro identity, plus its property->value table."""
+    """All metadata for one macro identity, plus its property->value table.
+
+    Context-data is stored in the macro's `identity` field.
+    """
 
     identity: MacroIdentity
     description: Optional[str] = None
@@ -412,13 +415,12 @@ class MacroDefIn(BaseModel):
                     # Inject defaults
                     if not ctx.get("defaults"):
                         ctx["defaults"] = defaults
-                    elif isinstance(ctx["defaults"], dict):
+                    if isinstance(ctx["defaults"], dict):
                         # Some defaults missing
                         for k, v in defaults.items():
                             ctx["defaults"].setdefault(k, v)
-                    # Fall through if defaults is not a dict
 
-        # Inject template and defaults into properties (defaults goes to `values`!)
+        # Inject template and defaults into properties (defaults go into `values`!)
         properties = data.get("properties", {})
         if template and isinstance(properties, dict):
             for prop, val in properties.items():  # pyright: ignore[reportUnusedVariable]  # noqa: B007
