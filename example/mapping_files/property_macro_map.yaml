@@ -51,7 +51,7 @@ macros:
       dashboard_node: # no values to substitute, just uses hostname
 
   # More advanced template patterns can also be defined where each property can
-  # define their own template values. The top-level definition _must_ define
+  # override one or more defaults. The top-level definition _must_ define
   # defaults for all template variables used in the macro template.
   "{$ZAC.ADVANCED_TEMPLATE_MACRO}":
     description: "Agent scrape URL"
@@ -83,7 +83,7 @@ macros:
         template: "https://{{hostname}}:{{port}}/legacy/{{different_placeholder}}"
         values:
           port: 9101 # also exists in top-level, redefined
-          different_placeholder: ingestor
+          different_placeholder: old-ingestor
 
 
   # `value_type` controls the Zabbix usermacro value type. Defaults to `text`.
@@ -106,8 +106,8 @@ macros:
   # plain macros, but with an additional "contexts" section.
   # Context docs: <https://www.zabbix.com/documentation/current/en/manual/config/macros/user_macros_context>
   #
-  # Each context must match one or more properties.
-  # By default, contexts use `resolve: first`, just like top-level macro definitions.
+  # Each context defines one or more properties, just like regular macros.
+  # Contexts also default to `resolve: first`
   #
   # To illustrate:
   # With property "spam", the following macros are created for the host from this definition:
@@ -133,6 +133,7 @@ macros:
           spam: 30
           bar: 40 # only used here
           gux: 50 # only used here
+
   # We can define macros with contexts that are rendered using templates as well.
   # In this case, the text context `internal` inherits the top-level template,
   # while the regex context `^site:.*` defines its own template and new placeholders.

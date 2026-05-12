@@ -173,6 +173,7 @@ class MacroValue:
     value: Optional[str] = None
     description: Optional[str] = None
     values: TemplateMacroValues = field(default_factory=dict)
+    template: Optional[str] = None  # per-property template override
 
 
 @dataclass
@@ -240,7 +241,22 @@ class PropertyValueIn(BaseModel):
 
 
 _PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
-RESERVED_PROPERTY_KEYS = frozenset(PropertyValueIn.__annotations__)
+
+
+def get_placeholders(template: str) -> set[str]:
+    """Extract the set of placeholders used in a template string."""
+    return set(_PLACEHOLDER_RE.findall(template))
+
+
+def get_substitutions(
+    defn: MacroDefinition, val: MacroValue, facts: HostFacts, prop: str
+) -> dict[str, str]:
+    """Get subtitutions used to render a template for a macro value."""
+    subs: TemplateMacroValues = {k: str(v) for k, v in facts.items()}
+    subs.update(defn.defaults)  # is this necessary? defaults are injected into values
+    subs.update(val.values)  # overrides defaults
+    subs.update({"property": prop})
+    return subs
 
 
 def _apply_template(
@@ -291,10 +307,10 @@ def _validate_template_props(
         return
 
     # Detect collisions with reserved keys
-    bad_defaults = sorted(k for k in defaults if k in RESERVED_HOST_FACT_KEYS)
+    bad_defaults = sorted(k for k in defaults if k in BUILTIN_PLACEHOLDERS)
     if bad_defaults:
         raise ValueError(
-            f"'defaults' keys collide with reserved host facts: {bad_defaults}"
+            f"'defaults' keys collide with builtin placeholders: {bad_defaults}"
         )
 
     # check for values on properties, and detect collisions with reserved host fact keys
@@ -303,35 +319,37 @@ def _validate_template_props(
             raise ValueError(
                 f"Property {p!r} uses scalar shorthand; not allowed with template"
             )
-        bad_values = sorted(k for k in pv.values if k in RESERVED_HOST_FACT_KEYS)
+        bad_values = sorted(k for k in pv.values if k in BUILTIN_PLACEHOLDERS)
         if bad_values:
             raise ValueError(
-                f"Property {p!r} template values collide with reserved host facts: {bad_values}"
+                f"Property {p!r} template values collide with builtin placeholders: {bad_values}"
             )
 
-    # Detect placeholders with no defaults
-    placeholders = set(_PLACEHOLDER_RE.findall(template))
+    # Detect placeholders with no defaults for properties
     missing_per_prop: dict[str, list[str]] = {}
     for p, pv in properties.items():
-        resolved = set(defaults) | set(pv.values) | RESERVED_HOST_FACT_KEYS
+        # FIXME: the problem here is that we have `template` and `pv.template`
+        # and it's not clear which one will be used to resolve the template,
+        # since the actual resolution doesn't happen here.
+        # Tests show no difference when using `template` and `pv.template or template`
+        # but that's not a reason to not remove this ambiguity
+        placeholders = get_placeholders(pv.template or template)
+        resolved = set(defaults) | set(pv.values) | BUILTIN_PLACEHOLDERS
         missing = sorted(placeholders - resolved)
         if missing:
             missing_per_prop[p] = missing
     if missing_per_prop:
         raise ValueError(f"Template placeholders not satisfied: {missing_per_prop}")
 
-    collisions = placeholders & RESERVED_PROPERTY_KEYS
-    if collisions:
-        raise ValueError(
-            f"Template placeholders collide with reserved property keys: {collisions}"
-        )
-
-    # NOTE: some unfortunate recursion here - should refactor
+    # Validate properties
     for p, pv in properties.items():  # noqa: B007
         if pv.template is not None:
+            # HACK: some unfortunate recursion here - should refactor
             _validate_template_props(
-                pv.template, pv.values, {}
-            )  # nested templates not allowed to have properties, so pass empty dict
+                template=pv.template,
+                defaults=pv.values,  # values instead of defaults
+                properties={},  # properties can't have properties
+            )
 
 
 class MacroContextIn(BaseModel):
@@ -379,10 +397,14 @@ class MacroDefIn(BaseModel):
         if not template:
             return data  # nothing to do
 
-        contexts = data.get("contexts", [])
+        defaults = data.get("defaults", {})
 
+        if not isinstance(defaults, dict):
+            return data  # pydantic will handle the error
+
+        # Inject template and defaults into contexts
+        contexts = data.get("contexts", [])
         if template and isinstance(contexts, list):
-            defaults = data.get("defaults", {})
             for ctx in contexts:
                 if isinstance(ctx, dict):
                     # Inject template if missing
@@ -398,20 +420,22 @@ class MacroDefIn(BaseModel):
                             ctx["defaults"].setdefault(k, v)
                     # Fall through if defaults is not a dict
 
-        # Inject into properties
+        # Inject template and defaults into properties (defaults goes to `values`!)
         properties = data.get("properties", {})
         if template and isinstance(properties, dict):
             for prop, val in properties.items():  # pyright: ignore[reportUnusedVariable]  # noqa: B007
                 if isinstance(val, dict):
                     # Inject template if missing
+                    # MUST BE INJECTED, otherwise validator will not validate
+                    # placeholders against the template for the property
                     if not val.get("template"):
                         val["template"] = template
 
-                    # Inject defaults into `values` (NOT `defaults`)
+                    # Inject defaults into `values`
                     if not val.get("values"):
                         val["values"] = {}
-                    elif isinstance(val["values"], dict):
-                        for k, v in data.get("defaults", {}).items():
+                    if isinstance(val["values"], dict):
+                        for k, v in defaults.items():
                             val["values"].setdefault(k, v)
         return data
 
@@ -464,7 +488,10 @@ class HostFacts(TypedDict):
     # future: proxy: NotRequired[str], etc.
 
 
-RESERVED_HOST_FACT_KEYS = frozenset(HostFacts.__annotations__)
+_HOST_FACT_PLACEHOLDERS = frozenset(HostFacts.__annotations__)  # injected by host facts
+_INJECTED_PLACEHOLDERS = frozenset[str]({"property"})  # injected after macro resolution
+BUILTIN_PLACEHOLDERS = _HOST_FACT_PLACEHOLDERS | _INJECTED_PLACEHOLDERS
+"""Keys that cannot be redefined in macro values/defaults."""
 
 
 def get_host_facts(host: Host) -> HostFacts:
@@ -563,15 +590,13 @@ class PropertyMacroMapping(BaseModel):
                 # block, which means we do not support template rendering
                 # for regex-resolved macro values. Even if we allow it in
                 # the main validators, we will only ever render the values here!
-                # Bug waiting to happen; should be generalized.
-                if defn.template is not None:
-                    subs: TemplateMacroValues = {
-                        k: str(v) for k, v in host_facts.items()
-                    }
-                    subs.update(defn.defaults)
-                    subs.update(macro_value.values)
-                    subs.update({"property": winning_prop})
-                    resolved_value = _apply_template(defn.template, subs, identity)
+                # Bug waiting to happen; should be generalized
+                template = macro_value.template or defn.template
+                if template is not None:
+                    subs = get_substitutions(
+                        defn, macro_value, host_facts, winning_prop
+                    )
+                    resolved_value = _apply_template(template, subs, identity)
                 else:
                     resolved_value = macro_value.value or ""
                 description = macro_value.description or defn.description
@@ -674,6 +699,8 @@ def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
                         value=pv.value,
                         description=pv.description,
                         values={k: str(v) for k, v in pv.values.items()},
+                        template=pv.template
+                        or macro_def.template,  # inherit from parent macro if not set
                     )
                     for p, pv in macro_def.properties.items()
                 },
@@ -699,13 +726,17 @@ def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
                     description=variant.description or macro_def.description,
                     value_type=macro_def.value_type,  # inherit from parent macro
                     resolve=macro_def.resolve,  # inherit from parent macro
-                    template=variant.template,
+                    template=variant.template
+                    or macro_def.template,  # inherit from parent macro if not set
                     defaults=dict(variant.defaults),
                     properties={
                         p: MacroValue(
                             value=pv.value,
                             description=pv.description,
                             values={k: str(v) for k, v in pv.values.items()},
+                            template=pv.template
+                            or variant.template
+                            or macro_def.template,  # inherit from parent macro if not set
                         )
                         for p, pv in variant.properties.items()
                     },

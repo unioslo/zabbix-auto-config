@@ -7,14 +7,15 @@ import pytest
 from inline_snapshot import snapshot
 from pydantic import ValidationError
 from pytest import TempPathFactory
-from zabbix_auto_config.macros import RESERVED_HOST_FACT_KEYS
-from zabbix_auto_config.macros import RESERVED_PROPERTY_KEYS
+from zabbix_auto_config.macros import BUILTIN_PLACEHOLDERS
 from zabbix_auto_config.macros import ContextType
 from zabbix_auto_config.macros import HostFacts
 from zabbix_auto_config.macros import MacroIdentity
 from zabbix_auto_config.macros import MacroValueType
 from zabbix_auto_config.macros import PropertyMacroMapping
 from zabbix_auto_config.macros import ResolvedMacro
+from zabbix_auto_config.macros import get_placeholders
+from zabbix_auto_config.macros import get_substitutions
 from zabbix_auto_config.macros import is_valid_macro_name
 from zabbix_auto_config.macros import read_property_macro_map
 
@@ -96,17 +97,20 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "barry": {
           "value": "barry value",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         },
         "pizza": {
           "value": "pizza value",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         },
         "spam": {
           "value": "a spam value",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         }
       }
     },
@@ -125,17 +129,20 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "tier_a": {
           "value": "tier_a value",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         },
         "tier_m": {
           "value": "tier_m value",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         },
         "tier_z": {
           "value": "tier_z value",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         }
       }
     },
@@ -154,17 +161,20 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "bazinga": {
           "value": "bazinga",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         },
         "spam": {
           "value": "spam value",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         },
         "grok": {
           "value": "^grok value$",
           "description": "We can override the description for individual properties as well",
-          "values": {}
+          "values": {},
+          "template": null
         }
       }
     },
@@ -183,7 +193,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "dashboard_node": {
           "value": null,
           "description": null,
-          "values": {}
+          "values": {},
+          "template": "https://grafana.example.com/d/node?var-host={{hostname}}"
         }
       }
     },
@@ -205,7 +216,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "monitored_node": {
           "value": null,
           "description": null,
-          "values": {}
+          "values": {},
+          "template": "https://{{hostname}}:{{port}}/{{endpoint}}"
         },
         "legacy_exporter": {
           "value": null,
@@ -213,7 +225,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "values": {
             "port": "9101",
             "endpoint": "metrics"
-          }
+          },
+          "template": "https://{{hostname}}:{{port}}/{{endpoint}}"
         }
       }
     },
@@ -235,21 +248,27 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "logs_ingestor": {
           "value": null,
           "description": null,
-          "values": {}
+          "values": {},
+          "template": "https://{{hostname}}:{{port}}/{{endpoint}}"
         },
         "legacy_ingestor": {
           "value": null,
           "description": null,
-          "values": {}
+          "values": {
+            "port": "9100",
+            "endpoint": "ingestion"
+          },
+          "template": "https://{{hostname}}:{{port}}/legacy/{{endpoint}}"
         },
         "older_legacy_ingestor": {
           "value": null,
           "description": null,
           "values": {
             "port": "9101",
-            "different_placeholder": "ingestor",
+            "different_placeholder": "old-ingestor",
             "endpoint": "ingestion"
-          }
+          },
+          "template": "https://{{hostname}}:{{port}}/legacy/{{different_placeholder}}"
         }
       }
     },
@@ -268,7 +287,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "has_api_integration": {
           "value": "s3cr3t-t0k3n",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         }
       }
     },
@@ -287,7 +307,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "uses_vault_secrets": {
           "value": "secret/zabbix/db:password",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         }
       }
     },
@@ -306,12 +327,14 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "spam": {
           "value": "value for non-context spam",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         },
         "eggs": {
           "value": "value for non-context eggs",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         }
       }
     },
@@ -330,17 +353,20 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "spam": {
           "value": "20",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         },
         "foo": {
           "value": "30",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         },
         "baz": {
           "value": "40",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         }
       }
     },
@@ -359,17 +385,20 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "spam": {
           "value": "30",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         },
         "bar": {
           "value": "40",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         },
         "gux": {
           "value": "50",
           "description": null,
-          "values": {}
+          "values": {},
+          "template": null
         }
       }
     },
@@ -410,19 +439,22 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "values": {
             "port": "20",
             "endpoint": "quxpoint"
-          }
+          },
+          "template": "https://{{hostname}}:{{port}}/ctx/{{endpoint}}"
         },
         "quux": {
           "value": null,
           "description": null,
           "values": {
             "endpoint": "quuxpoint"
-          }
+          },
+          "template": "https://{{hostname}}:{{port}}/ctx/{{endpoint}}"
         },
         "corge": {
           "value": null,
           "description": null,
-          "values": {}
+          "values": {},
+          "template": "https://{{hostname}}:{{port}}/ctx/{{endpoint}}"
         }
       }
     },
@@ -448,19 +480,22 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "values": {
             "port": "30",
             "ctxpoint": "waldopoint"
-          }
+          },
+          "template": "https://{{hostname}}:{{port}}/internal/{{ctxpoint}}"
         },
         "plugh": {
           "value": null,
           "description": null,
           "values": {
             "ctxpoint": "plughpoint"
-          }
+          },
+          "template": "https://{{hostname}}:{{port}}/internal/{{ctxpoint}}"
         },
         "xyzzy": {
           "value": null,
           "description": null,
-          "values": {}
+          "values": {},
+          "template": "https://{{hostname}}:{{port}}/internal/{{ctxpoint}}"
         }
       }
     }
@@ -669,6 +704,38 @@ def test_template_macro_extra_placeholders_multiple(macro_map: PropertyMacroMapp
     )
 
 
+def test_template_macro_property_template_override(macro_map: PropertyMacroMapping):
+    """Test templated macro with property that defines new template (with the same placeholders)."""
+    assert macro_map.get_macros(["legacy_ingestor"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}": ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}"
+                ),
+                value="https://testhost.example.com:9100/legacy/ingestion",
+                description="Ingestion endpoint",
+            )
+        }
+    )
+
+
+def test_template_macro_per_property_template_overrides(
+    macro_map: PropertyMacroMapping,
+):
+    """Test templated macro with properties that override the template and values on a per-property basis."""
+    assert macro_map.get_macros(["older_legacy_ingestor"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}": ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}"
+                ),
+                value="https://testhost.example.com:9101/legacy/old-ingestor",
+                description="Ingestion endpoint",
+            )
+        }
+    )
+
+
 def test_template_macro_with_context_text(macro_map: PropertyMacroMapping):
     """Test template macro with text context."""
 
@@ -787,33 +854,50 @@ def test_property_macro_map_vault(macro_map: PropertyMacroMapping):
     )
 
 
-def test_property_macro_map_combined(macro_map: PropertyMacroMapping):
-    # Macro with multiple properties, some of which are shared between macros
-    # Combine everything
-    assert macro_map.get_macros(
+def get_all_properties_from_mapping(macro_map: PropertyMacroMapping) -> list[str]:
+    """Helper function to get all properties defined in the macro map."""
+    return list(macro_map._by_property.keys())
+
+
+def test_property_map_properties(macro_map: PropertyMacroMapping) -> None:
+    """Snapshot test for verifying changes to defined properties in example mapping."""
+    assert get_all_properties_from_mapping(macro_map) == snapshot(
         [
-            # Plain
-            "pizza",
             "barry",
+            "pizza",
             "spam",
-            "eggs",
-            "ham",
-            "grok",
+            "tier_a",
+            "tier_m",
+            "tier_z",
             "bazinga",
-            # Context
-            "foo",
-            "bar",
-            "baz",
-            "gux",
-            # Template
+            "grok",
             "dashboard_node",
             "monitored_node",
             "legacy_exporter",
-            # Secret
+            "logs_ingestor",
+            "legacy_ingestor",
+            "older_legacy_ingestor",
             "has_api_integration",
-            # Vault
             "uses_vault_secrets",
-        ],
+            "eggs",
+            "foo",
+            "baz",
+            "bar",
+            "gux",
+            "qux",
+            "quux",
+            "corge",
+            "waldo",
+            "plugh",
+            "xyzzy",
+        ]
+    )
+
+
+def test_property_macro_map_combined(macro_map: PropertyMacroMapping):
+    """Test resolving macros for _all_ defined properties."""
+    assert macro_map.get_macros(
+        get_all_properties_from_mapping(macro_map),
         DEFAULT_FACTS,
     ) == snapshot(
         {
@@ -844,6 +928,9 @@ def test_property_macro_map_combined(macro_map: PropertyMacroMapping):
                 value="40",
                 description="This macro has contexts, but is optional",
             ),
+            "{$ZAC.LAST_MACRO}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.LAST_MACRO}"), value="tier_z value"
+            ),
             "{$ZAC.BASIC_TEMPLATE_MACRO}": ResolvedMacro(
                 identity=MacroIdentity(name="{$ZAC.BASIC_TEMPLATE_MACRO}"),
                 value="https://grafana.example.com/d/node?var-host=testhost.example.com",
@@ -852,6 +939,29 @@ def test_property_macro_map_combined(macro_map: PropertyMacroMapping):
                 identity=MacroIdentity(name="{$ZAC.ADVANCED_TEMPLATE_MACRO}"),
                 value="https://testhost.example.com:9101/metrics",
                 description="Agent scrape URL",
+            ),
+            "{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}": ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}"
+                ),
+                value="https://testhost.example.com:9100/legacy/ingestion",
+                description="Ingestion endpoint",
+            ),
+            "{$ZAC.TEMPLATE_AND_CONTEXT:internal}": ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.TEMPLATE_AND_CONTEXT}", context="internal"
+                ),
+                value="https://testhost.example.com:9100/ctx/defaultendpoint",
+                description="Description for internal context used here",
+            ),
+            '{$ZAC.TEMPLATE_AND_CONTEXT:regex:"^site:.*"}': ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.TEMPLATE_AND_CONTEXT}",
+                    context="^site:.*",
+                    context_type=ContextType.REGEX,
+                ),
+                value="https://testhost.example.com:9100/internal/plughpoint",
+                description="This macro has a template and contexts",
             ),
             "{$ZAC.API_TOKEN}": ResolvedMacro(
                 identity=MacroIdentity(name="{$ZAC.API_TOKEN}"),
@@ -1245,7 +1355,7 @@ macros:
           spam:
             values:
                 port: 30
-                blah: "bazinga"
+                blah: "spamington"
           bar:
             values:
               blah: "barval"
@@ -1267,7 +1377,7 @@ macros:
                     context="^site:.*",
                     context_type=ContextType.REGEX,
                 ),
-                value="https://testhost.example.com:30/internal/bazinga",
+                value="https://testhost.example.com:30/internal/spamington",
             ),
         }
     )
@@ -1284,14 +1394,14 @@ macros:
     contexts:
       - context: "plaintext"
         description: "Context description"
-        template: "https://{{hostname}}/ctx/{{ctx}}" # templates not allowed for context macros
+        template: "https://{{hostname}}/ctx/{{ctx}}"
         properties:
           foo:
             values:
               ctx: "foo value 123"
       - context: "^somepattern.*$"
         description: "Regex context description"
-        template: "https://{{hostname}}/ctx/{{ctx}}" # templates not allowed for context macros
+        template: "https://{{hostname}}/ctx/{{ctx}}"
         properties:
           foo:
             values:
@@ -1306,67 +1416,179 @@ macros:
         _ = read_property_macro_map(tmpfile)
 
 
-def test_template_macro_reserved_placeholders_main_def(tmp_path: Path):
-    """Template in macro definition must not use reserved property keys as placeholders."""
+def test_template_macro_property_unused_values(tmp_path: Path) -> None:
+    """Test passing in incorrect placeholder to a property of a template macro.
+
+    NOTE
+    ----
+    Currently we don't flag this as an error, since the property simply
+    inherits the missing value from the defaults when resolved.
+    The incorrect placeholder is simply ignored.
+    """
     tmpfile = tmp_path / "property_macro_map.yaml"
     tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
         """
 macros:
-  "{$ZAC.TEMPLATE_MACRO}":
-    description: "Agent scrape URL"
-    template: "https://{{hostname}}:{{description}}/{{value}}"
+  "{$ZAC.TEMPLATE_UNUSED_VALUE}":
+    description: "Ingestion endpoint"
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
     defaults:
-      description: whatever
-      value: endpoint
+      port: 9100
+      endpoint: ingestion
     properties:
-      monitored_node:
-      legacy_exporter:
-""",
-        encoding="utf-8",
-    )
-    with pytest.raises(
-        ValidationError,
-        match=re.escape("Template placeholders collide with reserved property keys"),
-    ):
-        _ = read_property_macro_map(tmpfile)
-
-
-def test_template_macro_reserved_placeholders_properties(tmp_path: Path):
-    """Template in macro properties must not use reserved property keys as placeholders."""
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
-        """
-macros:
-  "{$ZAC.TEMPLATE_MACRO}":
-    description: "Agent scrape URL"
-    template: "https://{{hostname}}:{{valid}}/{{placeholders}}"
-    defaults:
-      valid: whatever
-      placeholders: endpoint
-    properties:
-      monitored_node:
-        template: "https://{{hostname}}:{{description}}/{{value}}" # invalid
+      foo:
         values:
-          description: desc for monitored_node
-          value: nodeendpoint
-      legacy_exporter:
+          port: 910
+          wrong_placeholder: old-ingestor # will not be used
+""",
+        encoding="utf-8",
+    )
+    m = read_property_macro_map(tmpfile)
+    macros = m.get_macros(["foo"], DEFAULT_FACTS)
+    assert len(macros) == 1
+    assert (
+        # Macro inherits the missing `endpoint` value from defaults
+        # while `wrong_placeholder` is ignored.
+        macros["{$ZAC.TEMPLATE_UNUSED_VALUE}"].value
+        == "https://testhost.example.com:910/ingestion"
+    )
+
+
+def test_template_no_defaults_no_properties(tmp_path: Path) -> None:
+    """Template macro with no properties doesn't need defaults (no properties to validate)"""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$ZAC.TEMPLATE_NO_PROPS}":
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+""",
+        encoding="utf-8",
+    )
+    m = read_property_macro_map(tmpfile)  # reads fine
+    assert len(m.definitions) == 1
+
+
+def test_template_no_defaults_with_properties(tmp_path: Path) -> None:
+    """Template macro with properties must have defaults to satisfy placeholders."""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$ZAC.TEMPLATE_PROPS_NO_DEFAULTS}":
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+    properties:
+      foo:
 """,
         encoding="utf-8",
     )
     with pytest.raises(
         ValidationError,
-        match=re.escape("Template placeholders collide with reserved property keys"),
+        match=re.escape(
+            "Template placeholders not satisfied: {'foo': ['endpoint', 'port']}"
+        ),
     ):
         _ = read_property_macro_map(tmpfile)
 
 
-def test_reserved_host_fact_keys() -> None:
-    """Snapshot test for ensuring reserved host fact keys stay consistent."""
-    assert RESERVED_HOST_FACT_KEYS == snapshot(frozenset({"hostname"}))
-
-
-def test_reserved_property_keys() -> None:
-    """Snapshot test for ensuring reserved property keys stay consistent."""
-    assert RESERVED_PROPERTY_KEYS == snapshot(
-        frozenset({"description", "template", "value", "values"})
+def test_get_substitutions(tmp_path: Path) -> None:
+    """Test `get_substitutions using a macro with template+template override in properties."""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}":
+    description: "Ingestion endpoint"
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+    defaults:
+      port: 9100
+      endpoint: ingestion
+    properties:
+      logs_ingestor:
+      # Overrides template only (same placeholders)
+      legacy_ingestor:
+        template: "https://{{hostname}}:{{port}}/legacy/{{endpoint}}"
+      older_legacy_ingestor:
+        template: "https://{{hostname}}:{{port}}/legacy/{{different_placeholder}}"
+        values:
+          port: 910
+          different_placeholder: old-ingestor
+""",
+        encoding="utf-8",
     )
+    m = read_property_macro_map(tmpfile)
+    assert len(m.definitions) == 1
+    defn = m.definitions[0]
+
+    # No overrides in property
+    prop_1 = defn.properties["logs_ingestor"]
+    subs_1 = get_substitutions(defn, prop_1, DEFAULT_FACTS, "logs_ingestor")
+    assert subs_1 == snapshot(
+        {
+            "hostname": "testhost.example.com",
+            "port": "9100",
+            "endpoint": "ingestion",
+            "property": "logs_ingestor",
+        }
+    )
+
+    # Overrides template with identical placeholders -> identical sub keys
+    prop_2 = defn.properties["legacy_ingestor"]
+    subs_2 = get_substitutions(defn, prop_2, DEFAULT_FACTS, "legacy_ingestor")
+    assert subs_2.keys() == subs_1.keys()
+    assert subs_2 == snapshot(
+        {
+            "hostname": "testhost.example.com",
+            "port": "9100",
+            "endpoint": "ingestion",
+            "property": "legacy_ingestor",
+        }
+    )
+
+    # Overrides template with new placeholders -> new sub keys
+    prop_3 = defn.properties["older_legacy_ingestor"]
+    subs_3 = get_substitutions(defn, prop_3, DEFAULT_FACTS, "older_legacy_ingestor")
+    assert subs_3.keys() != subs_1.keys()
+    assert subs_3 == snapshot(
+        {
+            "hostname": "testhost.example.com",
+            "port": "910",
+            "endpoint": "ingestion",
+            "different_placeholder": "old-ingestor",
+            "property": "older_legacy_ingestor",
+        }
+    )
+
+
+def test_builtin_placeholder_keys() -> None:
+    """Snapshot test to catch changes to builtin placeholder keys (host facts, resolved macro properties, etc.)"""
+    assert BUILTIN_PLACEHOLDERS == snapshot(frozenset({"hostname", "property"}))
+
+
+def test_get_substitutions_builtin_placeholder_keys_are_used(
+    macro_map: PropertyMacroMapping,
+) -> None:
+    """Test that template placeholder substitutions are resolved correctly and contain the expected keys."""
+
+    all_macros = list(macro_map._by_property.items())  # pyright: ignore[reportPrivateUsage]
+    assert len(all_macros) > 0, (
+        "No macros found in the mapping to test substitutions for"
+    )
+
+    for prop_name, macros in all_macros:
+        for macro in macros:
+            if not macro.properties:  # no properties to test for
+                continue
+            for prop in macro.properties.values():
+                if not prop.template:
+                    continue
+
+                subs = get_substitutions(macro, prop, DEFAULT_FACTS, prop_name)
+                placeholders = get_placeholders(prop.template)
+
+                # All placeholders satisfied
+                assert placeholders.issubset(subs.keys())
+
+                # Resolved substitutions contain 'builtins', defaults, values
+                expect = BUILTIN_PLACEHOLDERS | set(macro.defaults) | set(prop.values)
+                assert expect.issubset(subs.keys())
