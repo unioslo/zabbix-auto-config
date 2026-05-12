@@ -296,9 +296,7 @@ def _validate_template_props(
             raise ValueError("'defaults' set but no 'template' defined")
         missing = [p for p, pv in properties.items() if pv.value is None]
         if missing:
-            raise ValueError(
-                f"Properties missing value (no template defined): {missing}"
-            )
+            raise ValueError(f"Property values cannot be null: {missing}")
         with_values = {p: list(pv.values) for p, pv in properties.items() if pv.values}
         if with_values:
             raise ValueError(

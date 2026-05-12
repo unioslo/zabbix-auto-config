@@ -991,6 +991,61 @@ def contains_valid_regex(macros: dict[str, ResolvedMacro]) -> bool:
     return True
 
 
+def test_get_macros_properties_with_empty_values(tmp_path: Path):
+    """Test that properties with empty string values are accepted and can be resolved."""
+    tmpfile = tmp_path / "property_macro_map.txt"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$BLANK_PROPERTIES}":
+    properties:
+      default_db: xyzzydb  # ensures we sort by property value, not macro value
+      is_pgsql_server: ""
+""",
+        encoding="utf-8",
+    )
+    m = read_property_macro_map(tmpfile)
+    assert m.get_macros(["is_pgsql_server"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$BLANK_PROPERTIES}": ResolvedMacro(
+                identity=MacroIdentity(name="{$BLANK_PROPERTIES}"), value=""
+            )
+        }
+    )
+
+    # alphabetically first property
+    assert m.get_macros(["default_db", "is_pgsql_server"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$BLANK_PROPERTIES}": ResolvedMacro(
+                identity=MacroIdentity(name="{$BLANK_PROPERTIES}"), value="xyzzydb"
+            )
+        }
+    )
+
+
+def test_get_macros_properties_with_null_values_rejected(tmp_path: Path):
+    """Test that properties with null values are rejected.
+
+    Using an empty macro value should be a deliberate choice denoted
+    by an empty string literal - not the absence of a value."""
+    tmpfile = tmp_path / "property_macro_map.txt"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$BLANK_PROPERTIES}":
+    properties:
+      default_db: xyzzydb
+      is_pgsql_server:
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValidationError,
+        match=re.escape("Property values cannot be null: ['is_pgsql_server']"),
+    ):
+        _ = read_property_macro_map(tmpfile)
+
+
 def test_get_macros_deduplication_regex_plain(tmp_path: Path):
     """Test deduplication of plain text values for regex macros."""
     tmpfile = tmp_path / "property_macro_map.txt"
