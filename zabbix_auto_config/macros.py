@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from dataclasses import field
 from enum import Enum
+from functools import cached_property
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -64,7 +65,7 @@ def fmt_macro_name(macro: str) -> str:
 
 
 @lru_cache(maxsize=1000)
-def validate_regexp(regex: str) -> bool:
+def is_valid_regexp(regex: str) -> bool:
     """Validate a regex pattern and cache the result for future calls."""
     try:
         re.compile(regex)
@@ -190,6 +191,7 @@ class MacroDefinition:
     template: Optional[str] = None
     defaults: TemplateMacroValues = field(default_factory=dict)
     properties: dict[str, MacroValue] = field(default_factory=dict)
+    hosts: dict[str, MacroValue] = field(default_factory=dict)  # per-host overrides
 
     @property
     def macro(self) -> str:
@@ -198,6 +200,22 @@ class MacroDefinition:
     @property
     def kind(self) -> MacroKind:
         return MacroKind.TEMPLATE if self.template is not None else MacroKind.PLAIN
+
+    @cached_property
+    def host_patterns(self) -> list[tuple[re.Pattern[str], str]]:
+        """Compiled host regex patterns, sorted longest-first then alphabetical.
+
+        Iterated only after exact dict lookup on `hosts` misses. Compiled
+        lazily on first access; not serialized.
+        """
+        patterns: list[tuple[re.Pattern[str], str]] = []
+        for name in self.hosts:
+            try:
+                patterns.append((re.compile(name), name))
+            except re.error:
+                continue
+        patterns.sort(key=lambda p: (-len(p[1]), p[1]))
+        return patterns
 
 
 @dataclass
@@ -281,73 +299,62 @@ def _apply_template(
     return _PLACEHOLDER_RE.sub(_replace, template)
 
 
-def _validate_template_props(
+def _validate_template_entries(
     template: Optional[str],
     defaults: TemplateMacroValues,
-    properties: dict[str, PropertyValueIn],
+    entries: dict[str, PropertyValueIn],
+    label: str,
 ) -> None:
-    """Validate template/defaults/properties consistency.
+    """Validate template/defaults/entries consistency for one entry kind.
 
-    Raises ValueError if validation fails.
-
-    NOTE: this function should only be called when reading from the mapping file.
-    We do not want to raise exceptions when resolving macros for hosts!
+    `label` is the singular noun used in error messages ("Property" / "Host").
+    Plural is constructed by appending "ies" / "s" via simple substitution where needed.
     """
+    label_plural = "Properties" if label == "Property" else label + "s"
+
     # Detect if values are defined on macro with no template
     if template is None:
-        if defaults:
-            raise ValueError("'defaults' set but no 'template' defined")
-
-        # HACK: recurse into properties _here_ to validate child templates.
-        # Detect if properties are defining templates when parent does not
-        has_template = [p for p, pv in properties.items() if pv.template is not None]
+        # HACK: recurse here to validate child templates.
+        # Detect entries defining templates when parent does not
+        has_template = [p for p, pv in entries.items() if pv.template is not None]
         if has_template:
             raise ValueError(
-                f"Properties {sorted(has_template)} define templates but macro definition does not"
+                f"{label_plural} {sorted(has_template)} define templates but macro definition does not"
             )
 
-        # Check for properties without `template` and `value`
+        # Check for entries without `template` and `value`
         missing = [
-            p
-            for p, pv in properties.items()
-            if pv.value is None and pv.template is None
+            p for p, pv in entries.items() if pv.value is None and pv.template is None
         ]
         if missing:
-            raise ValueError(f"Property values cannot be null: {sorted(missing)}")
+            raise ValueError(f"{label} values cannot be null: {sorted(missing)}")
 
         with_values = {
             p: list(pv.values)
-            for p, pv in properties.items()
+            for p, pv in entries.items()
             if pv.values and not pv.template
         }
         if with_values:
             raise ValueError(
-                f"Properties have `values` keys but no template defined: {with_values}"
+                f"{label_plural} have `values` keys but no template defined: {with_values}"
             )
         return
 
-    # Detect collisions with reserved keys
-    bad_defaults = sorted(k for k in defaults if k in BUILTIN_PLACEHOLDERS)
-    if bad_defaults:
-        raise ValueError(
-            f"'defaults' keys collide with builtin placeholders: {bad_defaults}"
-        )
-
-    # check for values on properties, and detect collisions with reserved host fact keys
-    for p, pv in properties.items():
+    # check for values on entries, and detect collisions with reserved host fact keys
+    for p, pv in entries.items():
         if pv.value is not None:
             raise ValueError(
-                f"Property {p!r} uses scalar shorthand; not allowed with template"
+                f"{label} {p!r} uses scalar shorthand; not allowed with template"
             )
         bad_values = sorted(k for k in pv.values if k in BUILTIN_PLACEHOLDERS)
         if bad_values:
             raise ValueError(
-                f"Property {p!r} template values collide with builtin placeholders: {bad_values}"
+                f"{label} {p!r} template values collide with builtin placeholders: {bad_values}"
             )
 
-    # Detect placeholders with no defaults for properties
-    missing_per_prop: dict[str, list[str]] = {}
-    for p, pv in properties.items():
+    # Detect placeholders with no defaults for entries
+    missing_per_entry: dict[str, list[str]] = {}
+    for p, pv in entries.items():
         # FIXME: the problem here is that we have `template` and `pv.template`
         # and it's not clear which one will be used to resolve the template,
         # since the actual resolution doesn't happen here.
@@ -357,19 +364,75 @@ def _validate_template_props(
         resolved = set(defaults) | set(pv.values) | BUILTIN_PLACEHOLDERS
         missing = sorted(placeholders - resolved)
         if missing:
-            missing_per_prop[p] = missing
-    if missing_per_prop:
-        raise ValueError(f"Template placeholders not satisfied: {missing_per_prop}")
+            missing_per_entry[p] = missing
+    if missing_per_entry:
+        raise ValueError(f"Template placeholders not satisfied: {missing_per_entry}")
 
-    # Validate properties
-    for p, pv in properties.items():  # noqa: B007
+    # Validate entries with their own template recursively
+    for p, pv in entries.items():  # noqa: B007
         if pv.template is not None:
             # HACK: some unfortunate recursion here - should refactor
-            _validate_template_props(
+            _validate_template_entries(
                 template=pv.template,
                 defaults=pv.values,  # values instead of defaults
-                properties={},  # properties can't have properties
+                entries={},  # nested entries can't have nested entries
+                label=label,
             )
+
+
+def _validate_template_props(
+    template: Optional[str],
+    defaults: TemplateMacroValues,
+    properties: dict[str, PropertyValueIn],
+    hosts: Optional[dict[str, PropertyValueIn]] = None,
+) -> None:
+    """Validate template/defaults/properties/hosts consistency.
+
+    Raises ValueError if validation fails.
+
+    NOTE: this function should only be called when reading from the mapping file.
+    We do not want to raise exceptions when resolving macros for hosts!
+    """
+    hosts = hosts or {}
+
+    if template is None and defaults:
+        raise ValueError("'defaults' set but no 'template' defined")
+
+    if template is not None:
+        bad_defaults = sorted(k for k in defaults if k in BUILTIN_PLACEHOLDERS)
+        if bad_defaults:
+            raise ValueError(
+                f"'defaults' keys collide with builtin placeholders: {bad_defaults}"
+            )
+
+    _validate_template_entries(template, defaults, properties, label="Property")
+    if hosts:
+        _validate_template_entries(template, defaults, hosts, label="Host")
+        for hostname in hosts:
+            if not is_valid_regexp(hostname):
+                raise ValueError(f"Invalid host pattern: {hostname!r}")
+
+
+def _inject_template_into_entries(
+    entries: Any, template: str, defaults: dict[str, Any]
+) -> None:
+    """Inject template (if missing) and defaults (into `values`) for each entry.
+
+    Used for `properties` and `hosts` blocks (top-level and per-context).
+    Operates in-place. No-op for unexpected types.
+    """
+    if not isinstance(entries, dict):
+        return
+    for val in entries.values():  # pyright: ignore[reportUnknownVariableType]
+        if not isinstance(val, dict):
+            continue
+        if not val.get("template"):
+            val["template"] = template
+        if not val.get("values"):
+            val["values"] = {}
+        if isinstance(val["values"], dict):
+            for k, v in defaults.items():
+                val["values"].setdefault(k, v)
 
 
 class MacroContextIn(BaseModel):
@@ -381,13 +444,19 @@ class MacroContextIn(BaseModel):
     template: Optional[str] = None
     defaults: TemplateMacroValues = Field(default_factory=dict)
     properties: dict[str, PropertyValueIn] = Field(default_factory=dict)
+    hosts: dict[str, PropertyValueIn] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _validate(self) -> Self:
-        if self.context_type == ContextType.REGEX and not validate_regexp(self.context):
+        if self.context_type == ContextType.REGEX and not is_valid_regexp(self.context):
             raise ValueError(f"Invalid regex context: {self.context!r}")
-        _validate_template_props(self.template, self.defaults, self.properties)
+        _validate_template_props(
+            self.template, self.defaults, self.properties, self.hosts
+        )
         return self
+
+
+HostValuesIn = dict[str, str]  # May add validator to this
 
 
 class MacroDefIn(BaseModel):
@@ -400,11 +469,12 @@ class MacroDefIn(BaseModel):
     defaults: TemplateMacroValues = Field(default_factory=dict)
     properties: dict[str, PropertyValueIn] = Field(default_factory=dict)
     contexts: list[MacroContextIn] = Field(default_factory=list)
+    hosts: dict[str, PropertyValueIn] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
     def _inject_template_to_contexts_and_properties(cls, data: Any) -> Any:
-        """Inject top-level template and defaults to contexts and properties if missing."""
+        """Inject top-level template and defaults to contexts/properties/hosts if missing."""
         # NOTE: this is hacky and overly dynamic, and we only have to do this because
         # MacroContextIn calls _validate_template_props in its own validator,
         # which requires the template to be present in the instance.
@@ -422,40 +492,36 @@ class MacroDefIn(BaseModel):
         if not isinstance(defaults, dict):
             return data  # pragma: no cover # pydantic error
 
-        # Inject template and defaults into contexts
+        # Inject into top-level properties and hosts
+        _inject_template_into_entries(data.get("properties", {}), template, defaults)
+        _inject_template_into_entries(data.get("hosts", {}), template, defaults)
+
+        # Inject into contexts (template, defaults, then per-context properties/hosts)
         contexts = data.get("contexts", [])
-        if template and isinstance(contexts, list):
+        if isinstance(contexts, list):
             for ctx in contexts:
-                if isinstance(ctx, dict):
-                    # Inject template if missing
-                    if not ctx.get("template"):
-                        ctx["template"] = template
+                if not isinstance(ctx, dict):
+                    continue
+                # Inject template if missing
+                if not ctx.get("template"):
+                    ctx["template"] = template
 
-                    # Inject defaults
-                    if not ctx.get("defaults"):
-                        ctx["defaults"] = defaults
-                    if isinstance(ctx["defaults"], dict):
-                        # Some defaults missing
-                        for k, v in defaults.items():
-                            ctx["defaults"].setdefault(k, v)
+                # Inject defaults
+                if not ctx.get("defaults"):
+                    ctx["defaults"] = defaults
+                if isinstance(ctx["defaults"], dict):
+                    for k, v in defaults.items():
+                        ctx["defaults"].setdefault(k, v)
 
-        # Inject template and defaults into properties (defaults go into `values`!)
-        properties = data.get("properties", {})
-        if template and isinstance(properties, dict):
-            for prop, val in properties.items():  # pyright: ignore[reportUnusedVariable]  # noqa: B007
-                if isinstance(val, dict):
-                    # Inject template if missing
-                    # MUST BE INJECTED, otherwise validator will not validate
-                    # placeholders against the template for the property
-                    if not val.get("template"):
-                        val["template"] = template
-
-                    # Inject defaults into `values`
-                    if not val.get("values"):
-                        val["values"] = {}
-                    if isinstance(val["values"], dict):
-                        for k, v in defaults.items():
-                            val["values"].setdefault(k, v)
+                ctx_template = ctx.get("template")
+                ctx_defaults = ctx.get("defaults", {})
+                if isinstance(ctx_template, str) and isinstance(ctx_defaults, dict):
+                    _inject_template_into_entries(
+                        ctx.get("properties", {}), ctx_template, ctx_defaults
+                    )
+                    _inject_template_into_entries(
+                        ctx.get("hosts", {}), ctx_template, ctx_defaults
+                    )
         return data
 
     @model_validator(mode="after")
@@ -473,7 +539,9 @@ class MacroDefIn(BaseModel):
                     f"context variant {v.context!r} uses template; "
                     "parent must not use resolve=regex"
                 )
-        _validate_template_props(self.template, self.defaults, self.properties)
+        _validate_template_props(
+            self.template, self.defaults, self.properties, self.hosts
+        )
         return self
 
 
@@ -568,10 +636,19 @@ class PropertyMacroMapping(BaseModel):
     when dealing with thousands of hosts.
     """
 
+    _host_bearing: list[MacroDefinition] = PrivateAttr(default_factory=list)
+    """Definitions that have at least one entry in `hosts`.
+
+    Iterated per `get_macros()` call so host-only macros (no contributing
+    property) can still emit when the hostname matches.
+    """
+
     def add(self, definition: MacroDefinition) -> None:
         self.definitions.append(definition)
         for prop in definition.properties:
             self._by_property[prop].append(definition)
+        if definition.hosts:
+            self._host_bearing.append(definition)
 
     def get_macros(
         self,
@@ -607,9 +684,47 @@ class PropertyMacroMapping(BaseModel):
                 slot = per_identity.setdefault(defn.identity, (defn, []))
                 slot[1].append((prop, macro_value))
 
+        # Apply host overrides. Host match always wins: replaces any property-derived
+        # contributions and bypasses the resolve strategy. Host-only macros (no
+        # property contributing) still emit if the hostname matches.
+        # Maps identity -> (matched_key, MacroValue) for the resolution loop below.
+        host_overrides: dict[MacroIdentity, tuple[str, MacroValue]] = {}
+        hostname = host_facts["hostname"]
+        for defn in self._host_bearing:
+            mv = defn.hosts.get(hostname)
+            matched_key = hostname
+            if mv is None:
+                for pattern, key in defn.host_patterns:
+                    if pattern.fullmatch(hostname):
+                        mv = defn.hosts[key]
+                        matched_key = key
+                        break
+            if mv is not None:
+                host_overrides[defn.identity] = (matched_key, mv)
+                # Ensure a slot exists so the resolution loop visits this identity
+                # even if no property contributed.
+                per_identity.setdefault(defn.identity, (defn, []))
+
         # Resolve macro values
         result: dict[str, ResolvedMacro] = {}
         for identity, (defn, contributions) in per_identity.items():
+            override = host_overrides.get(identity)
+            if override is not None:
+                matched_key, macro_value = override
+                template = macro_value.template or defn.template
+                if template is not None:
+                    subs = get_substitutions(defn, macro_value, host_facts, matched_key)
+                    resolved_value = _apply_template(template, subs, identity)
+                else:
+                    resolved_value = macro_value.value or ""
+                result[identity.to_zabbix()] = ResolvedMacro(
+                    identity=identity,
+                    value=resolved_value,
+                    description=macro_value.description or defn.description,
+                    value_type=defn.value_type,
+                )
+                continue
+
             if not contributions:  # safety for 0-indexing
                 continue
 
@@ -657,7 +772,7 @@ class PropertyMacroMapping(BaseModel):
                 resolved_value = (
                     f"({'|'.join(values)})" if len(values) > 1 else values[0]
                 )
-                if not validate_regexp(resolved_value):
+                if not is_valid_regexp(resolved_value):
                     logger.error(
                         "Resolved regex macro is invalid; skipping",
                         macro=identity.to_zabbix(),
@@ -679,6 +794,21 @@ class PropertyMacroMapping(BaseModel):
 
 
 # ----- YAML loader -----
+
+
+def _build_hosts(
+    raw: dict[str, PropertyValueIn], inherited_template: Optional[str]
+) -> dict[str, MacroValue]:
+    """Build the resolved per-host MacroValue dict, inheriting template if needed."""
+    return {
+        name: MacroValue(
+            value=pv.value,
+            description=pv.description,
+            values={k: str(v) for k, v in pv.values.items()},
+            template=pv.template or inherited_template,
+        )
+        for name, pv in raw.items()
+    }
 
 
 def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
@@ -728,9 +858,9 @@ def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
             continue
 
         # Register macro
-        if not macro_def.properties:
+        if not macro_def.properties and not macro_def.hosts:
             logger.warning(
-                "Macro definition has no properties. Will be used for removal only.",
+                "Macro definition has no properties or hosts. Will be used for removal only.",
                 macro_name=name,
             )
         register(
@@ -751,18 +881,19 @@ def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
                     )
                     for p, pv in macro_def.properties.items()
                 },
+                hosts=_build_hosts(macro_def.hosts, macro_def.template),
             )
         )
 
         # Register macro variants with contexts
         for variant in macro_def.contexts:
-            if not variant.properties:
+            if not variant.properties and not variant.hosts:
                 logger.warning(
-                    "Macro context variant has no properties. Will be used for removal only.",
+                    "Macro context variant has no properties or hosts. Will be used for removal only.",
                     macro_name=name,
                     context=variant.context,
                 )
-
+            variant_template = variant.template or macro_def.template
             register(
                 MacroDefinition(
                     identity=MacroIdentity(
@@ -773,20 +904,18 @@ def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
                     description=variant.description or macro_def.description,
                     value_type=macro_def.value_type,  # inherit from parent macro
                     resolve=macro_def.resolve,  # inherit from parent macro
-                    template=variant.template
-                    or macro_def.template,  # inherit from parent macro if not set
+                    template=variant_template,
                     defaults=dict(variant.defaults),
                     properties={
                         p: MacroValue(
                             value=pv.value,
                             description=pv.description,
                             values={k: str(v) for k, v in pv.values.items()},
-                            template=pv.template
-                            or variant.template
-                            or macro_def.template,  # inherit from parent macro if not set
+                            template=pv.template or variant_template,
                         )
                         for p, pv in variant.properties.items()
                     },
+                    hosts=_build_hosts(variant.hosts, variant_template),
                 )
             )
 

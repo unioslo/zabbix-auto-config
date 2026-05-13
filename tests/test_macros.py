@@ -10,6 +10,7 @@ from pytest import TempPathFactory
 from zabbix_auto_config.macros import BUILTIN_PLACEHOLDERS
 from zabbix_auto_config.macros import ContextType
 from zabbix_auto_config.macros import HostFacts
+from zabbix_auto_config.macros import MacroDefIn
 from zabbix_auto_config.macros import MacroIdentity
 from zabbix_auto_config.macros import MacroValueType
 from zabbix_auto_config.macros import PropertyMacroMapping
@@ -112,7 +113,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "values": {},
           "template": null
         }
-      }
+      },
+      "hosts": {}
     },
     {
       "identity": {
@@ -144,7 +146,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "values": {},
           "template": null
         }
-      }
+      },
+      "hosts": {}
     },
     {
       "identity": {
@@ -176,7 +179,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "values": {},
           "template": null
         }
-      }
+      },
+      "hosts": {}
     },
     {
       "identity": {
@@ -196,7 +200,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "values": {},
           "template": "https://grafana.example.com/d/node?var-host={{hostname}}"
         }
-      }
+      },
+      "hosts": {}
     },
     {
       "identity": {
@@ -228,7 +233,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           },
           "template": "https://{{hostname}}:{{port}}/{{endpoint}}"
         }
-      }
+      },
+      "hosts": {}
     },
     {
       "identity": {
@@ -270,7 +276,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           },
           "template": "https://{{hostname}}:{{port}}/legacy/{{different_placeholder}}"
         }
-      }
+      },
+      "hosts": {}
     },
     {
       "identity": {
@@ -312,7 +319,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           },
           "template": "{\\"endpoint\\": \\"{{endpoint}}\\", \\"port\\": \\"{{port}}\\"}"
         }
-      }
+      },
+      "hosts": {}
     },
     {
       "identity": {
@@ -332,7 +340,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "values": {},
           "template": null
         }
-      }
+      },
+      "hosts": {}
     },
     {
       "identity": {
@@ -352,7 +361,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "values": {},
           "template": null
         }
-      }
+      },
+      "hosts": {}
     },
     {
       "identity": {
@@ -378,7 +388,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "values": {},
           "template": null
         }
-      }
+      },
+      "hosts": {}
     },
     {
       "identity": {
@@ -410,7 +421,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "values": {},
           "template": null
         }
-      }
+      },
+      "hosts": {}
     },
     {
       "identity": {
@@ -442,7 +454,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "values": {},
           "template": null
         }
-      }
+      },
+      "hosts": {}
     },
     {
       "identity": {
@@ -458,7 +471,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
         "port": "9100",
         "endpoint": "defaultendpoint"
       },
-      "properties": {}
+      "properties": {},
+      "hosts": {}
     },
     {
       "identity": {
@@ -488,7 +502,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "value": null,
           "description": null,
           "values": {
-            "endpoint": "quuxpoint"
+            "endpoint": "quuxpoint",
+            "port": "9100"
           },
           "template": "https://{{hostname}}:{{port}}/ctx/{{endpoint}}"
         },
@@ -498,7 +513,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "values": {},
           "template": "https://{{hostname}}:{{port}}/ctx/{{endpoint}}"
         }
-      }
+      },
+      "hosts": {}
     },
     {
       "identity": {
@@ -521,7 +537,8 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "description": null,
           "values": {
             "port": "30",
-            "ctxpoint": "waldopoint"
+            "ctxpoint": "waldopoint",
+            "endpoint": "defaultendpoint"
           },
           "template": "https://{{hostname}}:{{port}}/internal/{{ctxpoint}}"
         },
@@ -529,7 +546,9 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "value": null,
           "description": null,
           "values": {
-            "ctxpoint": "plughpoint"
+            "ctxpoint": "plughpoint",
+            "port": "9100",
+            "endpoint": "defaultendpoint"
           },
           "template": "https://{{hostname}}:{{port}}/internal/{{ctxpoint}}"
         },
@@ -538,6 +557,50 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
           "description": null,
           "values": {},
           "template": "https://{{hostname}}:{{port}}/internal/{{ctxpoint}}"
+        }
+      },
+      "hosts": {}
+    },
+    {
+      "identity": {
+        "name": "{$ZAC.HOST_OVERRIDDEN}",
+        "context": null,
+        "context_type": "static"
+      },
+      "description": "Per-host scrape URL",
+      "value_type": "text",
+      "resolve": "first",
+      "template": "https://{{hostname}}:{{port}}/{{endpoint}}",
+      "defaults": {
+        "port": "9100",
+        "endpoint": "metrics"
+      },
+      "properties": {
+        "host_overridden_node": {
+          "value": null,
+          "description": null,
+          "values": {},
+          "template": "https://{{hostname}}:{{port}}/{{endpoint}}"
+        }
+      },
+      "hosts": {
+        "special.example.com": {
+          "value": null,
+          "description": null,
+          "values": {
+            "port": "9500",
+            "endpoint": "special-metrics"
+          },
+          "template": "https://{{hostname}}:{{port}}/{{endpoint}}"
+        },
+        ".*\\\\.legacy\\\\.example\\\\.com": {
+          "value": null,
+          "description": null,
+          "values": {
+            "port": "9101",
+            "endpoint": "metrics"
+          },
+          "template": "https://{{hostname}}:{{port}}/{{endpoint}}"
         }
       }
     }
@@ -936,6 +999,7 @@ def test_property_map_properties(macro_map: PropertyMacroMapping) -> None:
             "waldo",
             "plugh",
             "xyzzy",
+            "host_overridden_node",
         ]
     )
 
@@ -1026,6 +1090,11 @@ def test_property_macro_map_combined(macro_map: PropertyMacroMapping):
                 value="secret/zabbix/db:password",
                 description="DB password fetched from Vault",
                 value_type=MacroValueType.VAULT,
+            ),
+            "{$ZAC.HOST_OVERRIDDEN}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.HOST_OVERRIDDEN}"),
+                value="https://testhost.example.com:9100/metrics",
+                description="Per-host scrape URL",
             ),
         }
     )
@@ -1680,6 +1749,75 @@ macros:
         _ = read_property_macro_map(tmpfile)
 
 
+def test_macro_with_everything(tmp_path: Path):
+    """Macro with template, contexts and host overrides."""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$ZAC.TEMPLATE_AND_CONTEXT}":
+    template: "https://{{hostname}}:{{port}}/ctx/{{ctx}}"
+    resolve: first
+    defaults:
+      port: 9100
+      ctx: defaultctx
+    properties:
+      spam:
+    hosts:
+      barhost.example.com:
+        values:
+          port: 9200
+          ctx: barhostctx
+      ".*.example.com": # regex match (matched if no exact match)
+        values:
+          port: 9300
+          ctx: regexhostctx
+      testhost.example.com: # exact match (preferred)
+        values:
+          port: 9400
+          ctx: testhostctx
+    contexts:
+      - context: "^site:.*"
+        context_type: regex
+        template: "https://{{hostname}}:{{port}}/internal/{{blah}}" # can override top-level template
+        defaults:
+            # inherits port
+            blah: "blahval"
+        properties:
+          spam:
+            values:
+                port: 30
+                blah: "spamington"
+          bar:
+            values:
+              blah: "barval"
+          gux:
+
+""",
+        encoding="utf-8",
+    )
+    m = read_property_macro_map(tmpfile)
+    facts = HostFacts(hostname="testhost.example.com")
+
+    # Matches on spam and hostname -> hostname match used
+    assert m.get_macros(["spam"], facts) == snapshot(
+        {
+            "{$ZAC.TEMPLATE_AND_CONTEXT}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.TEMPLATE_AND_CONTEXT}"),
+                value="https://testhost.example.com:9400/ctx/testhostctx",
+            ),
+            '{$ZAC.TEMPLATE_AND_CONTEXT:regex:"^site:.*"}': ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.TEMPLATE_AND_CONTEXT}",
+                    context="^site:.*",
+                    context_type=ContextType.REGEX,
+                ),
+                value="https://testhost.example.com:30/internal/spamington",
+            ),
+        }
+    )
+
+
 def test_empty_defs_only(
     tmp_path: Path,
 ) -> None:
@@ -1833,3 +1971,344 @@ def test_get_substitutions_builtin_placeholder_keys_are_used(
                 # Resolved substitutions contain 'builtins', defaults, values
                 expect = BUILTIN_PLACEHOLDERS | set(macro.defaults) | set(prop.values)
                 assert expect.issubset(subs.keys())
+
+
+def test_macrodefin_requires_no_args() -> None:
+    """Test that MacroDefIn can be instantiated without arguments."""
+    # MacroDef is instantiated without args in MacroMapFileIn validator
+    assert MacroDefIn()
+
+
+# ----- Hostname-based override tests -----
+
+
+# TODO: refactor all tests to use this helper function
+def _write_yaml(tmp_path: Path, body: str) -> Path:
+    p = tmp_path / "property_macro_map.yaml"
+    p.write_text(body, encoding="utf-8")  # pyright: ignore[reportUnusedCallResult]
+    return p
+
+
+def test_host_exact_match_wins_over_property(tmp_path: Path) -> None:
+    """Exact hostname match overrides property-derived value."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.HOST_OVR}":
+    template: "https://{{hostname}}:{{port}}/x"
+    defaults:
+      port: 9100
+    properties:
+      foo:
+    hosts:
+      testhost.example.com:
+        values:
+          port: 9999
+""",
+    )
+    m = read_property_macro_map(f)
+    macros = m.get_macros(["foo"], DEFAULT_FACTS)
+    assert macros["{$ZAC.HOST_OVR}"].value == "https://testhost.example.com:9999/x"
+
+
+def test_host_regex_fallback_when_no_exact(tmp_path: Path) -> None:
+    """Regex hostname match used when no exact match exists."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.HOST_OVR}":
+    template: "https://{{hostname}}:{{port}}/x"
+    defaults:
+      port: 9100
+    properties:
+      foo:
+    hosts:
+      ".*\\\\.example\\\\.com":
+        values:
+          port: 9200
+""",
+    )
+    m = read_property_macro_map(f)
+    macros = m.get_macros(["foo"], HostFacts(hostname="other.example.com"))
+    assert macros["{$ZAC.HOST_OVR}"].value == "https://other.example.com:9200/x"
+
+
+def test_host_longest_regex_wins(tmp_path: Path) -> None:
+    """When multiple regex patterns match, longest pattern wins."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.HOST_OVR}":
+    template: "https://{{hostname}}:{{port}}/x"
+    defaults:
+      port: 9100
+    properties:
+      foo:
+    hosts:
+      ".*":
+        values:
+          port: 9001
+      ".*\\\\.example\\\\.com":
+        values:
+          port: 9002
+""",
+    )
+    m = read_property_macro_map(f)
+    macros = m.get_macros(["foo"], HostFacts(hostname="x.example.com"))
+    assert macros["{$ZAC.HOST_OVR}"].value == "https://x.example.com:9002/x"
+
+
+def test_host_alphabetical_tiebreak(tmp_path: Path) -> None:
+    """Regex patterns of equal length tie-break alphabetically."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.HOST_OVR}":
+    template: "https://{{hostname}}:{{port}}/x"
+    defaults:
+      port: 9100
+    properties:
+      foo:
+    hosts:
+      "z.*\\\\.example\\\\.com":
+        values:
+          port: 9999
+      "a.*\\\\.example\\\\.com":
+        values:
+          port: 9000
+""",
+    )
+    m = read_property_macro_map(f)
+    macros = m.get_macros(["foo"], HostFacts(hostname="aaa.example.com"))
+    assert macros["{$ZAC.HOST_OVR}"].value == "https://aaa.example.com:9000/x"
+
+
+def test_host_only_macro_emits_when_match(tmp_path: Path) -> None:
+    """Host match alone (no property) is enough to emit the macro."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.HOST_ONLY}":
+    template: "https://{{hostname}}:{{port}}/x"
+    defaults:
+      port: 9100
+    hosts:
+      testhost.example.com:
+        values:
+          port: 7777
+""",
+    )
+    m = read_property_macro_map(f)
+    macros = m.get_macros([], DEFAULT_FACTS)
+    assert macros["{$ZAC.HOST_ONLY}"].value == "https://testhost.example.com:7777/x"
+
+
+def test_host_only_macro_does_not_emit_when_no_match(tmp_path: Path) -> None:
+    """No host match and no property contribution → macro not emitted."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.HOST_ONLY}":
+    template: "https://{{hostname}}:{{port}}/x"
+    defaults:
+      port: 9100
+    hosts:
+      other.example.com:
+        values:
+          port: 7777
+""",
+    )
+    m = read_property_macro_map(f)
+    macros = m.get_macros([], DEFAULT_FACTS)
+    assert "{$ZAC.HOST_ONLY}" not in macros
+
+
+def test_host_in_context_scoped_to_that_context(tmp_path: Path) -> None:
+    """Per-context hosts apply only to that context's macro identity."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.HOST_CTX}":
+    template: "https://{{hostname}}:{{port}}/x"
+    defaults:
+      port: 9100
+    properties:
+      foo:
+    contexts:
+      - context: "ctxA"
+        properties:
+          foo:
+        hosts:
+          testhost.example.com:
+            values:
+              port: 1111
+      - context: "ctxB"
+        properties:
+          foo:
+""",
+    )
+    m = read_property_macro_map(f)
+    macros = m.get_macros(["foo"], DEFAULT_FACTS)
+    assert macros["{$ZAC.HOST_CTX}"].value == "https://testhost.example.com:9100/x"
+    assert macros["{$ZAC.HOST_CTX:ctxA}"].value == "https://testhost.example.com:1111/x"
+    assert macros["{$ZAC.HOST_CTX:ctxB}"].value == "https://testhost.example.com:9100/x"
+
+
+def test_host_template_override(tmp_path: Path) -> None:
+    """Per-host template override takes precedence when host matches."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.HOST_TPL}":
+    template: "https://{{hostname}}:{{port}}/default"
+    defaults:
+      port: 9100
+    properties:
+      foo:
+    hosts:
+      testhost.example.com:
+        template: "https://{{hostname}}:{{port}}/overridden"
+        values:
+          port: 8888
+""",
+    )
+    m = read_property_macro_map(f)
+    macros = m.get_macros(["foo"], DEFAULT_FACTS)
+    assert (
+        macros["{$ZAC.HOST_TPL}"].value
+        == "https://testhost.example.com:8888/overridden"
+    )
+
+
+def test_host_with_scalar_value_under_template_invalid(tmp_path: Path) -> None:
+    """Host scalar shorthand forbidden when parent has template (mirrors property rule)."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.BAD}":
+    template: "https://{{hostname}}:{{port}}/x"
+    defaults:
+      port: 9100
+    properties:
+      foo:
+    hosts:
+      testhost.example.com: "scalar"
+""",
+    )
+    with pytest.raises(
+        ValidationError,
+        match=re.escape("Host 'testhost.example.com' uses scalar shorthand"),
+    ):
+        _ = read_property_macro_map(f)
+
+
+def test_host_unsatisfied_placeholders_invalid(tmp_path: Path) -> None:
+    """Host that doesn't satisfy template placeholders raises."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.BAD}":
+    template: "https://{{hostname}}:{{port}}/{{missing}}"
+    defaults:
+      port: 9100
+    hosts:
+      testhost.example.com:
+""",
+    )
+    with pytest.raises(
+        ValidationError,
+        match=re.escape("Template placeholders not satisfied"),
+    ):
+        _ = read_property_macro_map(f)
+
+
+def test_host_invalid_regex_key(tmp_path: Path) -> None:
+    """Hostname keys must compile as regex."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.BAD}":
+    template: "https://{{hostname}}/x"
+    properties:
+      foo:
+    hosts:
+      "[unclosed":
+        values: {}
+""",
+    )
+    with pytest.raises(ValidationError, match=re.escape("Invalid host pattern")):
+        _ = read_property_macro_map(f)
+
+
+def test_host_wins_over_resolve_regex(tmp_path: Path) -> None:
+    """resolve=regex with a host match: host wins, regex union is bypassed."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.RX_HOST}":
+    resolve: regex
+    properties:
+      foo: "fooval"
+      bar: "barval"
+    hosts:
+      testhost.example.com: "hostval"
+""",
+    )
+    m = read_property_macro_map(f)
+    macros = m.get_macros(["foo", "bar"], DEFAULT_FACTS)
+    assert macros["{$ZAC.RX_HOST}"].value == "hostval"
+
+
+def test_host_overrides_property_for_plain_macro(tmp_path: Path) -> None:
+    """Plain (non-template) macro: host scalar overrides property scalar."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.PLAIN}":
+    properties:
+      foo: "fooval"
+    hosts:
+      testhost.example.com: "hostval"
+""",
+    )
+    m = read_property_macro_map(f)
+    macros = m.get_macros(["foo"], DEFAULT_FACTS)
+    assert macros["{$ZAC.PLAIN}"].value == "hostval"
+
+
+def test_host_pattern_compiled_lazily_and_cached(tmp_path: Path) -> None:
+    """`host_patterns` is a cached_property: same list on repeat access; sort order checked."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.CACHE}":
+    template: "https://{{hostname}}/x"
+    properties:
+      foo:
+    hosts:
+      ".*\\\\.example\\\\.com":
+        values: {}
+      "z.*":
+        values: {}
+""",
+    )
+    m = read_property_macro_map(f)
+    defn = m.definitions[0]
+    first = defn.host_patterns
+    second = defn.host_patterns
+    assert first is second
+    assert [k for _, k in first] == [".*\\.example\\.com", "z.*"]

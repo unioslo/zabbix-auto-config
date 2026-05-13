@@ -199,3 +199,32 @@ macros:
             values:
               ctxpoint: "plughpoint"
           xyzzy:
+
+  # Hostname-based overrides. Per-host (or per-pattern) values that override any
+  # property-derived value for the same macro identity. Host match always wins
+  # over properties and bypasses the `resolve` strategy. A host match alone is
+  # enough to emit the macro — no contributing property required.
+  #
+  # Match precedence:
+  #  1. Exact hostname dict lookup
+  #  2. Regex fullmatch, longest pattern wins
+  #  3. Alphabetical tiebreak between patterns of equal length
+  #
+  # All keys are also valid regex patterns (validated at load time). Compilation
+  # is lazy and cached per macro definition.
+  "{$ZAC.HOST_OVERRIDDEN}":
+    description: "Per-host scrape URL"
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+    defaults:
+      port: 9100
+      endpoint: metrics
+    properties:
+      host_overridden_node:
+    hosts:
+      special.example.com:           # exact match (preferred)
+        values:
+          port: 9500
+          endpoint: special-metrics
+      ".*\\.legacy\\.example\\.com": # regex fallback
+        values:
+          port: 9101
