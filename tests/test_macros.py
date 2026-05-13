@@ -62,12 +62,18 @@ SAMPLE_PROPERTY_MACRO_MAP = (
 ).read_text(encoding="utf-8")
 
 
+# TODO: refactor all tests to use this helper function
+def _write_yaml(tmp_path: Path, body: str) -> Path:
+    p = tmp_path / "property_macro_map.yaml"
+    p.write_text(body, encoding="utf-8")  # pyright: ignore[reportUnusedCallResult]
+    return p
+
+
 @pytest.fixture(scope="session")
 def sample_property_macro_map_path(tmp_path_factory: TempPathFactory):
     """Creates a sample property macro map file for testing."""
     tmp_path = tmp_path_factory.mktemp("data")
-    p = tmp_path / "property_macro_map.yaml"
-    p.write_text(SAMPLE_PROPERTY_MACRO_MAP, encoding="utf-8")
+    p = _write_yaml(tmp_path, SAMPLE_PROPERTY_MACRO_MAP)
     yield p
 
 
@@ -1114,8 +1120,8 @@ def contains_valid_regex(macros: dict[str, ResolvedMacro]) -> bool:
 
 def test_get_macros_properties_with_empty_values(tmp_path: Path):
     """Test that properties with empty string values are accepted and can be resolved."""
-    tmpfile = tmp_path / "property_macro_map.txt"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$BLANK_PROPERTIES}":
@@ -1123,7 +1129,6 @@ macros:
       default_db: xyzzydb  # ensures we sort by property value, not macro value
       is_pgsql_server: ""
 """,
-        encoding="utf-8",
     )
     m = read_property_macro_map(tmpfile)
     assert m.get_macros(["is_pgsql_server"], DEFAULT_FACTS) == snapshot(
@@ -1149,8 +1154,8 @@ def test_get_macros_properties_with_null_values_rejected(tmp_path: Path):
 
     Using an empty macro value should be a deliberate choice denoted
     by an empty string literal - not the absence of a value."""
-    tmpfile = tmp_path / "property_macro_map.txt"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$BLANK_PROPERTIES}":
@@ -1158,7 +1163,6 @@ macros:
       default_db: xyzzydb
       is_pgsql_server:
 """,
-        encoding="utf-8",
     )
     with pytest.raises(
         ValidationError,
@@ -1169,8 +1173,8 @@ macros:
 
 def test_get_macros_deduplication_regex_plain(tmp_path: Path):
     """Test deduplication of plain text values for regex macros."""
-    tmpfile = tmp_path / "property_macro_map.txt"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         r"""
 macros:
   "{$SYSTEMD.NAME.SERVICE.MATCHES}":
@@ -1180,7 +1184,6 @@ macros:
       is_pgsql_server: postgresql
       zabbix_agent: zabbix-agent
 """,
-        encoding="utf-8",
     )
     m = read_property_macro_map(tmpfile)
 
@@ -1212,8 +1215,8 @@ macros:
 
 
 def test_get_macros_deduplication_regex_pattern(tmp_path: Path):
-    tmpfile = tmp_path / "property_macro_map.txt"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         r"""
 macros:
   "{$SYSTEMD.NAME.SERVICE.MATCHES}":
@@ -1223,7 +1226,6 @@ macros:
       is_pgsql_server: ^postgresql(\d+)?$
       zabbix_agent: ^zabbix-agent(\d+)?$
 """,
-        encoding="utf-8",
     )
     m = read_property_macro_map(tmpfile)
 
@@ -1244,8 +1246,8 @@ macros:
 
 def test_get_macros_deduplication_regex_mixed(tmp_path: Path):
     """Test deduplication of mixed plain text and regex values for regex macros."""
-    tmpfile = tmp_path / "property_macro_map.txt"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         r"""
 macros:
   "{$SYSTEMD.NAME.SERVICE.MATCHES}":
@@ -1256,7 +1258,6 @@ macros:
       zabbix_agent: ^zabbix-agent(\d+)?$
 
 """,
-        encoding="utf-8",
     )
     m = read_property_macro_map(tmpfile)
 
@@ -1275,8 +1276,8 @@ macros:
 
 def test_get_macros_regex_patterns(tmp_path: Path):
     """Test that the generated regex patterns are valid and correctly combined."""
-    tmpfile = tmp_path / "property_macro_map.txt"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         r"""
 macros:
   "{$SYSTEMD.NAME.SERVICE.MATCHES}":
@@ -1286,7 +1287,6 @@ macros:
       zabbix_agent: ^zabbix-agent(\d+)?$
       use_zabbix_agent2: ^zabbix-agent2$
 """,
-        encoding="utf-8",
     )
     m = read_property_macro_map(tmpfile)
 
@@ -1350,8 +1350,8 @@ macros:
 
 def test_get_macros_template_no_defaults(tmp_path: Path):
     """Test that template macros without a `defaults` section fails"""
-    tmpfile = tmp_path / "property_macro_map.txt"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         r"""
 macros:
   "{$AGENT.URL}":
@@ -1363,7 +1363,6 @@ macros:
         values:
           port: 9101              # overrides default
 """,
-        encoding="utf-8",
     )
     with pytest.raises(
         ValidationError,
@@ -1376,8 +1375,8 @@ macros:
 
 def test_get_macros_template_incomplete_defaults(tmp_path: Path):
     """Test that template macros without a complete `defaults` section fails."""
-    tmpfile = tmp_path / "property_macro_map.txt"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         r"""
 macros:
     "{$AGENT.URL}":
@@ -1392,7 +1391,6 @@ macros:
           values:
             port: 9101              # overrides default
 """,
-        encoding="utf-8",
     )
     with pytest.raises(
         ValidationError,
@@ -1405,8 +1403,8 @@ macros:
 
 def test_resolve_last(tmp_path: Path):
     """`resolve: last` picks alphabetically last contributing property."""
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$ZAC.LAST_MACRO}":
@@ -1416,7 +1414,6 @@ macros:
       banana: "banana value"
       cherry: "cherry value"
 """,
-        encoding="utf-8",
     )
     m = read_property_macro_map(tmpfile)
 
@@ -1437,8 +1434,8 @@ macros:
 
 def test_template_macro_rejects_resolve_regex(tmp_path: Path):
     """Template macros must not use `resolve: regex`."""
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$ZAC.TEMPLATE_MACRO}":
@@ -1447,7 +1444,6 @@ macros:
     properties:
       foo:
 """,
-        encoding="utf-8",
     )
     with pytest.raises(
         ValidationError,
@@ -1458,8 +1454,8 @@ macros:
 
 def test_context_macro_invalid_regexp(tmp_path: Path):
     """Context macro with type `regex` that has invalid regex pattern."""
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$ZAC.CONTEXT_MACRO}":
@@ -1471,7 +1467,6 @@ macros:
         properties:
           foo: "[also_invalid(" # the context validation fails before this
 """,
-        encoding="utf-8",
     )
     with pytest.raises(
         ValidationError, match=re.escape("Invalid regex context: '[invalid('")
@@ -1481,8 +1476,8 @@ macros:
 
 def test_context_macro_with_template(tmp_path: Path):
     """Context macros must not use `resolve: regex`."""
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$ZAC.CONTEXT_MACRO}":
@@ -1505,7 +1500,6 @@ macros:
             values:
                 ctx: "foo value 456"
 """,
-        encoding="utf-8",
     )
     m = read_property_macro_map(tmpfile)
     assert m.get_macros(["foo"], DEFAULT_FACTS) == snapshot(
@@ -1532,8 +1526,8 @@ macros:
 
 def test_context_macro_with_overriden_template(tmp_path: Path):
     """Context macro with template and contexts that override template + placeholders."""
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$ZAC.TEMPLATE_AND_CONTEXT}":
@@ -1561,7 +1555,6 @@ macros:
           gux:
 
 """,
-        encoding="utf-8",
     )
     m = read_property_macro_map(tmpfile)
     assert m.get_macros(["spam"], DEFAULT_FACTS) == snapshot(
@@ -1584,8 +1577,8 @@ macros:
 
 def test_context_macro_with_template_invalid(tmp_path: Path):
     """Context macros with templates must not use `resolve: regex`."""
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$ZAC.CONTEXT_MACRO}":
@@ -1606,7 +1599,6 @@ macros:
             values:
               ctx: "foo value 456"
 """,
-        encoding="utf-8",
     )
     with pytest.raises(
         ValidationError,
@@ -1624,8 +1616,8 @@ def test_template_macro_property_unused_values(tmp_path: Path) -> None:
     inherits the missing value from the defaults when resolved.
     The incorrect placeholder is simply ignored.
     """
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$ZAC.TEMPLATE_UNUSED_VALUE}":
@@ -1640,7 +1632,6 @@ macros:
           port: 910
           wrong_placeholder: old-ingestor # will not be used
 """,
-        encoding="utf-8",
     )
     m = read_property_macro_map(tmpfile)
     macros = m.get_macros(["foo"], DEFAULT_FACTS)
@@ -1655,14 +1646,13 @@ macros:
 
 def test_template_no_defaults_no_properties(tmp_path: Path) -> None:
     """Template macro with no properties doesn't need defaults (no properties to validate)"""
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$ZAC.TEMPLATE_NO_PROPS}":
     template: "https://{{hostname}}:{{port}}/{{endpoint}}"
 """,
-        encoding="utf-8",
     )
     m = read_property_macro_map(tmpfile)  # reads fine
     assert len(m.definitions) == 1
@@ -1670,8 +1660,8 @@ macros:
 
 def test_template_no_defaults_with_properties(tmp_path: Path) -> None:
     """Template macro with properties must have defaults to satisfy placeholders."""
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$ZAC.TEMPLATE_PROPS_NO_DEFAULTS}":
@@ -1679,7 +1669,6 @@ macros:
     properties:
       foo:
 """,
-        encoding="utf-8",
     )
     with pytest.raises(
         ValidationError,
@@ -1694,8 +1683,8 @@ def test_template_macro_property_only_has_template(
     tmp_path: Path,
 ) -> None:
     """Macro where top-level macro does not define template, but its properties do. Forbid this."""
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$ZAC.ONLY_PROPERTY_HAS_TEMPLATE}":
@@ -1709,7 +1698,6 @@ macros:
             endpoint: ingestion
 
 """,
-        encoding="utf-8",
     )
     with pytest.raises(
         ValidationError,
@@ -1724,8 +1712,8 @@ def test_template_macro_property_has_values(
     tmp_path: Path,
 ) -> None:
     """Macro where top-level macro does not define template, but its property defines `values`."""
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$ZAC.NO_TEMPLATE_PROPERTY_HAS_VALUES}":
@@ -1738,7 +1726,6 @@ macros:
           endpoint: ingestion
 
 """,
-        encoding="utf-8",
     )
     with pytest.raises(
         ValidationError,
@@ -1751,8 +1738,8 @@ macros:
 
 def test_macro_with_everything(tmp_path: Path):
     """Macro with template, contexts and host overrides."""
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$ZAC.TEMPLATE_AND_CONTEXT}":
@@ -1794,7 +1781,6 @@ macros:
           gux:
 
 """,
-        encoding="utf-8",
     )
     m = read_property_macro_map(tmpfile)
     facts = HostFacts(hostname="testhost.example.com")
@@ -1822,14 +1808,13 @@ def test_empty_defs_only(
     tmp_path: Path,
 ) -> None:
     """Ensure empty macro definitions (used for removal) are supported."""
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$ZAC.I_AM_EMPTY}":
   "{$ZAC.I_AM_ALSO_EMPTY}":
 """,
-        encoding="utf-8",
     )
     m = read_property_macro_map(tmpfile)
     assert len(m.definitions) == 2
@@ -1855,13 +1840,12 @@ def test_invalid_macro_name(
     name: str,
 ) -> None:
     """Macro name without closing curly brace."""
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         f"""
 macros:
   "{name}":
 """,
-        encoding="utf-8",
     )
     with pytest.raises(
         ValidationError,
@@ -1872,8 +1856,8 @@ macros:
 
 def test_get_substitutions(tmp_path: Path) -> None:
     """Test `get_substitutions using a macro with template+template override in properties."""
-    tmpfile = tmp_path / "property_macro_map.yaml"
-    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+    tmpfile = _write_yaml(
+        tmp_path,
         """
 macros:
   "{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}":
@@ -1893,7 +1877,6 @@ macros:
           port: 910
           different_placeholder: old-ingestor
 """,
-        encoding="utf-8",
     )
     m = read_property_macro_map(tmpfile)
     assert len(m.definitions) == 1
@@ -1980,13 +1963,6 @@ def test_macrodefin_requires_no_args() -> None:
 
 
 # ----- Hostname-based override tests -----
-
-
-# TODO: refactor all tests to use this helper function
-def _write_yaml(tmp_path: Path, body: str) -> Path:
-    p = tmp_path / "property_macro_map.yaml"
-    p.write_text(body, encoding="utf-8")  # pyright: ignore[reportUnusedCallResult]
-    return p
 
 
 def test_host_exact_match_wins_over_property(tmp_path: Path) -> None:
