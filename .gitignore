@@ -20,6 +20,10 @@ _venv/
 .ruff_cache/
 .hypothesis/
 
+# Tests
+.coverage
+.coverage.*
+
 # Dev files
 .dev/
 
