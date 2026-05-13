@@ -210,8 +210,8 @@ macros:
   #  2. Regex fullmatch, longest pattern wins
   #  3. Alphabetical tiebreak between patterns of equal length
   #
-  # All keys are also valid regex patterns (validated at load time). Compilation
-  # is lazy and cached per macro definition.
+  # Host keys should be exact Zabbix hostnames or regex patterns.
+  # Exact hostnames always take precedence over regex patterns.
   "{$ZAC.HOST_OVERRIDDEN}":
     description: "Per-host scrape URL"
     template: "https://{{hostname}}:{{port}}/{{endpoint}}"
