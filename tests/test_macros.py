@@ -274,6 +274,48 @@ def test_read_property_macro_map(sample_property_macro_map_path: Path):
     },
     {
       "identity": {
+        "name": "{$ZAC.SIMPLE_PARENT_ADVANCED_CHILD}",
+        "context": null,
+        "context_type": "static"
+      },
+      "description": "Ingestion endpoint",
+      "value_type": "text",
+      "resolve": "first",
+      "template": "{{value}}",
+      "defaults": {
+        "value": "defaultval"
+      },
+      "properties": {
+        "default_ingestor": {
+          "value": null,
+          "description": null,
+          "values": {
+            "value": "foo_val"
+          },
+          "template": "{{value}}"
+        },
+        "labeled_ingestor": {
+          "value": null,
+          "description": null,
+          "values": {
+            "value": "defaultval"
+          },
+          "template": "value: {{value}}"
+        },
+        "json_ingestor": {
+          "value": null,
+          "description": null,
+          "values": {
+            "port": "9101",
+            "endpoint": "healthcheck",
+            "value": "defaultval"
+          },
+          "template": "{\\"endpoint\\": \\"{{endpoint}}\\", \\"port\\": \\"{{port}}\\"}"
+        }
+      }
+    },
+    {
+      "identity": {
         "name": "{$ZAC.API_TOKEN}",
         "context": null,
         "context_type": "static"
@@ -878,6 +920,9 @@ def test_property_map_properties(macro_map: PropertyMacroMapping) -> None:
             "logs_ingestor",
             "legacy_ingestor",
             "older_legacy_ingestor",
+            "default_ingestor",
+            "labeled_ingestor",
+            "json_ingestor",
             "has_api_integration",
             "uses_vault_secrets",
             "eggs",
@@ -947,6 +992,11 @@ def test_property_macro_map_combined(macro_map: PropertyMacroMapping):
                     name="{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}"
                 ),
                 value="https://testhost.example.com:9100/legacy/ingestion",
+                description="Ingestion endpoint",
+            ),
+            "{$ZAC.SIMPLE_PARENT_ADVANCED_CHILD}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.SIMPLE_PARENT_ADVANCED_CHILD}"),
+                value="foo_val",
                 description="Ingestion endpoint",
             ),
             "{$ZAC.TEMPLATE_AND_CONTEXT:internal}": ResolvedMacro(
@@ -1337,6 +1387,29 @@ macros:
         _ = read_property_macro_map(tmpfile)
 
 
+def test_context_macro_invalid_regexp(tmp_path: Path):
+    """Context macro with type `regex` that has invalid regex pattern."""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$ZAC.CONTEXT_MACRO}":
+    resolve: first
+    contexts:
+      - context: "[invalid("
+        context_type: regex
+        description: "Regex context description"
+        properties:
+          foo: "[also_invalid(" # the context validation fails before this
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValidationError, match=re.escape("Invalid regex context: '[invalid('")
+    ):
+        _ = read_property_macro_map(tmpfile)
+
+
 def test_context_macro_with_template(tmp_path: Path):
     """Context macros must not use `resolve: regex`."""
     tmpfile = tmp_path / "property_macro_map.yaml"
@@ -1544,6 +1617,117 @@ macros:
         match=re.escape(
             "Template placeholders not satisfied: {'foo': ['endpoint', 'port']}"
         ),
+    ):
+        _ = read_property_macro_map(tmpfile)
+
+
+def test_template_macro_property_only_has_template(
+    tmp_path: Path,
+) -> None:
+    """Macro where top-level macro does not define template, but its properties do. Forbid this."""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$ZAC.ONLY_PROPERTY_HAS_TEMPLATE}":
+    description: "Ingestion endpoint"
+    properties:
+      foo:
+        template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+        values:
+            # missing port
+            # but parent missing template is the error that will be raised
+            endpoint: ingestion
+
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValidationError,
+        match=re.escape(
+            "Properties ['foo'] define templates but macro definition does not"
+        ),
+    ):
+        _ = read_property_macro_map(tmpfile)
+
+
+def test_template_macro_property_has_values(
+    tmp_path: Path,
+) -> None:
+    """Macro where top-level macro does not define template, but its property defines `values`."""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$ZAC.NO_TEMPLATE_PROPERTY_HAS_VALUES}":
+    description: "Ingestion endpoint"
+    properties:
+      foo:
+        value: "some value" # checked before `values`, so must be present to trigger error
+        values:
+          port: 9001
+          endpoint: ingestion
+
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValidationError,
+        match=re.escape(
+            "Properties have `values` keys but no template defined: {'foo': ['port', 'endpoint']}"
+        ),
+    ):
+        _ = read_property_macro_map(tmpfile)
+
+
+def test_empty_defs_only(
+    tmp_path: Path,
+) -> None:
+    """Ensure empty macro definitions (used for removal) are supported."""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        """
+macros:
+  "{$ZAC.I_AM_EMPTY}":
+  "{$ZAC.I_AM_ALSO_EMPTY}":
+""",
+        encoding="utf-8",
+    )
+    m = read_property_macro_map(tmpfile)
+    assert len(m.definitions) == 2
+    assert len(m._by_property) == 0  # pyright: ignore[reportPrivateUsage]
+    assert sorted(m.identity.to_zabbix() for m in m.definitions) == snapshot(
+        ["{$ZAC.I_AM_ALSO_EMPTY}", "{$ZAC.I_AM_EMPTY}"]
+    )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "{$ZAC.INVALID",
+        "ZAC.INVALID}",
+        "{$ZAC.INV{ALID}",
+        "{$ZAC.INVALID}EXTRA",
+        "{$ZAC.INV@LID}",
+        "ZAC.INVALID",
+    ],
+)
+def test_invalid_macro_name(
+    tmp_path: Path,
+    name: str,
+) -> None:
+    """Macro name without closing curly brace."""
+    tmpfile = tmp_path / "property_macro_map.yaml"
+    tmpfile.write_text(  # pyright: ignore[reportUnusedCallResult]
+        f"""
+macros:
+  "{name}":
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValidationError,
+        match=re.escape(f"Invalid macro name: '{name}'"),
     ):
         _ = read_property_macro_map(tmpfile)
 

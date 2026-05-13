@@ -86,6 +86,30 @@ macros:
           port: 9101 # also exists in top-level, redefined
           different_placeholder: old-ingestor
 
+  # Mixing non-templated macros with templated properties is forbidden.
+  # If rendering simple values is required for most properties,
+  # but a few need advanced templates, define a template that renders
+  # a single placeholder as-is, then override the template on the properties
+  # that require more advanced rendering.
+  "{$ZAC.SIMPLE_PARENT_ADVANCED_CHILD}":
+    description: "Ingestion endpoint"
+    template: "{{value}}"
+    defaults:
+      value: defaultval
+    properties:
+      # inherits top-level template (render value as is)
+      default_ingestor:
+        values:
+          value: foo_val
+      # Overrides template only (same placeholders)
+      labeled_ingestor:
+        template: "value: {{value}}"
+      # Overrides template and placeholders
+      json_ingestor:
+        template: '{"endpoint": "{{endpoint}}", "port": "{{port}}"}'
+        values:
+          port: 9101
+          endpoint: healthcheck
 
   # `value_type` controls the Zabbix usermacro value type. Defaults to `text`.
   # Use `secret` for values that should be masked in the Zabbix UI.

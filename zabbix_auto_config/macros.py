@@ -297,10 +297,29 @@ def _validate_template_props(
     if template is None:
         if defaults:
             raise ValueError("'defaults' set but no 'template' defined")
-        missing = [p for p, pv in properties.items() if pv.value is None]
+
+        # HACK: recurse into properties _here_ to validate child templates.
+        # Detect if properties are defining templates when parent does not
+        has_template = [p for p, pv in properties.items() if pv.template is not None]
+        if has_template:
+            raise ValueError(
+                f"Properties {sorted(has_template)} define templates but macro definition does not"
+            )
+
+        # Check for properties without `template` and `value`
+        missing = [
+            p
+            for p, pv in properties.items()
+            if pv.value is None and pv.template is None
+        ]
         if missing:
-            raise ValueError(f"Property values cannot be null: {missing}")
-        with_values = {p: list(pv.values) for p, pv in properties.items() if pv.values}
+            raise ValueError(f"Property values cannot be null: {sorted(missing)}")
+
+        with_values = {
+            p: list(pv.values)
+            for p, pv in properties.items()
+            if pv.values and not pv.template
+        }
         if with_values:
             raise ValueError(
                 f"Properties have `values` keys but no template defined: {with_values}"
@@ -393,15 +412,15 @@ class MacroDefIn(BaseModel):
         # We could refactor the validation to only be called once after all
         # definitions have been fully constructed - instead of on a per-model basis.
         if not isinstance(data, dict):
-            return data  # pydantic will handle the error
+            return data  # pragma: no cover # pydantic error
+
         template = data.get("template")
-        if not template:
+        if not template or not isinstance(template, str):
             return data  # nothing to do
 
         defaults = data.get("defaults", {})
-
         if not isinstance(defaults, dict):
-            return data  # pydantic will handle the error
+            return data  # pragma: no cover # pydantic error
 
         # Inject template and defaults into contexts
         contexts = data.get("contexts", [])
@@ -466,12 +485,40 @@ class MacroMapFileIn(BaseModel):
 
     macros: dict[str, MacroDefIn] = Field(default_factory=dict)
 
-    @field_validator("macros")
+    @field_validator("macros", mode="before")
+    @classmethod
+    def _none_is_empty_macrodef(cls, v: Any) -> Any:
+        """Null value for a macro is an empty definition.
+
+        Short-hand for macro with no property, to mark them as
+        'managed', removing the macro from every host in Zabbix.
+        I.e.:
+
+        ```yaml
+        macros:
+          "{$WILL_BE_REMOVED}":
+        ```
+        is equivalent to:
+
+        ```yaml
+        macros:
+          "{$WILL_BE_REMOVED}":
+            description:
+            properties: {}
+        """
+        if not isinstance(v, dict):
+            return v  # pragma: no cover # pydantic error
+        for k, values in v.items():
+            if values is None:
+                v[k] = MacroDefIn()
+        return v
+
+    @field_validator("macros", mode="after")
     @classmethod
     def _validate_macro_keys(cls, v: dict[str, MacroDefIn]) -> dict[str, MacroDefIn]:
         for name in v:
             if not is_valid_macro_name(name):
-                raise ValueError(f"Invalid macro name key: {name!r}")
+                raise ValueError(f"Invalid macro name: {name!r}")
         return v
 
 
