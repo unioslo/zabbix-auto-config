@@ -1120,7 +1120,7 @@ def contains_valid_regex(macros: dict[str, ResolvedMacro]) -> bool:
 
 def test_get_macros_properties_with_empty_values(tmp_path: Path):
     """Test that properties with empty string values are accepted and can be resolved."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1130,7 +1130,7 @@ macros:
       is_pgsql_server: ""
 """,
     )
-    m = read_property_macro_map(tmpfile)
+    m = read_property_macro_map(f)
     assert m.get_macros(["is_pgsql_server"], DEFAULT_FACTS) == snapshot(
         {
             "{$BLANK_PROPERTIES}": ResolvedMacro(
@@ -1154,7 +1154,7 @@ def test_get_macros_properties_with_null_values_rejected(tmp_path: Path):
 
     Using an empty macro value should be a deliberate choice denoted
     by an empty string literal - not the absence of a value."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1168,12 +1168,12 @@ macros:
         ValidationError,
         match=re.escape("Property values cannot be null: ['is_pgsql_server']"),
     ):
-        _ = read_property_macro_map(tmpfile)
+        _ = read_property_macro_map(f)
 
 
 def test_get_macros_deduplication_regex_plain(tmp_path: Path):
     """Test deduplication of plain text values for regex macros."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         r"""
 macros:
@@ -1185,7 +1185,7 @@ macros:
       zabbix_agent: zabbix-agent
 """,
     )
-    m = read_property_macro_map(tmpfile)
+    m = read_property_macro_map(f)
 
     # Resolve to single value
     macros = m.get_macros(["default_db", "is_pgsql_server"], DEFAULT_FACTS)
@@ -1215,7 +1215,7 @@ macros:
 
 
 def test_get_macros_deduplication_regex_pattern(tmp_path: Path):
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         r"""
 macros:
@@ -1227,7 +1227,7 @@ macros:
       zabbix_agent: ^zabbix-agent(\d+)?$
 """,
     )
-    m = read_property_macro_map(tmpfile)
+    m = read_property_macro_map(f)
 
     # Test that duplicate values are deduplicated for regex macros
     macros = m.get_macros(
@@ -1246,7 +1246,7 @@ macros:
 
 def test_get_macros_deduplication_regex_mixed(tmp_path: Path):
     """Test deduplication of mixed plain text and regex values for regex macros."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         r"""
 macros:
@@ -1259,7 +1259,7 @@ macros:
 
 """,
     )
-    m = read_property_macro_map(tmpfile)
+    m = read_property_macro_map(f)
 
     # Test that duplicate values are deduplicated for regex macros
     macros = m.get_macros(["default_db", "is_pgsql_server"], DEFAULT_FACTS)
@@ -1276,7 +1276,7 @@ macros:
 
 def test_get_macros_regex_patterns(tmp_path: Path):
     """Test that the generated regex patterns are valid and correctly combined."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         r"""
 macros:
@@ -1288,7 +1288,7 @@ macros:
       use_zabbix_agent2: ^zabbix-agent2$
 """,
     )
-    m = read_property_macro_map(tmpfile)
+    m = read_property_macro_map(f)
 
     # Combinations of regex patterns
     macros = m.get_macros(["is_pgsql_server", "zabbix_agent"], DEFAULT_FACTS)
@@ -1350,7 +1350,7 @@ macros:
 
 def test_get_macros_template_no_defaults(tmp_path: Path):
     """Test that template macros without a `defaults` section fails"""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         r"""
 macros:
@@ -1370,12 +1370,12 @@ macros:
             "Template placeholders not satisfied: {'monitored_node': ['port']}"
         ),
     ):
-        _ = read_property_macro_map(tmpfile)
+        _ = read_property_macro_map(f)
 
 
 def test_get_macros_template_incomplete_defaults(tmp_path: Path):
     """Test that template macros without a complete `defaults` section fails."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         r"""
 macros:
@@ -1398,12 +1398,12 @@ macros:
             "Template placeholders not satisfied: {'monitored_node': ['endpoint'], 'legacy_exporter': ['endpoint']}"
         ),
     ):
-        _ = read_property_macro_map(tmpfile)
+        _ = read_property_macro_map(f)
 
 
 def test_resolve_last(tmp_path: Path):
     """`resolve: last` picks alphabetically last contributing property."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1415,7 +1415,7 @@ macros:
       cherry: "cherry value"
 """,
     )
-    m = read_property_macro_map(tmpfile)
+    m = read_property_macro_map(f)
 
     # Single property -> that property's value
     assert m.get_macros(["apple"], DEFAULT_FACTS) == {
@@ -1434,7 +1434,7 @@ macros:
 
 def test_template_macro_rejects_resolve_regex(tmp_path: Path):
     """Template macros must not use `resolve: regex`."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1449,12 +1449,12 @@ macros:
         ValidationError,
         match=re.escape("template macros do not support resolve=regex"),
     ):
-        _ = read_property_macro_map(tmpfile)
+        _ = read_property_macro_map(f)
 
 
 def test_context_macro_invalid_regexp(tmp_path: Path):
     """Context macro with type `regex` that has invalid regex pattern."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1471,12 +1471,12 @@ macros:
     with pytest.raises(
         ValidationError, match=re.escape("Invalid regex context: '[invalid('")
     ):
-        _ = read_property_macro_map(tmpfile)
+        _ = read_property_macro_map(f)
 
 
 def test_context_macro_with_template(tmp_path: Path):
     """Context macros must not use `resolve: regex`."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1501,7 +1501,7 @@ macros:
                 ctx: "foo value 456"
 """,
     )
-    m = read_property_macro_map(tmpfile)
+    m = read_property_macro_map(f)
     assert m.get_macros(["foo"], DEFAULT_FACTS) == snapshot(
         {
             "{$ZAC.CONTEXT_MACRO:plaintext}": ResolvedMacro(
@@ -1526,7 +1526,7 @@ macros:
 
 def test_context_macro_with_overriden_template(tmp_path: Path):
     """Context macro with template and contexts that override template + placeholders."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1556,7 +1556,7 @@ macros:
 
 """,
     )
-    m = read_property_macro_map(tmpfile)
+    m = read_property_macro_map(f)
     assert m.get_macros(["spam"], DEFAULT_FACTS) == snapshot(
         {
             "{$ZAC.TEMPLATE_AND_CONTEXT}": ResolvedMacro(
@@ -1577,7 +1577,7 @@ macros:
 
 def test_context_macro_with_template_invalid(tmp_path: Path):
     """Context macros with templates must not use `resolve: regex`."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1604,7 +1604,7 @@ macros:
         ValidationError,
         match=re.escape("uses template; parent must not use resolve=regex"),
     ):
-        _ = read_property_macro_map(tmpfile)
+        _ = read_property_macro_map(f)
 
 
 def test_template_macro_property_unused_values(tmp_path: Path) -> None:
@@ -1616,7 +1616,7 @@ def test_template_macro_property_unused_values(tmp_path: Path) -> None:
     inherits the missing value from the defaults when resolved.
     The incorrect placeholder is simply ignored.
     """
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1633,7 +1633,7 @@ macros:
           wrong_placeholder: old-ingestor # will not be used
 """,
     )
-    m = read_property_macro_map(tmpfile)
+    m = read_property_macro_map(f)
     macros = m.get_macros(["foo"], DEFAULT_FACTS)
     assert len(macros) == 1
     assert (
@@ -1646,7 +1646,7 @@ macros:
 
 def test_template_no_defaults_no_properties(tmp_path: Path) -> None:
     """Template macro with no properties doesn't need defaults (no properties to validate)"""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1654,13 +1654,13 @@ macros:
     template: "https://{{hostname}}:{{port}}/{{endpoint}}"
 """,
     )
-    m = read_property_macro_map(tmpfile)  # reads fine
+    m = read_property_macro_map(f)  # reads fine
     assert len(m.definitions) == 1
 
 
 def test_template_no_defaults_with_properties(tmp_path: Path) -> None:
     """Template macro with properties must have defaults to satisfy placeholders."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1676,14 +1676,14 @@ macros:
             "Template placeholders not satisfied: {'foo': ['endpoint', 'port']}"
         ),
     ):
-        _ = read_property_macro_map(tmpfile)
+        _ = read_property_macro_map(f)
 
 
 def test_template_macro_property_only_has_template(
     tmp_path: Path,
 ) -> None:
     """Macro where top-level macro does not define template, but its properties do. Forbid this."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1705,14 +1705,14 @@ macros:
             "Properties ['foo'] define templates but macro definition does not"
         ),
     ):
-        _ = read_property_macro_map(tmpfile)
+        _ = read_property_macro_map(f)
 
 
 def test_template_macro_property_has_values(
     tmp_path: Path,
 ) -> None:
     """Macro where top-level macro does not define template, but its property defines `values`."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1733,12 +1733,12 @@ macros:
             "Properties have `values` keys but no template defined: {'foo': ['port', 'endpoint']}"
         ),
     ):
-        _ = read_property_macro_map(tmpfile)
+        _ = read_property_macro_map(f)
 
 
 def test_macro_with_everything(tmp_path: Path):
     """Macro with template, contexts and host overrides."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1782,7 +1782,7 @@ macros:
 
 """,
     )
-    m = read_property_macro_map(tmpfile)
+    m = read_property_macro_map(f)
     facts = HostFacts(hostname="testhost.example.com")
 
     # Matches on spam and hostname -> hostname match used
@@ -1808,7 +1808,7 @@ def test_empty_defs_only(
     tmp_path: Path,
 ) -> None:
     """Ensure empty macro definitions (used for removal) are supported."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1816,7 +1816,7 @@ macros:
   "{$ZAC.I_AM_ALSO_EMPTY}":
 """,
     )
-    m = read_property_macro_map(tmpfile)
+    m = read_property_macro_map(f)
     assert len(m.definitions) == 2
     assert len(m._by_property) == 0  # pyright: ignore[reportPrivateUsage]
     assert sorted(m.identity.to_zabbix() for m in m.definitions) == snapshot(
@@ -1840,7 +1840,7 @@ def test_invalid_macro_name(
     name: str,
 ) -> None:
     """Macro name without closing curly brace."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         f"""
 macros:
@@ -1851,12 +1851,12 @@ macros:
         ValidationError,
         match=re.escape(f"Invalid macro name: '{name}'"),
     ):
-        _ = read_property_macro_map(tmpfile)
+        _ = read_property_macro_map(f)
 
 
 def test_get_substitutions(tmp_path: Path) -> None:
     """Test `get_substitutions using a macro with template+template override in properties."""
-    tmpfile = _write_yaml(
+    f = _write_yaml(
         tmp_path,
         """
 macros:
@@ -1878,7 +1878,7 @@ macros:
           different_placeholder: old-ingestor
 """,
     )
-    m = read_property_macro_map(tmpfile)
+    m = read_property_macro_map(f)
     assert len(m.definitions) == 1
     defn = m.definitions[0]
 
