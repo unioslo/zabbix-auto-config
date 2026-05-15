@@ -1781,232 +1781,6 @@ macros:
         _ = read_property_macro_map(f)
 
 
-def test_macro_with_everything(tmp_path: Path):
-    """Macro with template, contexts and host overrides."""
-    f = _write_yaml(
-        tmp_path,
-        """
-macros:
-  "{$ZAC.TEMPLATE_AND_CONTEXT}":
-    template: "https://{{hostname}}:{{port}}/ctx/{{ctx}}"
-    resolve: first
-    defaults:
-      port: 9100
-      ctx: defaultctx
-    properties:
-      spam:
-    hosts:
-      barhost.example.com:
-        values:
-          port: 9200
-          ctx: barhostctx
-      ".*.example.com": # regex match (matched if no exact match)
-        values:
-          port: 9300
-          ctx: regexhostctx
-      testhost.example.com: # exact match (preferred)
-        values:
-          port: 9400
-          ctx: testhostctx
-    contexts:
-      - context: "^site:.*"
-        context_type: regex
-        template: "https://{{hostname}}:{{port}}/internal/{{blah}}" # can override top-level template
-        defaults:
-            # inherits port
-            blah: "blahval"
-        properties:
-          spam:
-            values:
-                port: 30
-                blah: "spamington"
-          bar:
-            values:
-              blah: "barval"
-          gux:
-
-""",
-    )
-    m = read_property_macro_map(f)
-    facts = HostFacts(hostname="testhost.example.com")
-
-    # Matches on spam and hostname -> hostname match used
-    assert m.get_macros(["spam"], facts) == snapshot(
-        {
-            "{$ZAC.TEMPLATE_AND_CONTEXT}": ResolvedMacro(
-                identity=MacroIdentity(name="{$ZAC.TEMPLATE_AND_CONTEXT}"),
-                value="https://testhost.example.com:9400/ctx/testhostctx",
-            ),
-            '{$ZAC.TEMPLATE_AND_CONTEXT:regex:"^site:.*"}': ResolvedMacro(
-                identity=MacroIdentity(
-                    name="{$ZAC.TEMPLATE_AND_CONTEXT}",
-                    context="^site:.*",
-                    context_type=ContextType.REGEX,
-                ),
-                value="https://testhost.example.com:30/internal/spamington",
-            ),
-        }
-    )
-
-
-def test_empty_defs_only(
-    tmp_path: Path,
-) -> None:
-    """Ensure empty macro definitions (used for removal) are supported."""
-    f = _write_yaml(
-        tmp_path,
-        """
-macros:
-  "{$ZAC.I_AM_EMPTY}":
-  "{$ZAC.I_AM_ALSO_EMPTY}":
-""",
-    )
-    m = read_property_macro_map(f)
-    assert len(m.definitions) == 2
-    assert len(m._by_property) == 0  # pyright: ignore[reportPrivateUsage]
-    assert sorted(m.identity.to_zabbix() for m in m.definitions) == snapshot(
-        ["{$ZAC.I_AM_ALSO_EMPTY}", "{$ZAC.I_AM_EMPTY}"]
-    )
-
-
-@pytest.mark.parametrize(
-    "name",
-    [
-        "{$ZAC.INVALID",
-        "ZAC.INVALID}",
-        "{$ZAC.INV{ALID}",
-        "{$ZAC.INVALID}EXTRA",
-        "{$ZAC.INV@LID}",
-        "ZAC.INVALID",
-    ],
-)
-def test_invalid_macro_name(
-    tmp_path: Path,
-    name: str,
-) -> None:
-    """Macro name without closing curly brace."""
-    f = _write_yaml(
-        tmp_path,
-        f"""
-macros:
-  "{name}":
-""",
-    )
-    with pytest.raises(
-        ValidationError,
-        match=re.escape(f"Invalid macro name: '{name}'"),
-    ):
-        _ = read_property_macro_map(f)
-
-
-def test_get_substitutions(tmp_path: Path) -> None:
-    """Test `get_substitutions using a macro with template+template override in properties."""
-    f = _write_yaml(
-        tmp_path,
-        """
-macros:
-  "{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}":
-    description: "Ingestion endpoint"
-    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
-    defaults:
-      port: 9100
-      endpoint: ingestion
-    properties:
-      logs_ingestor:
-      # Overrides template only (same placeholders)
-      legacy_ingestor:
-        template: "https://{{hostname}}:{{port}}/legacy/{{endpoint}}"
-      older_legacy_ingestor:
-        template: "https://{{hostname}}:{{port}}/legacy/{{different_placeholder}}"
-        values:
-          port: 910
-          different_placeholder: old-ingestor
-""",
-    )
-    m = read_property_macro_map(f)
-    assert len(m.definitions) == 1
-    defn = m.definitions[0]
-
-    # No overrides in property
-    prop_1 = defn.properties["logs_ingestor"]
-    subs_1 = get_substitutions(defn, prop_1, DEFAULT_FACTS, "logs_ingestor")
-    assert subs_1 == snapshot(
-        {
-            "hostname": "testhost.example.com",
-            "port": "9100",
-            "endpoint": "ingestion",
-            "property": "logs_ingestor",
-        }
-    )
-
-    # Overrides template with identical placeholders -> identical sub keys
-    prop_2 = defn.properties["legacy_ingestor"]
-    subs_2 = get_substitutions(defn, prop_2, DEFAULT_FACTS, "legacy_ingestor")
-    assert subs_2.keys() == subs_1.keys()
-    assert subs_2 == snapshot(
-        {
-            "hostname": "testhost.example.com",
-            "port": "9100",
-            "endpoint": "ingestion",
-            "property": "legacy_ingestor",
-        }
-    )
-
-    # Overrides template with new placeholders -> new sub keys
-    prop_3 = defn.properties["older_legacy_ingestor"]
-    subs_3 = get_substitutions(defn, prop_3, DEFAULT_FACTS, "older_legacy_ingestor")
-    assert subs_3.keys() != subs_1.keys()
-    assert subs_3 == snapshot(
-        {
-            "hostname": "testhost.example.com",
-            "port": "910",
-            "endpoint": "ingestion",
-            "different_placeholder": "old-ingestor",
-            "property": "older_legacy_ingestor",
-        }
-    )
-
-
-def test_builtin_placeholder_keys() -> None:
-    """Snapshot test to catch changes to builtin placeholder keys (host facts, resolved macro properties, etc.)"""
-    assert BUILTIN_PLACEHOLDERS == snapshot(frozenset({"hostname", "property"}))
-
-
-def test_get_substitutions_builtin_placeholder_keys_are_used(
-    macro_map: PropertyMacroMapping,
-) -> None:
-    """Test that template placeholder substitutions are resolved correctly and contain the expected keys."""
-
-    all_macros = list(macro_map._by_property.items())  # pyright: ignore[reportPrivateUsage]
-    assert len(all_macros) > 0, (
-        "No macros found in the mapping to test substitutions for"
-    )
-
-    for prop_name, macros in all_macros:
-        for macro in macros:
-            if not macro.properties:  # no properties to test for
-                continue
-            for prop in macro.properties.values():
-                if not prop.template:
-                    continue
-
-                subs = get_substitutions(macro, prop, DEFAULT_FACTS, prop_name)
-                placeholders = get_placeholders(prop.template)
-
-                # All placeholders satisfied
-                assert placeholders.issubset(subs.keys())
-
-                # Resolved substitutions contain 'builtins', defaults, values
-                expect = BUILTIN_PLACEHOLDERS | set(macro.defaults) | set(prop.values)
-                assert expect.issubset(subs.keys())
-
-
-def test_macrodefin_requires_no_args() -> None:
-    """Test that MacroDefIn can be instantiated without arguments."""
-    # MacroDef is instantiated without args in MacroMapFileIn validator
-    assert MacroDefIn()
-
-
 # ----- Hostname-based override tests -----
 
 
@@ -2333,3 +2107,229 @@ macros:
     second = defn.host_patterns
     assert first is second
     assert [k for _, k in first] == [".*\\.example\\.com", "z.*"]
+
+
+def test_macro_with_everything(tmp_path: Path):
+    """Macro with template, contexts and host overrides."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.TEMPLATE_AND_CONTEXT}":
+    template: "https://{{hostname}}:{{port}}/ctx/{{ctx}}"
+    resolve: first
+    defaults:
+      port: 9100
+      ctx: defaultctx
+    properties:
+      spam:
+    hosts:
+      barhost.example.com:
+        values:
+          port: 9200
+          ctx: barhostctx
+      ".*.example.com": # regex match (matched if no exact match)
+        values:
+          port: 9300
+          ctx: regexhostctx
+      testhost.example.com: # exact match (preferred)
+        values:
+          port: 9400
+          ctx: testhostctx
+    contexts:
+      - context: "^site:.*"
+        context_type: regex
+        template: "https://{{hostname}}:{{port}}/internal/{{blah}}" # can override top-level template
+        defaults:
+            # inherits port
+            blah: "blahval"
+        properties:
+          spam:
+            values:
+                port: 30
+                blah: "spamington"
+          bar:
+            values:
+              blah: "barval"
+          gux:
+
+""",
+    )
+    m = read_property_macro_map(f)
+    facts = HostFacts(hostname="testhost.example.com")
+
+    # Matches on spam and hostname -> hostname match used
+    assert m.get_macros(["spam"], facts) == snapshot(
+        {
+            "{$ZAC.TEMPLATE_AND_CONTEXT}": ResolvedMacro(
+                identity=MacroIdentity(name="{$ZAC.TEMPLATE_AND_CONTEXT}"),
+                value="https://testhost.example.com:9400/ctx/testhostctx",
+            ),
+            '{$ZAC.TEMPLATE_AND_CONTEXT:regex:"^site:.*"}': ResolvedMacro(
+                identity=MacroIdentity(
+                    name="{$ZAC.TEMPLATE_AND_CONTEXT}",
+                    context="^site:.*",
+                    context_type=ContextType.REGEX,
+                ),
+                value="https://testhost.example.com:30/internal/spamington",
+            ),
+        }
+    )
+
+
+def test_empty_defs_only(
+    tmp_path: Path,
+) -> None:
+    """Ensure empty macro definitions (used for removal) are supported."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.I_AM_EMPTY}":
+  "{$ZAC.I_AM_ALSO_EMPTY}":
+""",
+    )
+    m = read_property_macro_map(f)
+    assert len(m.definitions) == 2
+    assert len(m._by_property) == 0  # pyright: ignore[reportPrivateUsage]
+    assert sorted(m.identity.to_zabbix() for m in m.definitions) == snapshot(
+        ["{$ZAC.I_AM_ALSO_EMPTY}", "{$ZAC.I_AM_EMPTY}"]
+    )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "{$ZAC.INVALID",
+        "ZAC.INVALID}",
+        "{$ZAC.INV{ALID}",
+        "{$ZAC.INVALID}EXTRA",
+        "{$ZAC.INV@LID}",
+        "ZAC.INVALID",
+    ],
+)
+def test_invalid_macro_name(
+    tmp_path: Path,
+    name: str,
+) -> None:
+    """Macro name without closing curly brace."""
+    f = _write_yaml(
+        tmp_path,
+        f"""
+macros:
+  "{name}":
+""",
+    )
+    with pytest.raises(
+        ValidationError,
+        match=re.escape(f"Invalid macro name: '{name}'"),
+    ):
+        _ = read_property_macro_map(f)
+
+
+def test_get_substitutions(tmp_path: Path) -> None:
+    """Test `get_substitutions using a macro with template+template override in properties."""
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}":
+    description: "Ingestion endpoint"
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+    defaults:
+      port: 9100
+      endpoint: ingestion
+    properties:
+      logs_ingestor:
+      # Overrides template only (same placeholders)
+      legacy_ingestor:
+        template: "https://{{hostname}}:{{port}}/legacy/{{endpoint}}"
+      older_legacy_ingestor:
+        template: "https://{{hostname}}:{{port}}/legacy/{{different_placeholder}}"
+        values:
+          port: 910
+          different_placeholder: old-ingestor
+""",
+    )
+    m = read_property_macro_map(f)
+    assert len(m.definitions) == 1
+    defn = m.definitions[0]
+
+    # No overrides in property
+    prop_1 = defn.properties["logs_ingestor"]
+    subs_1 = get_substitutions(defn, prop_1, DEFAULT_FACTS, "logs_ingestor")
+    assert subs_1 == snapshot(
+        {
+            "hostname": "testhost.example.com",
+            "port": "9100",
+            "endpoint": "ingestion",
+            "property": "logs_ingestor",
+        }
+    )
+
+    # Overrides template with identical placeholders -> identical sub keys
+    prop_2 = defn.properties["legacy_ingestor"]
+    subs_2 = get_substitutions(defn, prop_2, DEFAULT_FACTS, "legacy_ingestor")
+    assert subs_2.keys() == subs_1.keys()
+    assert subs_2 == snapshot(
+        {
+            "hostname": "testhost.example.com",
+            "port": "9100",
+            "endpoint": "ingestion",
+            "property": "legacy_ingestor",
+        }
+    )
+
+    # Overrides template with new placeholders -> new sub keys
+    prop_3 = defn.properties["older_legacy_ingestor"]
+    subs_3 = get_substitutions(defn, prop_3, DEFAULT_FACTS, "older_legacy_ingestor")
+    assert subs_3.keys() != subs_1.keys()
+    assert subs_3 == snapshot(
+        {
+            "hostname": "testhost.example.com",
+            "port": "910",
+            "endpoint": "ingestion",
+            "different_placeholder": "old-ingestor",
+            "property": "older_legacy_ingestor",
+        }
+    )
+
+
+def test_builtin_placeholder_keys() -> None:
+    """Snapshot test to catch changes to builtin placeholder keys (host facts, resolved macro properties, etc.)"""
+    assert BUILTIN_PLACEHOLDERS == snapshot(frozenset({"hostname", "property"}))
+
+
+def test_get_substitutions_builtin_placeholder_keys_are_used(
+    macro_map: PropertyMacroMapping,
+) -> None:
+    """Test that template placeholder substitutions are resolved correctly and contain the expected keys."""
+
+    all_macros = list(macro_map._by_property.items())  # pyright: ignore[reportPrivateUsage]
+    assert len(all_macros) > 0, (
+        "No macros found in the mapping to test substitutions for"
+    )
+
+    for prop_name, macros in all_macros:
+        for macro in macros:
+            if not macro.properties:  # no properties to test for
+                continue
+            for prop in macro.properties.values():
+                if not prop.template:
+                    continue
+
+                subs = get_substitutions(macro, prop, DEFAULT_FACTS, prop_name)
+                placeholders = get_placeholders(prop.template)
+
+                # All placeholders satisfied
+                assert placeholders.issubset(subs.keys())
+
+                # Resolved substitutions contain 'builtins', defaults, values
+                expect = BUILTIN_PLACEHOLDERS | set(macro.defaults) | set(prop.values)
+                assert expect.issubset(subs.keys())
+
+
+def test_macrodefin_requires_no_args() -> None:
+    """Test that MacroDefIn can be instantiated without arguments."""
+    # MacroDef is instantiated without args in MacroMapFileIn validator
+    assert MacroDefIn()
