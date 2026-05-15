@@ -124,7 +124,7 @@ class TestMacroNameValidation:
             ValidationError,
             match=re.escape(f"Invalid macro name: '{name}'"),
         ):
-            _load_mapping(
+            _ = _load_mapping(
                 tmp_path,
                 f"""
 macros:
@@ -1192,7 +1192,7 @@ class TestContextMacro:
         with pytest.raises(
             ValidationError, match=re.escape("Invalid regex context: '[invalid('")
         ):
-            _load_mapping(
+            _ = _load_mapping(
                 tmp_path,
                 """
 macros:
@@ -1310,7 +1310,7 @@ macros:
             ValidationError,
             match=re.escape("uses template; parent must not use resolve=regex"),
         ):
-            _load_mapping(
+            _ = _load_mapping(
                 tmp_path,
                 """
 macros:
@@ -1565,7 +1565,7 @@ macros:
                 "Template placeholders not satisfied: {'foo': ['endpoint', 'port']}"
             ),
         ):
-            _load_mapping(
+            _ = _load_mapping(
                 tmp_path,
                 """
 macros:
@@ -1582,7 +1582,7 @@ macros:
                 "Template placeholders not satisfied: {'monitored_node': ['port']}"
             ),
         ):
-            _load_mapping(
+            _ = _load_mapping(
                 tmp_path,
                 r"""
 macros:
@@ -1605,7 +1605,7 @@ macros:
                 "Template placeholders not satisfied: {'monitored_node': ['endpoint'], 'legacy_exporter': ['endpoint']}"
             ),
         ):
-            _load_mapping(
+            _ = _load_mapping(
                 tmp_path,
                 r"""
 macros:
@@ -1629,7 +1629,7 @@ macros:
             ValidationError,
             match=re.escape("template macros do not support resolve=regex"),
         ):
-            _load_mapping(
+            _ = _load_mapping(
                 tmp_path,
                 """
 macros:
@@ -1652,7 +1652,7 @@ macros:
                 "Properties ['foo'] define templates but macro definition does not"
             ),
         ):
-            _load_mapping(
+            _ = _load_mapping(
                 tmp_path,
                 """
 macros:
@@ -1680,7 +1680,7 @@ macros:
                 "Properties have `values` keys but no template defined: {'foo': ['port', 'endpoint']}"
             ),
         ):
-            _load_mapping(
+            _ = _load_mapping(
                 tmp_path,
                 """
 macros:
@@ -1961,7 +1961,7 @@ macros:
             ValidationError,
             match=re.escape("Host 'testhost.example.com' uses scalar shorthand"),
         ):
-            _load_mapping(
+            _ = _load_mapping(
                 tmp_path,
                 """
 macros:
@@ -1982,7 +1982,7 @@ macros:
             ValidationError,
             match=re.escape("Template placeholders not satisfied"),
         ):
-            _load_mapping(
+            _ = _load_mapping(
                 tmp_path,
                 """
 macros:
@@ -1998,7 +1998,7 @@ macros:
     def test_invalid_regex_key_rejected(self, tmp_path: Path) -> None:
         """Hostname keys must compile as regex."""
         with pytest.raises(ValidationError, match=re.escape("Invalid host pattern")):
-            _load_mapping(
+            _ = _load_mapping(
                 tmp_path,
                 """
 macros:
@@ -2113,7 +2113,7 @@ macros:
             ValidationError,
             match=re.escape("Property values cannot be null: ['is_pgsql_server']"),
         ):
-            _load_mapping(
+            _ = _load_mapping(
                 tmp_path,
                 """
 macros:
