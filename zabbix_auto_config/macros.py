@@ -26,6 +26,7 @@ from pydantic import PrivateAttr
 from pydantic import field_validator
 from pydantic import model_validator
 from typing_extensions import Self
+from typing_extensions import assert_never
 
 try:
     from yaml import CSafeLoader as _YamlLoader
@@ -738,7 +739,7 @@ class PropertyMacroMapping(BaseModel):
                 pick_idx = 0 if defn.resolve == ResolveStrategy.FIRST else -1
                 winning_prop, macro_value = contributions[pick_idx]
                 if len(contributions) > 1:
-                    logger.warning(
+                    logger.debug(
                         "Multiple contributing properties for macro; resolved to single value",
                         macro=identity.to_zabbix(),
                         resolve=defn.resolve.value,
@@ -762,8 +763,8 @@ class PropertyMacroMapping(BaseModel):
                 else:
                     resolved_value = macro_value.value or ""
                 description = macro_value.description or defn.description
-            else:  # REGEX
-                # Deduplicate values (validator guarantees no None values for regex) is this true???
+            elif defn.resolve == ResolveStrategy.REGEX:  # resolve: regex
+                # Deduplicate values (validator guarantees no None values for regex) NOTE: is this true???
                 values = sorted(
                     {mv.value for _, mv in contributions if mv.value is not None}
                 )
@@ -783,6 +784,9 @@ class PropertyMacroMapping(BaseModel):
                     (mv.description for _, mv in contributions if mv.description),
                     defn.description,
                 )
+            else:
+                # Ensure we handle new resolution strategies in the future
+                assert_never(defn.resolve)
 
             result[identity.to_zabbix()] = ResolvedMacro(
                 identity=identity,
