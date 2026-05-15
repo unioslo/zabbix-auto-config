@@ -801,7 +801,7 @@ class PropertyMacroMapping(BaseModel):
 
 
 def _build_hosts(
-    raw: dict[str, PropertyValueIn], inherited_template: Optional[str]
+    hosts_def: dict[str, PropertyValueIn], inherited_template: Optional[str]
 ) -> dict[str, MacroValue]:
     """Build the resolved per-host MacroValue dict, inheriting template if needed."""
     return {
@@ -811,7 +811,7 @@ def _build_hosts(
             values={k: str(v) for k, v in pv.values.items()},
             template=pv.template or inherited_template,
         )
-        for name, pv in raw.items()
+        for name, pv in hosts_def.items()
     }
 
 
