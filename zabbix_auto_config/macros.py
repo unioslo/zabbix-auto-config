@@ -275,7 +275,9 @@ def get_substitutions(
 ) -> dict[str, str]:
     """Get subtitutions used to render a template for a macro value."""
     subs: TemplateMacroValues = {k: str(v) for k, v in facts.items()}
-    subs.update(defn.defaults)  # is this necessary? defaults are injected into values
+    # NOTE: must inject defaults, otherwise templates may fail to render!
+    #       why doesn't the validator ensure these values exist in values?
+    subs.update(defn.defaults)
     subs.update(val.values)  # overrides defaults
     subs.update({"property": prop})
     return subs
