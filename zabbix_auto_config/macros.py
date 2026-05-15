@@ -476,12 +476,14 @@ class MacroDefIn(BaseModel):
     @classmethod
     def _inject_template_to_contexts_and_properties(cls, data: Any) -> Any:
         """Inject top-level template and defaults to contexts/properties/hosts if missing."""
-        # NOTE: this is hacky and overly dynamic, and we only have to do this because
+        # NOTE: This is hacky and overly dynamic for my tastes.
+        # We have to perform this mutation before proper model validation, because
         # MacroContextIn calls _validate_template_props in its own validator,
-        # which requires the template to be present in the instance.
+        # which requires template and defaults/values to be present.
         #
-        # We could refactor the validation to only be called once after all
-        # definitions have been fully constructed - instead of on a per-model basis.
+        # Furthermore, each context is more or less its own macro definition,
+        # which means we have to inject it not only into the top-level properties
+        # and hosts, but also into each context's properties and hosts.
         if not isinstance(data, dict):
             return data  # pragma: no cover # pydantic error
 
@@ -516,6 +518,9 @@ class MacroDefIn(BaseModel):
 
                 ctx_template = ctx.get("template")
                 ctx_defaults = ctx.get("defaults", {})
+
+                # Inject defaults into properties and hosts for this context
+                # NOTE: should we do a check for empty template/context before injecting?
                 if isinstance(ctx_template, str) and isinstance(ctx_defaults, dict):
                     _inject_template_into_entries(
                         ctx.get("properties", {}), ctx_template, ctx_defaults
