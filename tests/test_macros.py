@@ -1171,6 +1171,51 @@ macros:
         _ = read_property_macro_map(f)
 
 
+def test_get_macros_whitespace_in_values(tmp_path: Path):
+    """Test leading/trailing/only whitespace in property values is preserved.
+
+    Ensures we catch if we change this behavior in the future.
+    We can't assume anything about what whitespace denotes in macro values.
+    It is very difficult to unintentionally add leading/trailing whitespace in YAML,
+    so it's unlikely that this would happen by mistake.
+
+    If it's present, it's probably intentional, and we should preserve it.
+    """
+    f = _write_yaml(
+        tmp_path,
+        """
+macros:
+  "{$WHITESPACE_VALUES}":
+    properties:
+      default_db: " maindb"  # leading
+      alternate_db: "altdb "  # trailing
+      is_pgsql_server: "   " # only whitespace
+""",
+    )
+    m = read_property_macro_map(f)
+    assert m.get_macros(["default_db"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$WHITESPACE_VALUES}": ResolvedMacro(
+                identity=MacroIdentity(name="{$WHITESPACE_VALUES}"), value=" maindb"
+            )
+        }
+    )
+    assert m.get_macros(["alternate_db"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$WHITESPACE_VALUES}": ResolvedMacro(
+                identity=MacroIdentity(name="{$WHITESPACE_VALUES}"), value="altdb "
+            )
+        }
+    )
+    assert m.get_macros(["is_pgsql_server"], DEFAULT_FACTS) == snapshot(
+        {
+            "{$WHITESPACE_VALUES}": ResolvedMacro(
+                identity=MacroIdentity(name="{$WHITESPACE_VALUES}"), value="   "
+            )
+        }
+    )
+
+
 def test_get_macros_deduplication_regex_plain(tmp_path: Path):
     """Test deduplication of plain text values for regex macros."""
     f = _write_yaml(
