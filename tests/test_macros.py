@@ -2512,7 +2512,7 @@ class TestHostFacts:
 
 
 class TestGetMacrosCornerCases:
-    """Tests for plain (non-regex, non-template) macro resolution."""
+    """Tests for corner cases and abnormal usage patterns."""
 
     def test_same_property_multiple_times(self, tmp_path: Path):
         """Passing the same property multiple times should yield one value."""
