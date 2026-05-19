@@ -2509,3 +2509,85 @@ class TestHostFacts:
                 tags={("tag1", "x"), ("tag2", "y")},
             )
         ) == snapshot({"hostname": "mytesthost.example.com"})
+
+
+class TestGetMacrosCornerCases:
+    """Tests for plain (non-regex, non-template) macro resolution."""
+
+    def test_same_property_multiple_times(self, tmp_path: Path):
+        """Passing the same property multiple times should yield one value."""
+
+        m = _load_mapping(
+            tmp_path,
+            """
+macros:
+  "{$ZAC.PLAIN_MACRO}":
+    description: Just a plain macro
+    properties:
+      foo: foo val
+      bar: bar val
+""",
+        )
+        assert m.get_macros(["foo", "foo", "foo"], DEFAULT_FACTS) == snapshot(
+            {
+                "{$ZAC.PLAIN_MACRO}": ResolvedMacro(
+                    identity=MacroIdentity(name="{$ZAC.PLAIN_MACRO}"),
+                    value="foo val",
+                    description="Just a plain macro",
+                )
+            }
+        )
+
+    def test_same_property_multiple_times_regex(self, tmp_path: Path):
+        """Passing the same property multiple times with regex resolution should yield one value."""
+
+        m = _load_mapping(
+            tmp_path,
+            """
+macros:
+  "{$ZAC.REGEX_MACRO}":
+    description: Just a regex macro
+    resolve: regex
+    properties:
+      foo: foo regex val
+      bar: bar regex val
+""",
+        )
+        assert m.get_macros(["foo", "foo", "foo"], DEFAULT_FACTS) == snapshot(
+            {
+                "{$ZAC.REGEX_MACRO}": ResolvedMacro(
+                    identity=MacroIdentity(name="{$ZAC.REGEX_MACRO}"),
+                    value="foo regex val",
+                    description="Just a regex macro",
+                )
+            }
+        )
+
+    def test_duplicate_definition(self, tmp_path: Path):
+        """Defining the same macro multiple times should use the last definition."""
+
+        m = _load_mapping(
+            tmp_path,
+            """
+macros:
+  "{$ZAC.DUPLICATE_MACRO}":
+    description: I am defined first and will lose!
+    resolve: regex # different type doesn't matter. last definition wins
+    properties:
+      foo: first def val
+  "{$ZAC.DUPLICATE_MACRO}":
+    description: I am defined last and will win!
+    resolve: first # no effect on macro definitions. still wins because it's defined last
+    properties:
+      foo: last def val
+""",
+        )
+        assert m.get_macros(["foo"], DEFAULT_FACTS) == snapshot(
+            {
+                "{$ZAC.DUPLICATE_MACRO}": ResolvedMacro(
+                    identity=MacroIdentity(name="{$ZAC.DUPLICATE_MACRO}"),
+                    value="last def val",
+                    description="I am defined last and will win!",
+                )
+            }
+        )
