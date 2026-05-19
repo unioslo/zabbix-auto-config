@@ -611,6 +611,13 @@ ZAC operates on a concept of mapping files to assign assign attributes to hosts 
 - Property-macro mapping
   - Maps host properties to macros. If a host has a property that is present in the mapping file, the corresponding macro(s) will be set for the host with the value(s) specified in the mapping file.
 
+All mapping files are expected to be found in the directory configured with the `zabbix.map_dir` option in the config file:
+
+```toml
+[zabbix]
+map_dir = "example/mapping_files/"
+```
+
 #### Siteadmin-hostgroup mapping
 
 The siteadmin-hostgroup mapping file is the central concept around which ZAC uses to group hosts. Hosts are grouped by their siteadmins (owners). These host groups are created automatically by ZAC if they do not exist in Zabbix:
@@ -671,8 +678,6 @@ When multiple properties contribute to the same macro, the `resolve` field contr
 A default description can be defined for the macro using the `description` field. Furthermore, per-property descriptions can also be defined to override the default description when certain properties are matched.
 
 ```yaml
-# property_macro_map.yaml
-
 macros:
   "{$ZAC.PLAIN_MACRO}":
     description: "This is a default description for the macro"
@@ -690,7 +695,6 @@ Some macros support regular expressions, and can thus combine multiple matching 
 To specify a regex macro, use `resolve: regex`.
 
 ```yaml
-# property_macro_map.yaml
 macros:
   "{$SYSTEMD.NAME.SERVICE.MATCHES}":
     description: "Systemd service name matches regex"
@@ -708,6 +712,7 @@ Given a host with the properties `is_pgsql_server` and `use_zabbix_agent2`, the 
 Some macros require a value such as a DNS name (for all intents and purposes, this is a hostname in Zabbix context). In these cases, the mapping file can specify a template for how the macro value should be constructed using the `template` field.
 
 ```yaml
+macros:
   "{$NODE.DASHBOARD}":
     template: "https://grafana.example.com/d/node?var-host={{hostname}}"
     properties:
@@ -717,6 +722,7 @@ Some macros require a value such as a DNS name (for all intents and purposes, th
 More advanced templates are also supported, with multiple placeholders. Each placeholder must have a default defined in the `defaults` field, and can optionally be overridden per property:
 
 ```yaml
+macros:
   "{$AGENT.URL}":
     description: "Agent scrape URL"
     template: "https://{{hostname}}:{{port}}/{{endpoint}}"
@@ -735,7 +741,6 @@ Zabbix macros can also include optional context that is used to determine which 
 
 
 ```yaml
-# property_macro_map.yaml
 macros:
   "{$LOW_SPACE_LIMIT}":
     description: "We can override the default description"
@@ -761,9 +766,35 @@ macros:
 Contexts exist independently of the parent macro it is defined on, and properties for contexts do not have to match those defined on the parent macro.
 
 
+##### Overriding macros on specific hosts
+
+If one or more hosts require specific macro values independent of their properties, the `hosts:` value can be set to one or more hostnames or hostname patterns:
+
+```yaml
+macros:
+  "{$ZAC.HOST_OVERRIDDEN}":
+    description: "Per-host scrape URL"
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+    defaults:
+      port: 9100
+      endpoint: metrics
+    properties:
+      host_overridden_node:
+    hosts:
+      special.example.com:           # exact match (preferred)
+        values:
+          port: 9500
+          endpoint: special-metrics
+      ".*\\.legacy\\.example\\.com": # regex fallback
+        values:
+          port: 9101
+```
+
+Given the above example, the host `special.example.com` would match the first pattern (exact match). Another host, `other.legacy.example.com`, would match the second pattern (regex match). A third host, `unmatched.example.com`, would not match any pattern and match on properties (if any).
+
 ##### Removing managed macros
 
-All macros defined in the mapping file are considered "managed", and are thus removed from hosts if the corresponding properties are removed from the host. If a macro has existed at some point, and should be retired (i.e. removed from all hosts), a macro definition with no properties can be used:
+All macros defined in the mapping file are considered "managed", and are thus removed from hosts if the corresponding properties are removed from the host. If a macro has been managed by ZAC at some point, and should be retired (i.e. removed from all hosts), a macro definition with no properties can be used to remove it from all hosts.
 
 ```yaml
 macros:
