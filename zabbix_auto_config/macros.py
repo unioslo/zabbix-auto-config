@@ -15,7 +15,6 @@ from typing import Any
 from typing import NewType
 from typing import Optional
 from typing import TypedDict
-from typing import Union
 
 import structlog.stdlib
 import yaml
@@ -841,8 +840,15 @@ def _build_hosts(
     }
 
 
-def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
+def read_property_macro_map(path: Path) -> PropertyMacroMapping:
     """Load and validate a property:macro YAML mapping file."""
+    if not path.exists():
+        logger.warning(
+            "Property macro map file does not exist; using empty mapping",
+            file=str(path),
+        )
+        return PropertyMacroMapping()
+
     try:
         with open(path) as f:
             data = yaml.load(f, Loader=_YamlLoader)

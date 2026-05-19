@@ -902,6 +902,22 @@ macros:
             ["{$ZAC.I_AM_ALSO_EMPTY}", "{$ZAC.I_AM_EMPTY}"]
         )
 
+    def test_non_existent_file(
+        self,
+        tmp_path: Path,
+        log_output: LogCapture,
+    ) -> None:
+        """Reading from a non-existent file should warn and return empty mapping."""
+        m = read_property_macro_map(tmp_path / "non_existent_file.yaml")
+        assert len(m.definitions) == 0
+        assert len(m._by_property) == 0  # pyright: ignore[reportPrivateUsage]
+
+        assert len(log_output.entries) == 1
+        assert (
+            log_output.entries[0]["event"]
+            == "Property macro map file does not exist; using empty mapping"
+        )
+
     def test_macrodefin_requires_no_args(self) -> None:
         """Test that MacroDefIn can be instantiated without arguments."""
         # MacroDef is instantiated without args in MacroMapFileIn validator
