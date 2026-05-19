@@ -4,8 +4,6 @@ import itertools
 import logging
 import multiprocessing
 import multiprocessing.synchronize
-import os
-import os.path
 import queue
 import random
 import re
@@ -758,14 +756,16 @@ class ZabbixUpdater(BaseProcess):
 
         self.update_interval = 60  # default. Overriden in subclasses
 
+        # TODO: configure paths, read on every work iteration
+        map_dir = Path(self.zabbix_config.map_dir)
         self.property_template_map = utils.read_map_file(
-            os.path.join(self.zabbix_config.map_dir, "property_template_map.txt")
+            map_dir / "property_template_map.txt"
         )
         self.property_hostgroup_map = utils.read_map_file(
-            os.path.join(self.zabbix_config.map_dir, "property_hostgroup_map.txt")
+            map_dir / "property_hostgroup_map.txt"
         )
         self.siteadmin_hostgroup_map = utils.read_map_file(
-            os.path.join(self.zabbix_config.map_dir, "siteadmin_hostgroup_map.txt")
+            map_dir / "siteadmin_hostgroup_map.txt"
         )
 
         pyzabbix_logger = logging.getLogger("pyzabbix")

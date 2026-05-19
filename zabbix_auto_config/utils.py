@@ -48,11 +48,15 @@ def zac_tags2zabbix_tags(zac_tags: ZacTags) -> list[HostTag]:
     return [HostTag(tag=tag[0], value=tag[1]) for tag in zac_tags]
 
 
-def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
+def read_map_file(path: Path) -> dict[str, list[str]]:
+    log = logger.bind(file=str(path))
+    if not path.is_file():
+        log.warning("Map file does not exist")
+        return {}
+
     _map: dict[str, list[str]] = {}
 
     with open(path) as f:
-        log = logger.bind(file=str(path))
         for lineno, line in enumerate(f, start=1):
             line = line.strip()
 
