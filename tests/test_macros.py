@@ -7,6 +7,7 @@ import pytest
 from inline_snapshot import snapshot
 from pydantic import ValidationError
 from pytest import TempPathFactory
+from structlog.testing import LogCapture
 from zabbix_auto_config.macros import BUILTIN_PLACEHOLDERS
 from zabbix_auto_config.macros import ContextType
 from zabbix_auto_config.macros import HostFacts
@@ -20,6 +21,7 @@ from zabbix_auto_config.macros import get_placeholders
 from zabbix_auto_config.macros import get_substitutions
 from zabbix_auto_config.macros import is_valid_macro_name
 from zabbix_auto_config.macros import read_property_macro_map
+from zabbix_auto_config.macros import validate_macro_name
 from zabbix_auto_config.models import Host
 from zabbix_auto_config.models import Interface
 
@@ -121,19 +123,93 @@ class TestMacroNameValidation:
         self,
         tmp_path: Path,
         name: str,
+        log_output: LogCapture,
     ) -> None:
-        """Macro name without closing curly brace."""
-        with pytest.raises(
-            ValidationError,
-            match=re.escape(f"Invalid macro name: '{name}'"),
-        ):
-            _ = _load_mapping(
-                tmp_path,
-                f"""
+        """Test loading mapping file with invalid macro name."""
+        m = _load_mapping(
+            tmp_path,
+            f"""
+macros:
+  "{name}": # invalid!
+    description: "ignored"
+    properties:
+      foo: fooignored
+      bar: barignored
+  "{{$VALID_MACRO_NAME}}": # valid!
+    description: "Included"
+    properties:
+      foo: fooval
+      bar: barval
+""",
+        )
+
+        # Mapping is loadable and invalid macro has been discarded
+        assert len(m.definitions) == 1
+        assert m.definitions[0].identity.name == "{$VALID_MACRO_NAME}"
+
+        # Fetching macros returns only valid
+        macros = m.get_macros(["foo"], DEFAULT_FACTS)
+        assert macros["{$VALID_MACRO_NAME}"].value == "fooval"
+
+        # Check logs
+        assert len(log_output.entries) == 1
+        entry = log_output.entries[0]
+        assert entry["event"] == "Invalid macro name in mapping file; skipping"
+        assert entry["macro_name"] == name
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "{$MACRO_WITH_TRAILING_WHITESPACE} ",
+            " {$MACRO_WITH_LEADING_WHITESPACE}",
+            " {$MACRO_WITH_SURROUNDING_WHITESPACE} ",
+        ],
+    )
+    def test_macro_name_trailing_whitespace(
+        self,
+        tmp_path: Path,
+        name: str,
+        log_output: LogCapture,
+    ) -> None:
+        """Test loading mapping file with invalid macro name."""
+        m = _load_mapping(
+            tmp_path,
+            f"""
 macros:
   "{name}":
+    description: "Macro name will be normalized"
+    properties:
+      foo: fooval
+      bar: barval
 """,
-            )
+        )
+
+        # Mapping is loadable and name has been normalized
+        assert len(m.definitions) == 1
+        assert m.definitions[0].identity.name == name.strip()
+        macros = m.get_macros(["foo"], DEFAULT_FACTS)
+        assert macros[name.strip()].value == "fooval"
+
+        # Check logs
+        assert len(log_output.entries) == 1
+        entry = log_output.entries[0]
+        assert (
+            entry["event"] == "Macro name has leading/trailing whitespace; normalizing"
+        )
+        assert entry["original"] == name
+        assert entry["normalized"] == name.strip()
+
+    def test_macro_name_type(self) -> None:
+        raw_name = "{$ZAC_MACRO}"  # the string value will be returned
+        macro_name = validate_macro_name(raw_name)
+        assert macro_name == raw_name
+        assert hash(macro_name) == hash(raw_name)  # same hash on runtime
+        assert type(macro_name) is type(raw_name)  # same type on runtime
+
+        raw_name = "{$ZAC_MACRO_TRAILING} "  # validation will return new string
+        macro_name = validate_macro_name(raw_name)
+        assert macro_name != raw_name
+        assert hash(macro_name) != hash(raw_name)
 
 
 class TestMappingFileLoad:

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Annotated
 from typing import Any
+from typing import NewType
 from typing import Optional
 from typing import TypedDict
 from typing import Union
@@ -41,28 +42,21 @@ logger = structlog.stdlib.get_logger(__name__)
 MACRO_NAME_PATTERN = re.compile(r"^\{\$[A-Z0-9_.]+\}$")
 
 
+MacroName = NewType("MacroName", str)
+"""Validated and normalized macro name."""
+
+
 def is_valid_macro_name(name: str) -> bool:
     """Check if the provided name is a valid Zabbix user macro name."""
     return bool(MACRO_NAME_PATTERN.match(name))
 
 
-@lru_cache(maxsize=1000)
-def fmt_macro_name(macro: str) -> str:
+def validate_macro_name(macro: str) -> MacroName:
     """Normalize and validate a Zabbix user macro name."""
-    macro = macro.strip()
-    if not macro:
-        raise ValueError("Macro name cannot be empty.")
-    if not macro.isupper():
-        macro = macro.upper()
-    if not macro.startswith("{"):
-        macro = "{" + macro
-    if not macro.endswith("}"):
-        macro = macro + "}"
-    if macro[1] != "$":
-        macro = "{$" + macro[1:]
+    macro = macro.strip()  # remove whitespace
     if not is_valid_macro_name(macro):
         raise ValueError(f"Invalid macro name {macro!r}")
-    return macro
+    return MacroName(macro)
 
 
 @lru_cache(maxsize=1000)
@@ -126,7 +120,7 @@ class MacroKind(str, Enum):
 class MacroIdentity:
     """Unique identity of a Zabbix user macro: (name, context, context_type)."""
 
-    name: str
+    name: str  # NOTE: this should be MacroName, but it messes up static analysis of snapshot tests
     context: Optional[str] = None
     context_type: ContextType = ContextType.STATIC
 
@@ -559,15 +553,16 @@ class MacroMapFileIn(BaseModel):
     Used for input validation of the property:macro mapping YAML file.
     """
 
-    macros: dict[str, MacroDefIn] = Field(default_factory=dict)
+    macros: dict[MacroName, MacroDefIn] = Field(default_factory=dict)
+    """Mapping of all loaded macro definitions from the mapping file."""
 
     @field_validator("macros", mode="before")
     @classmethod
     def _none_is_empty_macrodef(cls, v: Any) -> Any:
         """Null value for a macro is an empty definition.
 
-        Short-hand for macro with no property, to mark them as
-        'managed', removing the macro from every host in Zabbix.
+        Allows short-hand notation for macro without properties,
+        marking it as 'managed', removing it from every host in Zabbix.
         I.e.:
 
         ```yaml
@@ -589,13 +584,33 @@ class MacroMapFileIn(BaseModel):
                 v[k] = MacroDefIn()
         return v
 
-    @field_validator("macros", mode="after")
+    @field_validator("macros", mode="before")
     @classmethod
-    def _validate_macro_keys(cls, v: dict[str, MacroDefIn]) -> dict[str, MacroDefIn]:
-        for name in v:
-            if not is_valid_macro_name(name):
-                raise ValueError(f"Invalid macro name: {name!r}")
-        return v
+    def _validate_macro_names(cls, macros: Any) -> dict[MacroName, MacroDefIn]:
+        """Validate and normalize macro names."""
+        if not isinstance(macros, dict):
+            return macros  # pragma: no cover # pydantic error
+
+        for raw_name, val in list(macros.items()):
+            try:
+                macro_name = validate_macro_name(raw_name)
+            except ValueError as e:
+                logger.error(
+                    "Invalid macro name in mapping file; skipping",
+                    macro_name=raw_name,
+                    error=str(e),
+                )
+                del macros[raw_name]
+            else:
+                if macro_name != raw_name:
+                    logger.warning(
+                        "Macro name has leading/trailing whitespace; normalizing",
+                        original=raw_name,
+                        normalized=macro_name,
+                    )
+                    macros[macro_name] = val
+                    del macros[raw_name]
+        return macros
 
 
 # ----- Property-to-macro mapping (resolved, public API) -----
@@ -850,28 +865,19 @@ def read_property_macro_map(path: Union[str, Path]) -> PropertyMacroMapping:
     seen: set[MacroIdentity] = set()
 
     def register(defn: MacroDefinition) -> None:
+        # NOTE: duplicate def error will likely not ever be emitted
+        # because pyyaml silently overwrites duplicate mapping keys on read!
         if defn.identity in seen:
-            logger.error(
+            logger.error(  # pragma: no cover
                 "Duplicate macro identity in mapping file; ignoring later occurrence",
                 file=str(path),
                 identity=defn.identity.to_zabbix(),
             )
-            return
+            return  # pragma: no cover
         seen.add(defn.identity)
         mapping.add(defn)
 
-    for raw_name, macro_def in file_in.macros.items():
-        try:
-            name = fmt_macro_name(raw_name)
-        except ValueError as e:
-            logger.error(
-                "Invalid macro name in mapping file; skipping",
-                file=str(path),
-                macro_name=raw_name,
-                error=str(e),
-            )
-            continue
-
+    for name, macro_def in file_in.macros.items():
         # Register macro
         if not macro_def.properties and not macro_def.hosts:
             logger.warning(
