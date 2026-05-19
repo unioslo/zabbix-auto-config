@@ -15,10 +15,13 @@ from zabbix_auto_config.macros import MacroIdentity
 from zabbix_auto_config.macros import MacroValueType
 from zabbix_auto_config.macros import PropertyMacroMapping
 from zabbix_auto_config.macros import ResolvedMacro
+from zabbix_auto_config.macros import get_host_facts
 from zabbix_auto_config.macros import get_placeholders
 from zabbix_auto_config.macros import get_substitutions
 from zabbix_auto_config.macros import is_valid_macro_name
 from zabbix_auto_config.macros import read_property_macro_map
+from zabbix_auto_config.models import Host
+from zabbix_auto_config.models import Interface
 
 DEFAULT_FACTS = HostFacts(hostname="testhost.example.com")
 
@@ -2383,3 +2386,34 @@ macros:
                         BUILTIN_PLACEHOLDERS | set(macro.defaults) | set(prop.values)
                     )
                     assert expect.issubset(subs.keys())
+
+
+class TestHostFacts:
+    def test_get_host_facts(self) -> None:
+        assert get_host_facts(
+            Host(
+                enabled=True,
+                hostname="mytesthost.example.com",
+                importance=5,
+                interfaces=[
+                    Interface(
+                        endpoint="mytesthost.example.com",
+                        port="10050",
+                        type=1,
+                    ),
+                    Interface(
+                        endpoint="mytesthost.example.com",
+                        port="161",
+                        type=2,
+                        details={"version": 2, "community": "{$SNMP_COMMUNITY}"},
+                    ),
+                ],
+                inventory={"OS": "Linux"},
+                macros=None,  # unused, will be removed - not synced
+                properties={"foo", "bar", "baz"},
+                proxy_pattern=r"^zbx-proxy\d+\.example\.com$",
+                siteadmins={"alice@example.com", "bob@example.com"},
+                sources={"source1", "source2"},
+                tags={("tag1", "x"), ("tag2", "y")},
+            )
+        ) == snapshot({"hostname": "mytesthost.example.com"})
