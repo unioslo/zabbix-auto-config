@@ -647,8 +647,8 @@ class PropertyMacroMapping(BaseModel):
     _host_bearing: list[MacroDefinition] = PrivateAttr(default_factory=list)
     """Definitions that have at least one entry in `hosts`.
 
-    Iterated per `get_macros()` call so host-only macros (no contributing
-    property) can still emit when the hostname matches.
+    Shortcut for iterating over macros with host overrides, so we can resolve
+    them separately from property-derived macros.
     """
 
     def add(self, definition: MacroDefinition) -> None:
@@ -682,7 +682,7 @@ class PropertyMacroMapping(BaseModel):
         # Get macros associated with each property
         seen_props: set[str] = set()
         for prop in properties:
-            if prop in seen_props:
+            if prop in seen_props:  # ignore repeated properties
                 continue
             seen_props.add(prop)
             for defn in self._by_property.get(prop, []):
@@ -692,9 +692,10 @@ class PropertyMacroMapping(BaseModel):
                 slot = per_identity.setdefault(defn.identity, (defn, []))
                 slot[1].append((prop, macro_value))
 
-        # Apply host overrides. Host match always wins: replaces any property-derived
-        # contributions and bypasses the resolve strategy. Host-only macros (no
-        # property contributing) still emit if the hostname matches.
+        # Resolve macros by host overrides
+        #
+        # Host match always wins: replaces any property-derived
+        # contributions and bypasses the resolve strategy.
         # Maps identity -> (matched_key, MacroValue) for the resolution loop below.
         host_overrides: dict[MacroIdentity, tuple[str, MacroValue]] = {}
         hostname = host_facts["hostname"]
@@ -713,9 +714,10 @@ class PropertyMacroMapping(BaseModel):
                 # even if no property contributed.
                 per_identity.setdefault(defn.identity, (defn, []))
 
-        # Resolve macro values
+        # Resolve macro values by properties
         result: dict[str, ResolvedMacro] = {}
         for identity, (defn, contributions) in per_identity.items():
+            # Only resolve property contribution if no host override exists!
             override = host_overrides.get(identity)
             if override is not None:
                 matched_key, macro_value = override
@@ -736,7 +738,7 @@ class PropertyMacroMapping(BaseModel):
             if not contributions:  # safety for 0-indexing
                 continue
 
-            # NOTE: the two different sorting calls within each if-branch are a
+            # NOTE: the two different sorting calls within each strategy branch are a
             # code smell, but we need to deduplicate values for resolve=regex,
             # which would break the sorting order if we sorted before deduplication.
 
@@ -787,12 +789,14 @@ class PropertyMacroMapping(BaseModel):
                         value=resolved_value,
                     )
                     continue
+
+                # Use first valid description from contributions + defn
                 description = next(
                     (mv.description for _, mv in contributions if mv.description),
                     defn.description,
                 )
             else:
-                # Ensure we handle new resolution strategies in the future
+                # Let type checker catch unhandled strategies
                 assert_never(defn.resolve)
 
             result[identity.to_zabbix()] = ResolvedMacro(
