@@ -17,7 +17,7 @@ macros:
 
   # `resolve: last` picks the alphabetically last contributing property.
   # Useful for tier-style overrides where the highest-priority property name
-  # is intentionally placed at the end of the alphabet.
+  # is intentionally placed at the end of the alphabet/numbered sequence.
   # If a host has properties `tier_a` and `tier_z`:
   # - {$ZAC.LAST_MACRO} -> "tier_z value"
   "{$ZAC.LAST_MACRO}":
@@ -202,8 +202,8 @@ macros:
 
   # Hostname-based overrides. Per-host (or per-pattern) values that override any
   # property-derived value for the same macro identity. Host match always wins
-  # over properties and bypasses the `resolve` strategy. A host match alone is
-  # enough to emit the macro — no contributing property required.
+  # over properties and bypasses the `resolve` strategy. No properties are required
+  # for a host to match.
   #
   # Match precedence:
   #  1. Exact hostname dict lookup
@@ -225,6 +225,6 @@ macros:
         values:
           port: 9500
           endpoint: special-metrics
-      ".*\\.legacy\\.example\\.com": # regex fallback
+      ".*\\.legacy\\.example\\.com": # regex fallback - must be escaped for YAML
         values:
           port: 9101
