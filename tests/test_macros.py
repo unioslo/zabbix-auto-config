@@ -1584,7 +1584,7 @@ macros:
         ):
             _ = _load_mapping(
                 tmp_path,
-                r"""
+                """
 macros:
   "{$AGENT.URL}":
     description: "Agent scrape URL"
@@ -1607,7 +1607,7 @@ macros:
         ):
             _ = _load_mapping(
                 tmp_path,
-                r"""
+                """
 macros:
     "{$AGENT.URL}":
       description: "Agent scrape URL"
@@ -1695,6 +1695,88 @@ macros:
 
 """,
             )
+
+    def test_empty_string_template_toplevel_allowed(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Macro where top-level macro has empty string template.
+
+        Correctly resolves to an empty value.
+        We assume the use of an empty string is deliberate.
+        """
+        m = _load_mapping(
+            tmp_path,
+            """
+macros:
+  "{$ZAC.TEMPLATE_EMPTY_STRING}":
+    description: "Ingestion endpoint"
+    template: ""
+    properties:
+      foo:
+        values:
+          port: 9001
+          endpoint: ingestion
+""",
+        )
+
+        macros = m.get_macros(["foo"], DEFAULT_FACTS)
+        assert macros == snapshot(
+            {
+                "{$ZAC.TEMPLATE_EMPTY_STRING}": ResolvedMacro(
+                    identity=MacroIdentity(name="{$ZAC.TEMPLATE_EMPTY_STRING}"),
+                    value="",
+                    description="Ingestion endpoint",
+                )
+            }
+        )
+
+    def test_empty_string_template_property_allowed(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Macro where property overrides with empty string template.
+
+        FIXME
+        -----
+        Due to technical reasons, the property inherits the template
+        from the parent definition. This has to do with the way we
+        evaluate template 'inheritance' on runtime when resolving macros.
+
+        Ideally, we would be consistent with our `None` checks and treat
+        empty strings as semantically different from `None` everywhere, but
+        don't actually do that today because of all the `x or y` evaluations,
+        which means if `x == ""`, it's semantically identical to `None`.
+        """
+        m = _load_mapping(
+            tmp_path,
+            """
+macros:
+  "{$ZAC.TEMPLATE_PROPERTY_EMPTY_STRING}":
+    description: "Ingestion endpoint"
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+    defaults:
+      port: 9001
+      endpoint: ingestion
+    properties:
+      foo:
+        template: "" # will not be used!
+""",
+        )
+
+        # Resolves to parent macro - ideally the value would be an empty string
+        macros = m.get_macros(["foo"], DEFAULT_FACTS)
+        assert macros == snapshot(
+            {
+                "{$ZAC.TEMPLATE_PROPERTY_EMPTY_STRING}": ResolvedMacro(
+                    identity=MacroIdentity(
+                        name="{$ZAC.TEMPLATE_PROPERTY_EMPTY_STRING}"
+                    ),
+                    value="https://testhost.example.com:9001/ingestion",
+                    description="Ingestion endpoint",
+                )
+            }
+        )
 
     def test_full_combo(self, tmp_path: Path):
         """Macro with template, contexts and host overrides."""
