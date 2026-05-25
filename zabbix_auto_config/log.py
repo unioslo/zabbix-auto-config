@@ -16,6 +16,9 @@ from zabbix_auto_config.config import Settings
 from zabbix_auto_config.dirs import ensure_directory
 from zabbix_auto_config.exceptions import ZACException
 
+# Ensure basic config is applied before structlog configuration
+structlog.configure(logger_factory=structlog.stdlib.LoggerFactory())
+
 
 @dataclass
 class ProcessNameFormatter:
@@ -205,6 +208,12 @@ def configure_logging(config: Settings) -> None:
 
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
+def debug_configuration(config: Settings) -> None:
+    """Show logging debug information."""
+    # NOTE: should this live somewhere else?
+    # can make it a general purpose function for showing debug info
 
     # Show which file is being logged to (if any)
     if config.zac.logging.file.enabled:
