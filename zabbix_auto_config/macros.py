@@ -23,18 +23,29 @@ from pydantic import BeforeValidator
 from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import PrivateAttr
+from pydantic import ValidationError
 from pydantic import field_validator
 from pydantic import model_validator
+from typing_extensions import NamedTuple
 from typing_extensions import Self
 from typing_extensions import assert_never
+
+from zabbix_auto_config.exceptions import EmptyMacroMappingError
+from zabbix_auto_config.exceptions import InvalidMacroMappingFileError
+from zabbix_auto_config.exceptions import MacroMappingFileNotFound
+from zabbix_auto_config.exceptions import MacroMappingFileReadError
+
+if TYPE_CHECKING:
+    from zabbix_auto_config.config import Settings
+    from zabbix_auto_config.models import Host
+    from zabbix_auto_config.pyzabbix.types import Host as ZabbixHost
+    from zabbix_auto_config.pyzabbix.types import Macro as ZabbixMacro
 
 try:
     from yaml import CSafeLoader as _YamlLoader
 except ImportError:
     from yaml import SafeLoader as _YamlLoader  # type: ignore[assignment]
 
-if TYPE_CHECKING:
-    from zabbix_auto_config.models import Host
 
 logger = structlog.stdlib.get_logger(__name__)
 
@@ -43,6 +54,10 @@ MACRO_NAME_PATTERN = re.compile(r"^\{\$[A-Z0-9_.]+\}$")
 
 MacroName = NewType("MacroName", str)
 """Validated and normalized macro name."""
+
+
+MacroDescription = NewType("MacroDescription", str)
+"""Correctly formatted macro description."""
 
 
 def is_valid_macro_name(name: str) -> bool:
@@ -115,11 +130,30 @@ class MacroKind(str, Enum):
     TEMPLATE = "template"
 
 
+@lru_cache(maxsize=1000)
+def macro_to_zabbix(
+    name: str,
+    context: Optional[str] = None,
+    context_type: ContextType = ContextType.STATIC,
+) -> str:
+    if context is None:
+        return name
+    base = name[:-1]  # strip trailing "}"
+    ctx = context
+    if context_type == ContextType.REGEX:
+        escaped = ctx.replace('"', '\\"')
+        return f'{base}:regex:"{escaped}"' + "}"
+    if "}" in ctx or ctx.startswith('"'):
+        escaped = ctx.replace('"', '\\"')
+        return f'{base}:"{escaped}"' + "}"
+    return f"{base}:{ctx}" + "}"
+
+
 @dataclass(frozen=True)
 class MacroIdentity:
     """Unique identity of a Zabbix user macro: (name, context, context_type)."""
 
-    name: str  # NOTE: this should be MacroName, but it messes up static analysis of snapshot tests
+    name: MacroName  # This NewType breaks mypy for test snapshots in <3.10 :(
     context: Optional[str] = None
     context_type: ContextType = ContextType.STATIC
 
@@ -128,17 +162,7 @@ class MacroIdentity:
 
         Adds context to macro if present.
         """
-        if self.context is None:
-            return self.name
-        base = self.name[:-1]  # strip trailing "}"
-        ctx = self.context
-        if self.context_type == ContextType.REGEX:
-            escaped = ctx.replace('"', '\\"')
-            return f'{base}:regex:"{escaped}"' + "}"
-        if "}" in ctx or ctx.startswith('"'):
-            escaped = ctx.replace('"', '\\"')
-            return f'{base}:"{escaped}"' + "}"
-        return f"{base}:{ctx}" + "}"
+        return macro_to_zabbix(self.name, self.context, self.context_type)
 
 
 def validate_template_macro_values(v: Any) -> dict[str, str]:
@@ -169,6 +193,25 @@ class MacroValue:
     description: Optional[str] = None
     values: TemplateMacroValues = field(default_factory=dict)
     template: Optional[str] = None  # per-property template override
+
+    @classmethod
+    def via_mapping(
+        cls, mapping: dict[str, PropertyValueIn], parent_template: str | None
+    ) -> dict[str, Self]:
+        """Translate a PropertyValueIn mapping to a mapping of MacroValue objects.
+
+        Maintains the keys used in the original mapping (be that property or host names).
+        """
+        return {
+            p: cls(
+                value=pv.value,
+                description=pv.description,
+                values={k: str(v) for k, v in pv.values.items()},
+                template=pv.template
+                or parent_template,  # inherit from parent macro if not set
+            )
+            for p, pv in mapping.items()
+        }
 
 
 @dataclass
@@ -218,7 +261,7 @@ class ResolvedMacro:
 
     identity: MacroIdentity
     value: str
-    description: Optional[str] = None
+    description: Optional[MacroDescription] = None
     value_type: MacroValueType = MacroValueType.TEXT
 
     @property
@@ -419,6 +462,9 @@ def _inject_template_into_entries(
     """
     if not isinstance(entries, dict):
         return
+    # TODO: if values are None, we should add an empty dict!
+    # The current .values() approach does not work for this!
+    # we need to assign a dict to the key during iteration.
     for val in entries.values():  # pyright: ignore[reportUnknownVariableType]
         if not isinstance(val, dict):
             continue
@@ -573,7 +619,6 @@ class MacroMapFileIn(BaseModel):
         ```yaml
         macros:
           "{$WILL_BE_REMOVED}":
-            description:
             properties: {}
         """
         if not isinstance(v, dict):
@@ -611,6 +656,34 @@ class MacroMapFileIn(BaseModel):
                     del macros[raw_name]
         return macros
 
+    @classmethod
+    def load(cls, path: Path) -> Self:
+        """Load a MacroMapFileIn from a file path."""
+        try:
+            with open(path) as f:
+                data = yaml.load(f, Loader=_YamlLoader)
+        except FileNotFoundError as e:
+            raise MacroMappingFileNotFound(
+                f"Macro mapping file {path} not found: {e}"
+            ) from e
+        except Exception as e:
+            raise MacroMappingFileReadError(
+                f"Failed to read macro map file {path}: {e}"
+            ) from e
+
+        if data is None:  # NOTE: why not {}, "" and other empty data?
+            raise EmptyMacroMappingError("Macro map file is empty")
+
+        try:
+            file_in = cls.model_validate(data)
+        except ValidationError:  # re-raise as-is
+            raise
+        except Exception as e:
+            raise InvalidMacroMappingFileError(
+                f"Invalid macro map file {path}: {e}"
+            ) from e
+        return file_in
+
 
 # ----- Property-to-macro mapping (resolved, public API) -----
 
@@ -639,6 +712,19 @@ def get_host_facts(host: Host) -> HostFacts:
     }
 
 
+class HostMacroResult(NamedTuple):
+    """Result of resolving macros for a host, keyed by macro identity."""
+
+    add: dict[str, ResolvedMacro]
+    """Macros to add to the host, keyed by macro identity."""
+
+    update: dict[str, tuple[ZabbixMacro, ResolvedMacro]]
+    """Macros to update on the host, keyed by macro identity."""
+
+    remove: dict[str, ZabbixMacro]
+    """Macros to remove from the host, keyed by macro identity."""
+
+
 class PropertyMacroMapping(BaseModel):
     """All macro definitions, indexed by the property names that contribute to them."""
 
@@ -646,6 +732,9 @@ class PropertyMacroMapping(BaseModel):
     # Either accept recalculation overhead, or cache and invalidate on add() call
     definitions: list[MacroDefinition] = Field(default_factory=list)
     """List of all macro definitions."""
+
+    description_prefix: Optional[str] = None
+    """Prefix to append to descriptions of all macros derived from this mapping, to provide context in Zabbix UI."""
 
     _by_property: dict[str, list[MacroDefinition]] = PrivateAttr(
         default_factory=lambda: defaultdict(list)
@@ -665,12 +754,146 @@ class PropertyMacroMapping(BaseModel):
     them separately from property-derived macros.
     """
 
+    _managed_macros: set[str] = PrivateAttr(default_factory=set)
+    """Identities of all macros managed by the macro mapping."""
+
+    @property
+    def managed_macros(self) -> set[str]:
+        """Identities of all macros managed by the macro mapping."""
+        return self._managed_macros
+
+    @classmethod
+    def from_config(cls, config: Settings) -> Self:
+        """Alternate constructor for deriving the mapping file settings from config."""
+        return cls.load(
+            config.zabbix.macro_map_file,
+            description_prefix=config.zabbix.macro_description_prefix,
+        )
+
+    @classmethod
+    def _load_infile(cls, path: Path) -> MacroMapFileIn:
+        """Attempt to load a macro mapping input file."""
+        return MacroMapFileIn.load(path)
+
+    @classmethod
+    def load(cls, path: Path, description_prefix: Optional[str] = None) -> Self:
+        """Load and validate a property:macro YAML mapping file."""
+        mapping = cls(description_prefix=description_prefix)
+
+        try:
+            file_in = cls._load_infile(path)
+        except MacroMappingFileNotFound:
+            logger.warning(
+                "Property macro map file does not exist; using empty mapping",
+                file=str(path),
+            )
+            return mapping
+        except InvalidMacroMappingFileError as e:
+            logger.error(
+                "Invalid property macro map file", file=str(path), error=str(e)
+            )
+            raise
+        except Exception as e:
+            logger.error(
+                "Failed to read property macro map file", file=str(path), error=str(e)
+            )
+            raise
+
+        seen: set[MacroIdentity] = set()
+
+        def register(defn: MacroDefinition) -> None:
+            # NOTE: duplicate def error will likely not ever be emitted
+            # because pyyaml silently overwrites duplicate mapping keys on read!
+            if defn.identity in seen:
+                logger.error(  # pragma: no cover
+                    "Duplicate macro identity in mapping file; ignoring later occurrence",
+                    file=str(path),
+                    identity=defn.identity.to_zabbix(),
+                )
+                return  # pragma: no cover
+            seen.add(defn.identity)
+            mapping.add(defn)
+
+        for name, macro_def in file_in.macros.items():
+            # Register macro
+            if not macro_def.properties and not macro_def.hosts:
+                logger.warning(
+                    "Macro definition has no properties or hosts. Will be used for removal only.",
+                    macro_name=name,
+                )
+            register(
+                MacroDefinition(
+                    identity=MacroIdentity(name=name),
+                    description=macro_def.description,
+                    value_type=macro_def.value_type,
+                    resolve=macro_def.resolve,
+                    template=macro_def.template,
+                    defaults=dict(macro_def.defaults),
+                    properties=MacroValue.via_mapping(
+                        macro_def.properties, macro_def.template
+                    ),
+                    hosts=MacroValue.via_mapping(macro_def.hosts, macro_def.template),
+                )
+            )
+
+            # Register macro variants with contexts
+            for variant in macro_def.contexts:
+                if not variant.properties and not variant.hosts:
+                    logger.warning(
+                        "Macro context variant has no properties or hosts. Will be used for removal only.",
+                        macro_name=name,
+                        context=variant.context,
+                    )
+                variant_template = variant.template or macro_def.template
+                register(
+                    MacroDefinition(
+                        identity=MacroIdentity(
+                            name=name,
+                            context=variant.context,
+                            context_type=variant.context_type,
+                        ),
+                        description=variant.description or macro_def.description,
+                        value_type=macro_def.value_type,  # inherit from parent macro
+                        resolve=macro_def.resolve,  # inherit from parent macro
+                        template=variant_template,
+                        defaults=dict(variant.defaults),
+                        properties=MacroValue.via_mapping(
+                            variant.properties, variant_template
+                        ),
+                        hosts=MacroValue.via_mapping(variant.hosts, variant_template),
+                    )
+                )
+
+        return mapping
+
     def add(self, definition: MacroDefinition) -> None:
+        """Add a macro definition to the mapping."""
+        # NOTE: this feels like a code smell: we update 4 different data structures
+        # on each add. There are no defined constraints that prevent inconsistencies
+        # between them. Don't even get me started on a potential `remove()` method...
+        #
+        # We need a single source of truth that we derive these alternate
+        # datastructures from when accessed via some caching mechanism.
+        # Their reason d'etre is to provide efficient lookups for:
+        # - definitions by property (for resolving macros for hosts)
+        # - definitions with host overrides (for resolving host-specific macros)
+        # - identities of managed macros (for pruning old macros from hosts)
         self.definitions.append(definition)
         for prop in definition.properties:
             self._by_property[prop].append(definition)
         if definition.hosts:
             self._host_bearing.append(definition)
+        self._managed_macros.add(definition.macro)
+
+    def _get_description(self, description: str | None) -> Optional[MacroDescription]:
+        """Get final description for a macro, with mapping-level prefix if defined."""
+        parts: list[str] = []
+        if self.description_prefix:
+            parts.append(self.description_prefix.strip())
+        if description:
+            parts.append(description.strip())
+        if parts:  # avoid creating empty description if no parts -> "" semantically different from None
+            return MacroDescription(" ".join(parts))
 
     def get_macros(
         self,
@@ -744,7 +967,9 @@ class PropertyMacroMapping(BaseModel):
                 result[identity.to_zabbix()] = ResolvedMacro(
                     identity=identity,
                     value=resolved_value,
-                    description=macro_value.description or defn.description,
+                    description=self._get_description(
+                        macro_value.description or defn.description
+                    ),
                     value_type=defn.value_type,
                 )
                 continue
@@ -813,137 +1038,65 @@ class PropertyMacroMapping(BaseModel):
                 # Let type checker catch unhandled strategies
                 assert_never(defn.resolve)
 
+            # TODO: key by MacroName here
+            # but we can't do that right now, because MacroName exists to validate
+            # macro names from the config file, not the final macro names where
+            # context may exist. Sigh...
             result[identity.to_zabbix()] = ResolvedMacro(
                 identity=identity,
                 value=resolved_value,
-                description=description,
+                description=self._get_description(description),
                 value_type=defn.value_type,
             )
         return result
 
+    def resolve_macros(
+        self,
+        db_host: Host,
+        zabbix_host: ZabbixHost,
+    ) -> HostMacroResult:
+        """Resolve macros for the given host
 
-# ----- YAML loader -----
+        Returns a HostMacroResult containing macros to keep, add/update, and remove.
+        """
+        # Only include managed macros (macros on host that are also defined in the mapping)
+        current_macros = {
+            macro.macro: macro
+            for macro in zabbix_host.macros
+            if macro.macro in self.managed_macros
+        }
 
+        # Resolve macros for host given its properties + facts
+        facts = get_host_facts(db_host)
+        resolved_macros = self.get_macros(db_host.properties, facts)
 
-def _build_hosts(
-    hosts_def: dict[str, PropertyValueIn], inherited_template: Optional[str]
-) -> dict[str, MacroValue]:
-    """Build the resolved per-host MacroValue dict, inheriting template if needed."""
-    return {
-        name: MacroValue(
-            value=pv.value,
-            description=pv.description,
-            values={k: str(v) for k, v in pv.values.items()},
-            template=pv.template or inherited_template,
+        # Determine macros to remove
+        # Remove macros that are managed, but not connected to any current properties
+        to_remove: dict[str, ZabbixMacro] = {}
+        for macro in set(current_macros) - set(resolved_macros):
+            to_remove[macro] = current_macros[macro]
+
+        # Add macros connected to host's properties that it doesn't already have
+        to_add: dict[str, ResolvedMacro] = {}
+        for macro in set(resolved_macros) - set(current_macros):
+            to_add[macro] = resolved_macros[macro]
+
+        # Determine macros to update (compare differences)
+        # Update macros whose values or descriptions have changed
+        to_update: dict[str, tuple[ZabbixMacro, ResolvedMacro]] = {}
+        for macro_name in set(resolved_macros).intersection(set(current_macros)):
+            # Direct key access for speed (+ it's safe enough due to intersection above)
+            current_macro = current_macros[macro_name]
+            resolved_macro = resolved_macros[macro_name]
+            if (
+                resolved_macro.value != current_macro.value
+                or resolved_macro.description != current_macro.description
+                or resolved_macro.value_type.to_zabbix() != current_macro.type
+            ):
+                to_update[macro_name] = (current_macro, resolved_macro)
+
+        return HostMacroResult(
+            add=to_add,
+            update=to_update,
+            remove=to_remove,
         )
-        for name, pv in hosts_def.items()
-    }
-
-
-def read_property_macro_map(path: Path) -> PropertyMacroMapping:
-    """Load and validate a property:macro YAML mapping file."""
-    if not path.exists():
-        logger.warning(
-            "Property macro map file does not exist; using empty mapping",
-            file=str(path),
-        )
-        return PropertyMacroMapping()
-
-    try:
-        with open(path) as f:
-            data = yaml.load(f, Loader=_YamlLoader)
-    except Exception as e:
-        logger.error(
-            "Failed to read property macro map file", file=str(path), error=str(e)
-        )
-        raise
-
-    if data is None:
-        return PropertyMacroMapping()
-
-    try:
-        file_in = MacroMapFileIn.model_validate(data)
-    except Exception as e:
-        logger.error("Invalid property macro map file", file=str(path), error=str(e))
-        raise
-
-    mapping = PropertyMacroMapping()
-    seen: set[MacroIdentity] = set()
-
-    def register(defn: MacroDefinition) -> None:
-        # NOTE: duplicate def error will likely not ever be emitted
-        # because pyyaml silently overwrites duplicate mapping keys on read!
-        if defn.identity in seen:
-            logger.error(  # pragma: no cover
-                "Duplicate macro identity in mapping file; ignoring later occurrence",
-                file=str(path),
-                identity=defn.identity.to_zabbix(),
-            )
-            return  # pragma: no cover
-        seen.add(defn.identity)
-        mapping.add(defn)
-
-    for name, macro_def in file_in.macros.items():
-        # Register macro
-        if not macro_def.properties and not macro_def.hosts:
-            logger.warning(
-                "Macro definition has no properties or hosts. Will be used for removal only.",
-                macro_name=name,
-            )
-        register(
-            MacroDefinition(
-                identity=MacroIdentity(name=name),
-                description=macro_def.description,
-                value_type=macro_def.value_type,
-                resolve=macro_def.resolve,
-                template=macro_def.template,
-                defaults=dict(macro_def.defaults),
-                properties={
-                    p: MacroValue(
-                        value=pv.value,
-                        description=pv.description,
-                        values={k: str(v) for k, v in pv.values.items()},
-                        template=pv.template
-                        or macro_def.template,  # inherit from parent macro if not set
-                    )
-                    for p, pv in macro_def.properties.items()
-                },
-                hosts=_build_hosts(macro_def.hosts, macro_def.template),
-            )
-        )
-
-        # Register macro variants with contexts
-        for variant in macro_def.contexts:
-            if not variant.properties and not variant.hosts:
-                logger.warning(
-                    "Macro context variant has no properties or hosts. Will be used for removal only.",
-                    macro_name=name,
-                    context=variant.context,
-                )
-            variant_template = variant.template or macro_def.template
-            register(
-                MacroDefinition(
-                    identity=MacroIdentity(
-                        name=name,
-                        context=variant.context,
-                        context_type=variant.context_type,
-                    ),
-                    description=variant.description or macro_def.description,
-                    value_type=macro_def.value_type,  # inherit from parent macro
-                    resolve=macro_def.resolve,  # inherit from parent macro
-                    template=variant_template,
-                    defaults=dict(variant.defaults),
-                    properties={
-                        p: MacroValue(
-                            value=pv.value,
-                            description=pv.description,
-                            values={k: str(v) for k, v in pv.values.items()},
-                            template=pv.template or variant_template,
-                        )
-                        for p, pv in variant.properties.items()
-                    },
-                    hosts=_build_hosts(variant.hosts, variant_template),
-                )
-            )
-
-    return mapping

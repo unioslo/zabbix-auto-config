@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Optional
 
 import pytest
 from inline_snapshot import snapshot
@@ -11,6 +12,7 @@ from structlog.testing import LogCapture
 from zabbix_auto_config.macros import BUILTIN_PLACEHOLDERS
 from zabbix_auto_config.macros import ContextType
 from zabbix_auto_config.macros import HostFacts
+from zabbix_auto_config.macros import HostMacroResult
 from zabbix_auto_config.macros import MacroDefIn
 from zabbix_auto_config.macros import MacroIdentity
 from zabbix_auto_config.macros import MacroValueType
@@ -20,10 +22,11 @@ from zabbix_auto_config.macros import get_host_facts
 from zabbix_auto_config.macros import get_placeholders
 from zabbix_auto_config.macros import get_substitutions
 from zabbix_auto_config.macros import is_valid_macro_name
-from zabbix_auto_config.macros import read_property_macro_map
 from zabbix_auto_config.macros import validate_macro_name
 from zabbix_auto_config.models import Host
 from zabbix_auto_config.models import Interface
+from zabbix_auto_config.pyzabbix.types import Host as ZabbixHost
+from zabbix_auto_config.pyzabbix.types import Macro
 
 DEFAULT_FACTS = HostFacts(hostname="testhost.example.com")
 
@@ -44,10 +47,12 @@ def _write_yaml(tmp_path: Path, body: str) -> Path:
     return p
 
 
-def _load_mapping(tmp_path: Path, body: str) -> PropertyMacroMapping:
+def _load_mapping(
+    tmp_path: Path, body: str, description_prefix: Optional[str] = None
+) -> PropertyMacroMapping:
     """Helper function to write a mapping file and load it."""
     p = _write_yaml(tmp_path, body)
-    return read_property_macro_map(p)
+    return PropertyMacroMapping.load(p, description_prefix=description_prefix)
 
 
 @pytest.fixture(scope="session")
@@ -60,7 +65,7 @@ def sample_property_macro_map_path(tmp_path_factory: TempPathFactory):
 
 @pytest.fixture(scope="session")
 def macro_map(sample_property_macro_map_path: Path) -> PropertyMacroMapping:
-    return read_property_macro_map(sample_property_macro_map_path)
+    return PropertyMacroMapping.load(sample_property_macro_map_path)
 
 
 def contains_valid_regex(macros: dict[str, ResolvedMacro]) -> bool:
@@ -216,7 +221,7 @@ class TestMappingFileLoad:
     """Tests for loading and validating the property macro mapping file."""
 
     def test_read_example_mapping_snapshot(self, sample_property_macro_map_path: Path):
-        m = read_property_macro_map(sample_property_macro_map_path)
+        m = PropertyMacroMapping.load(sample_property_macro_map_path)
 
         # Dump internal representation of the property macro map
         assert m.model_dump_json(indent=2) == snapshot("""\
@@ -743,7 +748,8 @@ class TestMappingFileLoad:
         }
       }
     }
-  ]
+  ],
+  "description_prefix": null
 }\
 """)
 
@@ -908,7 +914,7 @@ macros:
         log_output: LogCapture,
     ) -> None:
         """Reading from a non-existent file should warn and return empty mapping."""
-        m = read_property_macro_map(tmp_path / "non_existent_file.yaml")
+        m = PropertyMacroMapping.load(tmp_path / "non_existent_file.yaml")
         assert len(m.definitions) == 0
         assert len(m._by_property) == 0  # pyright: ignore[reportPrivateUsage]
 
@@ -2590,4 +2596,149 @@ macros:
                     description="I am defined last and will win!",
                 )
             }
+        )
+
+
+@pytest.fixture(scope="function")
+def db_host() -> Host:
+    return Host(
+        enabled=True,
+        hostname="testhost.example.com",
+    )
+
+
+@pytest.fixture(scope="function")
+def zabbix_host() -> ZabbixHost:
+    return ZabbixHost(
+        hostid="123",
+        host="testhost.example.com",
+        proxyid="0",
+        zabbix_agent=None,
+        macros=[],
+    )
+
+
+class TestResolveMacros:
+    """Tests for resolution of macros for host objects."""
+
+    def test_resolve_macros_simple(
+        self, tmp_path: Path, db_host: Host, zabbix_host: ZabbixHost
+    ) -> None:
+        m = _load_mapping(
+            tmp_path,
+            """
+macros:
+  "{$ZAC.PLAIN_UPDATE}":
+    description: Just a plain macro
+    properties:
+      foo: plain foo
+      bar: plain bar # <-- Will be chosen
+  "{$ZAC.REGEX_ADD}":
+    resolve: regex
+    properties:
+      foo: regex foo
+      bar: regex bar
+  "{$ZAC.TEMPLATE_KEEP}":
+    template: "https://{{hostname}}/x"
+    description: "My template macro"
+    properties:
+      foo:
+  "{$ZAC.SECRET_ADD}":
+    description: "My secret macro"
+    properties:
+      bar: le_secret
+    value_type: secret
+  "{$ZAC.SECRET_KEEP}":
+    description: "Another secret macro"
+    properties:
+      bar: even more secret
+    value_type: secret
+  "{$ZAC.REMOVE}":
+""",
+            description_prefix="[ZAC]",
+        )
+
+        zabbix_host.macros = [
+            # Macros to update
+            Macro(
+                hostid="123",
+                hostmacroid="1",
+                macro="{$ZAC.PLAIN_UPDATE}",
+                value="plain bar",
+                description="Just a plain macro",  # <- missing prefix, will be updated
+                type=0,  # plain
+            ),
+            # Macros to leave as-is
+            Macro(
+                hostid="123",
+                hostmacroid="2",
+                macro="{$ZAC.TEMPLATE_KEEP}",
+                value="https://testhost.example.com/x",
+                description="[ZAC] My template macro",
+                type=0,
+            ),
+            Macro(
+                hostid="123",
+                hostmacroid="3",
+                macro="{$ZAC.SECRET_KEEP}",
+                value="even more secret",
+                description="[ZAC] Another secret macro",
+                type=1,
+            ),
+            # Macros to remove
+            Macro(
+                hostid="123",
+                hostmacroid="4",
+                macro="{$ZAC.REMOVE}",
+                value="who cares",
+                description="irrelevant",
+                type=0,
+            ),
+        ]
+        db_host.properties = {"foo", "bar", "baz"}
+
+        resolved = m.resolve_macros(db_host, zabbix_host)
+        assert resolved == snapshot(
+            HostMacroResult(
+                add={
+                    "{$ZAC.SECRET_ADD}": ResolvedMacro(
+                        identity=MacroIdentity(name="{$ZAC.SECRET_ADD}"),
+                        value="le_secret",
+                        description="[ZAC] My secret macro",
+                        value_type=MacroValueType.SECRET,
+                    ),
+                    "{$ZAC.REGEX_ADD}": ResolvedMacro(
+                        identity=MacroIdentity(name="{$ZAC.REGEX_ADD}"),
+                        value="(regex bar|regex foo)",
+                        description="[ZAC]",
+                    ),
+                },
+                update={
+                    "{$ZAC.PLAIN_UPDATE}": (
+                        Macro(
+                            macro="{$ZAC.PLAIN_UPDATE}",
+                            value="plain bar",
+                            type=0,
+                            description="Just a plain macro",
+                            hostid="123",
+                            hostmacroid="1",
+                        ),
+                        ResolvedMacro(
+                            identity=MacroIdentity(name="{$ZAC.PLAIN_UPDATE}"),
+                            value="plain bar",
+                            description="[ZAC] Just a plain macro",
+                        ),
+                    )
+                },
+                remove={
+                    "{$ZAC.REMOVE}": Macro(
+                        macro="{$ZAC.REMOVE}",
+                        value="who cares",
+                        type=0,
+                        description="irrelevant",
+                        hostid="123",
+                        hostmacroid="4",
+                    )
+                },
+            )
         )

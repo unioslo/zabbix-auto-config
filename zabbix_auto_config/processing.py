@@ -51,9 +51,8 @@ from zabbix_auto_config.exceptions import ZabbixAPISessionExpired
 from zabbix_auto_config.exceptions import ZabbixNotFoundError
 from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.failsafe import check_failsafe
+from zabbix_auto_config.macros import PropertyMacroMapping
 from zabbix_auto_config.macros import ResolvedMacro
-from zabbix_auto_config.macros import get_host_facts
-from zabbix_auto_config.macros import read_property_macro_map
 from zabbix_auto_config.pyzabbix.client import ZabbixAPI
 from zabbix_auto_config.pyzabbix.enums import InterfaceType
 from zabbix_auto_config.pyzabbix.enums import InventoryMode
@@ -1139,14 +1138,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         # TODO: refactor along with other mapping files if application is
         # rewritten to read mapping files on each work iteration, as opposed
         # to only on startup!
-        self.property_macro_map = read_property_macro_map(
-            # TODO: make configurable!
-            Path(self.config.zabbix.map_dir) / "property_macro_map.yaml"
-        )
-        self.managed_macros = {
-            macro.macro for macro in self.property_macro_map.definitions
-        }
-        """Names of all macros managed by ZAC."""
+        self.property_macro_map = PropertyMacroMapping.from_config(self.config)
 
     def get_or_create_hostgroup(self, hostgroup: str) -> HostGroup:
         """Fetch a host group, creating it if it doesn't exist."""
@@ -1764,60 +1756,17 @@ class ZabbixHostUpdater(ZabbixUpdater):
         # to the DB host, and we instead just calculate the desired macro
         # state here.
 
-        # Only include managed macros (macros that are defined in the mapping)
-        current_macros = {
-            macro.macro: macro
-            for macro in zabbix_host.macros
-            if macro.macro in self.managed_macros
-        }
-        property_macros = self.property_macro_map.get_macros(
-            db_host.properties, get_host_facts(db_host)
-        )
-
-        # NOTE: we use dicts to store the macros to add/update/remove
-        # which goes some way in preventing duplication issues.
-        # However, we should be fairly confident at this point that
-        # we don't have any duplicates, so it might be overkill!
-
-        # Remove macros that are managed, but not connected to any current properties
-        macros_to_remove: dict[str, Macro] = {}
-        for macro in set(current_macros) - set(property_macros):
-            macros_to_remove[macro] = current_macros[macro]
-
-        # Add macros connected to host's properties that it doesn't already have
-        macros_to_add: dict[str, ResolvedMacro] = {}
-        for macro in set(property_macros) - set(current_macros):
-            macros_to_add[macro] = property_macros[macro]
-
-        # Update macros whose values or descriptions have changed
-        macros_to_update: dict[str, tuple[Macro, ResolvedMacro]] = {}
-        for macro_name in set(property_macros).intersection(set(current_macros)):
-            # Direct key access for speed (+ it's safe enough due to intersection above)
-            current_macro = current_macros[macro_name]
-            property_macro = property_macros[macro_name]
-            if (
-                # Value
-                property_macro.value != current_macro.value
-                # Description
-                or self._get_macro_description(property_macro)
-                != current_macro.description
-                # Type
-                or current_macro.type != property_macro.value_type.to_zabbix()
-            ):
-                macros_to_update[macro_name] = (current_macro, property_macro)
-
+        result = self.property_macro_map.resolve_macros(db_host, zabbix_host)
         # Remove existing macros
-        if macros_to_remove:
-            self.remove_macros_from_host(zabbix_host, macros_to_remove)
-
+        if result.remove:
+            self.remove_macros_from_host(zabbix_host, result.remove)
         # Create new macros
-        if macros_to_add:
-            for macro in macros_to_add.values():
+        if result.add:
+            for macro in result.add.values():
                 self.add_macro_to_host(zabbix_host, macro)
-
         # Update existing macros
-        if macros_to_update:
-            for current_macro, new_macro in macros_to_update.values():
+        if result.update:
+            for current_macro, new_macro in result.update.values():
                 self.update_host_macro(zabbix_host, current_macro, new_macro)
 
     def add_macro_to_host(self, host: Host, macro: ResolvedMacro) -> None:

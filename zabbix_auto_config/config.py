@@ -127,6 +127,10 @@ class ZabbixSettings(ConfigBaseModel):
             return None
         return v
 
+    @property
+    def macro_map_file(self) -> Path:
+        return Path(self.map_dir) / "property_macro_map.yaml"
+
 
 class ZabbixHostSettings(ConfigBaseModel):
     remove_from_maintenance: bool = False
