@@ -22,10 +22,14 @@ def get_connection(
     """Get a connection to the Postgres database.
 
     Optionally specify a different database name to connect to."""
-    kwargs = settings.get_connect_kwargs()
-    if dbname:  # HACK: we need to connect to 'postgres' to create a new database
-        kwargs["dbname"] = dbname
-    return psycopg2.connect(**kwargs)
+    try:
+        kwargs = settings.get_connect_kwargs()
+        if dbname:  # HACK: we need to connect to 'postgres' to create a new database
+            kwargs["dbname"] = dbname
+        return psycopg2.connect(**kwargs)
+    except psycopg2.OperationalError as e:
+        logger.error("Unable to connect to database.")
+        raise ZACException(*e.args) from e  # isn't it insane to unpack args here?!
 
 
 @contextmanager
@@ -134,7 +138,7 @@ class PostgresDBInitializer:
                 # Create hosts_pending_deletion table
                 log.debug(
                     "Creating table if it doesn't exist",
-                    table=self.config.zac.db.tables.hosts_source,
+                    table=self.config.zac.db.tables.hosts_pending_deletion,
                 )
                 cur.execute(
                     sql.SQL("""

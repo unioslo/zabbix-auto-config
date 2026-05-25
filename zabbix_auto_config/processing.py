@@ -90,11 +90,7 @@ class BaseProcess(multiprocessing.Process):
         self.stop_event = multiprocessing.Event()
 
     def get_db_connection(self) -> psycopg2.extensions.connection:
-        try:
-            return db.get_connection(self.config.zac.db)
-        except psycopg2.OperationalError as e:
-            logger.error("Unable to connect to database.")
-            raise ZACException(*e.args) from e
+        return db.get_connection(self.config.zac.db)
 
     def get_next_update(self) -> datetime:
         """Get the time the process should run next."""

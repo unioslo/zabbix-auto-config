@@ -22,15 +22,14 @@ from zabbix_auto_config._types import HostModifierModule
 from zabbix_auto_config._types import SourceCollector
 from zabbix_auto_config._types import SourceCollectorModule
 from zabbix_auto_config._types import SourceHostQueue
+from zabbix_auto_config.cli import app
 from zabbix_auto_config.config import Settings
 from zabbix_auto_config.config import get_config
 from zabbix_auto_config.db import init_db
 from zabbix_auto_config.health import write_health
 from zabbix_auto_config.log import configure_logging
+from zabbix_auto_config.log import debug_configuration
 from zabbix_auto_config.state import get_manager
-
-app = typer.Typer(add_completion=False, pretty_exceptions_enable=False)
-
 
 logger = structlog.stdlib.get_logger(__name__)
 
@@ -134,8 +133,9 @@ def log_process_status(processes: list[processing.BaseProcess]) -> None:
     logger.info("Process status", status=process_statuses)
 
 
-@app.command()
+@app.callback()
 def main(
+    ctx: typer.Context,
     failsafe: Optional[int] = typer.Option(  # noqa: B008
         None,
         "--failsafe",
@@ -158,16 +158,20 @@ def main(
     ),
 ) -> None:
     """Run Zabbix-auto-config."""
-    logger.info("Main start", pid=os.getpid(), version=__version__)
-
+    # Always bootstrap config and logging
     config = get_config(config_path)
-
     if failsafe is not None:
         config.zabbix.failsafe = failsafe
     if dryrun is not None:
         config.zabbix.dryrun = dryrun
 
+    app.configure(config)  # should we call get_config inside this method?
     configure_logging(config)
+    if ctx.invoked_subcommand is not None:
+        return  # Don't run the main app if a subcommand was invoked
+
+    logger.info("Main start", pid=os.getpid(), version=__version__)
+    debug_configuration(config)  # show debug info
 
     stop_event = multiprocessing.Event()
     state_manager = get_manager()
