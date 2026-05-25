@@ -121,6 +121,7 @@ def validate(
     try:
         in_file = PropertyMacroMapping._load_infile(file)
     except Exception as e:
+        # TODO: this is _not_ pretty! Need some nicer abstractions here.
         from rich.panel import Panel
 
         if verbose:
