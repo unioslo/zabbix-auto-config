@@ -257,7 +257,7 @@ class MacroDefinition:
 
 @dataclass
 class ResolvedMacro:
-    """A macro resolved for a specific host's property set."""
+    """A resolved macro for a host."""
 
     identity: MacroIdentity
     value: str
@@ -266,6 +266,7 @@ class ResolvedMacro:
 
     @property
     def macro(self) -> str:
+        """The name of the macro used in Zabbix."""
         return self.identity.to_zabbix()
 
 
@@ -866,7 +867,7 @@ class MacroMap(BaseModel):
         #
         # We need a single source of truth that we derive these alternate
         # datastructures from when accessed via some caching mechanism.
-        # Their reason d'etre is to provide efficient lookups for:
+        # Any rewrite needs to provide interfaces that maintain efficient lookups for:
         # - definitions by property (for resolving macros for hosts)
         # - definitions with host overrides (for resolving host-specific macros)
         # - identities of managed macros (for pruning old macros from hosts)
