@@ -41,12 +41,12 @@ logger = structlog.stdlib.get_logger(__name__)
 
 
 def _render_pydantic_error(e: ErrorDetails) -> str:
-    """Render a Pydantic error detail."""
+    """Render a Pydantic error detail as a Rich-formatted string without URLs."""
     parts: list[str] = []
     if loc := e.get("loc"):
-        # We'll likely have a loc like `('macros', '{$MACRO_NAME}')`
-        # If we can, we should just show the macro name if the error
-        # stems from the top-level "macros" key
+        # We'll likely have a loc like `("macros", "{$MACRO_NAME}")`
+        # Try to show just the macro name if the error stems from the
+        # top-level "macros" key
         if loc[-1] == "macros" and len(loc) > 1:
             location = str(loc[1])
         else:  # fall back on entire location string joined by "."
@@ -286,8 +286,7 @@ def _preview_online(
 
     results: dict[str, HostMacroResult] = {}
     for host_name in managed_hosts:
-        zhost = zabbix_hosts[host_name]
-        result = macro_map.resolve_macros(db_hosts[host_name], zhost)
+        result = macro_map.resolve_macros(db_hosts[host_name], zabbix_hosts[host_name])
         results[host_name] = result
 
     return results
