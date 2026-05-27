@@ -30,10 +30,10 @@ from typing_extensions import NamedTuple
 from typing_extensions import Self
 from typing_extensions import assert_never
 
-from zabbix_auto_config.exceptions import EmptyMacroMappingError
-from zabbix_auto_config.exceptions import InvalidMacroMappingFileError
-from zabbix_auto_config.exceptions import MacroMappingFileNotFound
-from zabbix_auto_config.exceptions import MacroMappingFileReadError
+from zabbix_auto_config.exceptions import EmptyMacroMapError
+from zabbix_auto_config.exceptions import InvalidMacroMapFileError
+from zabbix_auto_config.exceptions import MacroMapFileNotFound
+from zabbix_auto_config.exceptions import MacroMapFileReadError
 
 if TYPE_CHECKING:
     from zabbix_auto_config.config import Settings
@@ -429,7 +429,7 @@ def _validate_template_props(
 
     Raises ValueError if validation fails.
 
-    NOTE: this function should only be called when reading from the mapping file.
+    NOTE: this function should only be called when reading from the macro map file.
     We do not want to raise exceptions when resolving macros for hosts!
     """
     hosts = hosts or {}
@@ -478,7 +478,7 @@ def _inject_template_into_entries(
 
 
 class MacroContextIn(BaseModel):
-    """Macro context from mapping file."""
+    """Macro context from macro map file."""
 
     context: str
     context_type: ContextType = ContextType.STATIC
@@ -502,7 +502,7 @@ HostValuesIn = dict[str, str]  # May add validator to this
 
 
 class MacroDefIn(BaseModel):
-    """Top-level macro definition entry from mapping file."""
+    """Top-level macro definition entry from macro map file."""
 
     description: Optional[str] = None
     value_type: MacroValueType = MacroValueType.TEXT
@@ -593,13 +593,13 @@ class MacroDefIn(BaseModel):
 
 
 class MacroMapFileIn(BaseModel):
-    """Top-level YAML schema for property-macro mapping files.
+    """Top-level YAML schema for macro map files.
 
-    Used for input validation of the property:macro mapping YAML file.
+    Used for input validation of the macro map YAML file.
     """
 
     macros: dict[MacroName, MacroDefIn] = Field(default_factory=dict)
-    """Mapping of all loaded macro definitions from the mapping file."""
+    """Mapping of all loaded macro definitions from the macro map file."""
 
     @field_validator("macros", mode="before")
     @classmethod
@@ -640,7 +640,7 @@ class MacroMapFileIn(BaseModel):
                 macro_name = validate_macro_name(raw_name)
             except ValueError as e:
                 logger.error(
-                    "Invalid macro name in mapping file; skipping",
+                    "Invalid macro name in macro map file; skipping",
                     macro_name=raw_name,
                     error=str(e),
                 )
@@ -663,29 +663,25 @@ class MacroMapFileIn(BaseModel):
             with open(path) as f:
                 data = yaml.load(f, Loader=_YamlLoader)
         except FileNotFoundError as e:
-            raise MacroMappingFileNotFound(
-                f"Macro mapping file {path} not found: {e}"
-            ) from e
+            raise MacroMapFileNotFound(f"Macro map file {path} not found: {e}") from e
         except Exception as e:
-            raise MacroMappingFileReadError(
+            raise MacroMapFileReadError(
                 f"Failed to read macro map file {path}: {e}"
             ) from e
 
         if data is None:  # NOTE: why not {}, "" and other empty data?
-            raise EmptyMacroMappingError("Macro map file is empty")
+            raise EmptyMacroMapError("Macro map file is empty")
 
         try:
             file_in = cls.model_validate(data)
         except ValidationError:  # re-raise as-is
             raise
         except Exception as e:
-            raise InvalidMacroMappingFileError(
-                f"Invalid macro map file {path}: {e}"
-            ) from e
+            raise InvalidMacroMapFileError(f"Invalid macro map file {path}: {e}") from e
         return file_in
 
 
-# ----- Property-to-macro mapping (resolved, public API) -----
+# ----- Macro map (resolved, public API) -----
 
 
 class HostFacts(TypedDict):
@@ -725,7 +721,7 @@ class HostMacroResult(NamedTuple):
     """Macros to remove from the host, keyed by macro identity."""
 
 
-class PropertyMacroMapping(BaseModel):
+class MacroMap(BaseModel):
     """All macro definitions, indexed by the property names that contribute to them."""
 
     # NOTE: rewrite as property? let _by_property be the single source of truth
@@ -755,16 +751,16 @@ class PropertyMacroMapping(BaseModel):
     """
 
     _managed_macros: set[str] = PrivateAttr(default_factory=set)
-    """Identities of all macros managed by the macro mapping."""
+    """Identities of all macros managed by the macro map."""
 
     @property
     def managed_macros(self) -> set[str]:
-        """Identities of all macros managed by the macro mapping."""
+        """Identities of all macros managed by the macro map."""
         return self._managed_macros
 
     @classmethod
     def from_config(cls, config: Settings) -> Self:
-        """Alternate constructor for deriving the mapping file settings from config."""
+        """Alternate constructor for deriving the macro map file settings from config."""
         return cls.load(
             config.zabbix.macro_map_file,
             description_prefix=config.zabbix.macro_description_prefix,
@@ -772,31 +768,27 @@ class PropertyMacroMapping(BaseModel):
 
     @classmethod
     def _load_infile(cls, path: Path) -> MacroMapFileIn:
-        """Attempt to load a macro mapping input file."""
+        """Attempt to load a macro map input file."""
         return MacroMapFileIn.load(path)
 
     @classmethod
     def load(cls, path: Path, description_prefix: Optional[str] = None) -> Self:
-        """Load and validate a property:macro YAML mapping file."""
+        """Load and validate a macro map YAML file."""
         mapping = cls(description_prefix=description_prefix)
 
         try:
             file_in = cls._load_infile(path)
-        except MacroMappingFileNotFound:
+        except MacroMapFileNotFound:
             logger.warning(
-                "Property macro map file does not exist; using empty mapping",
+                "Macro map file does not exist; using empty mapping",
                 file=str(path),
             )
             return mapping
-        except InvalidMacroMappingFileError as e:
-            logger.error(
-                "Invalid property macro map file", file=str(path), error=str(e)
-            )
+        except InvalidMacroMapFileError as e:
+            logger.error("Invalid macro map file", file=str(path), error=str(e))
             raise
         except Exception as e:
-            logger.error(
-                "Failed to read property macro map file", file=str(path), error=str(e)
-            )
+            logger.error("Failed to read macro map file", file=str(path), error=str(e))
             raise
 
         seen: set[MacroIdentity] = set()
@@ -806,7 +798,7 @@ class PropertyMacroMapping(BaseModel):
             # because pyyaml silently overwrites duplicate mapping keys on read!
             if defn.identity in seen:
                 logger.error(  # pragma: no cover
-                    "Duplicate macro identity in mapping file; ignoring later occurrence",
+                    "Duplicate macro identity in macro map file; ignoring later occurrence",
                     file=str(path),
                     identity=defn.identity.to_zabbix(),
                 )

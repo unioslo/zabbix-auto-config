@@ -15,8 +15,8 @@ from zabbix_auto_config.macros import HostFacts
 from zabbix_auto_config.macros import HostMacroResult
 from zabbix_auto_config.macros import MacroDefIn
 from zabbix_auto_config.macros import MacroIdentity
+from zabbix_auto_config.macros import MacroMap
 from zabbix_auto_config.macros import MacroValueType
-from zabbix_auto_config.macros import PropertyMacroMapping
 from zabbix_auto_config.macros import ResolvedMacro
 from zabbix_auto_config.macros import get_host_facts
 from zabbix_auto_config.macros import get_placeholders
@@ -33,39 +33,36 @@ DEFAULT_FACTS = HostFacts(hostname="testhost.example.com")
 
 # Read example mapping file so we know our examples
 # are always up-to-date and are valid.
-SAMPLE_PROPERTY_MACRO_MAP = (
-    Path(__file__).parent.parent
-    / "example"
-    / "mapping_files"
-    / "property_macro_map.yaml"
+SAMPLE_MACRO_MAP = (
+    Path(__file__).parent.parent / "example" / "mapping_files" / "macro_map.yaml"
 ).read_text(encoding="utf-8")
 
 
 def _write_yaml(tmp_path: Path, body: str) -> Path:
-    p = tmp_path / "property_macro_map.yaml"
+    p = tmp_path / "macro_map.yaml"
     p.write_text(body, encoding="utf-8")  # pyright: ignore[reportUnusedCallResult]
     return p
 
 
 def _load_mapping(
     tmp_path: Path, body: str, description_prefix: Optional[str] = None
-) -> PropertyMacroMapping:
+) -> MacroMap:
     """Helper function to write a mapping file and load it."""
     p = _write_yaml(tmp_path, body)
-    return PropertyMacroMapping.load(p, description_prefix=description_prefix)
+    return MacroMap.load(p, description_prefix=description_prefix)
 
 
 @pytest.fixture(scope="session")
-def sample_property_macro_map_path(tmp_path_factory: TempPathFactory):
-    """Creates a sample property macro map file for testing."""
+def sample_macro_map_path(tmp_path_factory: TempPathFactory):
+    """Creates a sample macro map file for testing."""
     tmp_path = tmp_path_factory.mktemp("data")
-    p = _write_yaml(tmp_path, SAMPLE_PROPERTY_MACRO_MAP)
+    p = _write_yaml(tmp_path, SAMPLE_MACRO_MAP)
     yield p
 
 
 @pytest.fixture(scope="session")
-def macro_map(sample_property_macro_map_path: Path) -> PropertyMacroMapping:
-    return PropertyMacroMapping.load(sample_property_macro_map_path)
+def macro_map(sample_macro_map_path: Path) -> MacroMap:
+    return MacroMap.load(sample_macro_map_path)
 
 
 def contains_valid_regex(macros: dict[str, ResolvedMacro]) -> bool:
@@ -78,7 +75,7 @@ def contains_valid_regex(macros: dict[str, ResolvedMacro]) -> bool:
     return True
 
 
-def get_all_properties_from_mapping(macro_map: PropertyMacroMapping) -> list[str]:
+def get_all_properties_from_mapping(macro_map: MacroMap) -> list[str]:
     """Helper function to get all properties defined in the macro map."""
     return list(macro_map._by_property.keys())
 
@@ -159,7 +156,7 @@ macros:
         # Check logs
         assert len(log_output.entries) == 1
         entry = log_output.entries[0]
-        assert entry["event"] == "Invalid macro name in mapping file; skipping"
+        assert entry["event"] == "Invalid macro name in macro map file; skipping"
         assert entry["macro_name"] == name
 
     @pytest.mark.parametrize(
@@ -218,12 +215,12 @@ macros:
 
 
 class TestMappingFileLoad:
-    """Tests for loading and validating the property macro mapping file."""
+    """Tests for loading and validating the macro map file."""
 
-    def test_read_example_mapping_snapshot(self, sample_property_macro_map_path: Path):
-        m = PropertyMacroMapping.load(sample_property_macro_map_path)
+    def test_read_example_mapping_snapshot(self, sample_macro_map_path: Path):
+        m = MacroMap.load(sample_macro_map_path)
 
-        # Dump internal representation of the property macro map
+        # Dump internal representation of the macro map
         assert m.model_dump_json(indent=2) == snapshot("""\
 {
   "definitions": [
@@ -753,7 +750,7 @@ class TestMappingFileLoad:
 }\
 """)
 
-    def test_example_properties_snapshot(self, macro_map: PropertyMacroMapping) -> None:
+    def test_example_properties_snapshot(self, macro_map: MacroMap) -> None:
         """Snapshot test for verifying changes to defined properties in example mapping."""
         assert get_all_properties_from_mapping(macro_map) == snapshot(
             [
@@ -791,7 +788,7 @@ class TestMappingFileLoad:
             ]
         )
 
-    def test_resolve_all_example_properties(self, macro_map: PropertyMacroMapping):
+    def test_resolve_all_example_properties(self, macro_map: MacroMap):
         """Test resolving macros for _all_ defined properties."""
         assert macro_map.get_macros(
             get_all_properties_from_mapping(macro_map),
@@ -914,14 +911,14 @@ macros:
         log_output: LogCapture,
     ) -> None:
         """Reading from a non-existent file should warn and return empty mapping."""
-        m = PropertyMacroMapping.load(tmp_path / "non_existent_file.yaml")
+        m = MacroMap.load(tmp_path / "non_existent_file.yaml")
         assert len(m.definitions) == 0
         assert len(m._by_property) == 0  # pyright: ignore[reportPrivateUsage]
 
         assert len(log_output.entries) == 1
         assert (
             log_output.entries[0]["event"]
-            == "Property macro map file does not exist; using empty mapping"
+            == "Macro map file does not exist; using empty mapping"
         )
 
     def test_macrodefin_requires_no_args(self) -> None:
@@ -933,7 +930,7 @@ macros:
 class TestPlainMacroResolve:
     """Tests for plain (non-regex, non-template) macro resolution."""
 
-    def test_resolve_first_single(self, macro_map: PropertyMacroMapping):
+    def test_resolve_first_single(self, macro_map: MacroMap):
         # Single value for plain macro
         assert macro_map.get_macros(["pizza"], DEFAULT_FACTS) == snapshot(
             {
@@ -945,9 +942,7 @@ class TestPlainMacroResolve:
             }
         )
 
-    def test_resolve_first_picks_alphabetical_first(
-        self, macro_map: PropertyMacroMapping
-    ):
+    def test_resolve_first_picks_alphabetical_first(self, macro_map: MacroMap):
         # Multiple values for resolve=first macro - should not combine, since it's not a regex macro
         assert macro_map.get_macros(["pizza", "barry"], DEFAULT_FACTS) == snapshot(
             {
@@ -961,7 +956,7 @@ class TestPlainMacroResolve:
 
     def test_resolve_last_single(
         self,
-        macro_map: PropertyMacroMapping,
+        macro_map: MacroMap,
     ):
         # Single value for resolve=last macro
         assert macro_map.get_macros(["tier_m"], DEFAULT_FACTS) == snapshot(
@@ -975,7 +970,7 @@ class TestPlainMacroResolve:
 
     def test_resolve_last_picks_alphabetical_last(
         self,
-        macro_map: PropertyMacroMapping,
+        macro_map: MacroMap,
     ):
         # Multiple values for resolve=last macro - should pick the alphabetically last property
         assert macro_map.get_macros(
@@ -1022,7 +1017,7 @@ macros:
 class TestRegexMacroResolve:
     """Tests for regex macro resolution and deduplication."""
 
-    def test_single_value(self, macro_map: PropertyMacroMapping):
+    def test_single_value(self, macro_map: MacroMap):
         # Single value for macro with regex support
         assert macro_map.get_macros(["bazinga"], DEFAULT_FACTS) == snapshot(
             {
@@ -1032,7 +1027,7 @@ class TestRegexMacroResolve:
             }
         )
 
-    def test_multiple_values_combined(self, macro_map: PropertyMacroMapping):
+    def test_multiple_values_combined(self, macro_map: MacroMap):
         # Multiple values for macro with regex support
         assert macro_map.get_macros(["bazinga", "grok"], DEFAULT_FACTS) == snapshot(
             {
@@ -1216,7 +1211,7 @@ macros:
 class TestContextMacro:
     """Tests for macros with text and regex contexts."""
 
-    def test_text_context(self, macro_map: PropertyMacroMapping):
+    def test_text_context(self, macro_map: MacroMap):
         # Macros with text context
         assert macro_map.get_macros(["foo"], DEFAULT_FACTS) == snapshot(
             {
@@ -1230,7 +1225,7 @@ class TestContextMacro:
             }
         )
 
-    def test_regex_context(self, macro_map: PropertyMacroMapping):
+    def test_regex_context(self, macro_map: MacroMap):
         # Macros with regex context
         assert macro_map.get_macros(["bar"], DEFAULT_FACTS) == snapshot(
             {
@@ -1246,7 +1241,7 @@ class TestContextMacro:
             }
         )
 
-    def test_text_and_regex_contexts(self, macro_map: PropertyMacroMapping):
+    def test_text_and_regex_contexts(self, macro_map: MacroMap):
         # Macros with two different contexts (text and regex)
         assert macro_map.get_macros(["foo", "bar"], DEFAULT_FACTS) == snapshot(
             {
@@ -1269,9 +1264,7 @@ class TestContextMacro:
             }
         )
 
-    def test_multiple_regex_contexts_resolve_first(
-        self, macro_map: PropertyMacroMapping
-    ):
+    def test_multiple_regex_contexts_resolve_first(self, macro_map: MacroMap):
         # Macros with two regex contexts with different values for a resolve=first macro
         # (alphabetically first is chosen -> "bar" chosen over "gux")
         assert macro_map.get_macros(["bar", "gux"], DEFAULT_FACTS) == snapshot(
@@ -1439,7 +1432,7 @@ macros:
 class TestTemplateMacro:
     """Tests for template-based macro resolution."""
 
-    def test_only_host_facts(self, macro_map: PropertyMacroMapping):
+    def test_only_host_facts(self, macro_map: MacroMap):
         # Test simple templated macro with no extra values - just host facts
         assert macro_map.get_macros(["dashboard_node"], DEFAULT_FACTS) == snapshot(
             {
@@ -1450,7 +1443,7 @@ class TestTemplateMacro:
             }
         )
 
-    def test_default_placeholder(self, macro_map: PropertyMacroMapping):
+    def test_default_placeholder(self, macro_map: MacroMap):
         # Test templated macro with extra placeholders
         assert macro_map.get_macros(["monitored_node"], DEFAULT_FACTS) == snapshot(
             {
@@ -1462,7 +1455,7 @@ class TestTemplateMacro:
             }
         )
 
-    def test_per_property_value_override(self, macro_map: PropertyMacroMapping):
+    def test_per_property_value_override(self, macro_map: MacroMap):
         # Test templated macro with extra placeholders
         assert macro_map.get_macros(["legacy_exporter"], DEFAULT_FACTS) == snapshot(
             {
@@ -1474,7 +1467,7 @@ class TestTemplateMacro:
             }
         )
 
-    def test_resolve_first_with_overrides(self, macro_map: PropertyMacroMapping):
+    def test_resolve_first_with_overrides(self, macro_map: MacroMap):
         # Test templated macro with extra placeholders (resolve to `legacy_exporter` because of alphabetical order)
         assert macro_map.get_macros(
             ["monitored_node", "legacy_exporter"], DEFAULT_FACTS
@@ -1488,9 +1481,7 @@ class TestTemplateMacro:
             }
         )
 
-    def test_per_property_template_same_placeholders(
-        self, macro_map: PropertyMacroMapping
-    ):
+    def test_per_property_template_same_placeholders(self, macro_map: MacroMap):
         """Test templated macro with property that defines new template (with the same placeholders)."""
         assert macro_map.get_macros(["legacy_ingestor"], DEFAULT_FACTS) == snapshot(
             {
@@ -1506,7 +1497,7 @@ class TestTemplateMacro:
 
     def test_per_property_template_new_placeholders(
         self,
-        macro_map: PropertyMacroMapping,
+        macro_map: MacroMap,
     ):
         """Test templated macro with properties that override the template and values on a per-property basis."""
         assert macro_map.get_macros(
@@ -1523,7 +1514,7 @@ class TestTemplateMacro:
             }
         )
 
-    def test_with_text_context(self, macro_map: PropertyMacroMapping):
+    def test_with_text_context(self, macro_map: MacroMap):
         """Test template macro with text context."""
 
         # Inherits no defaults - specifies all values itself
@@ -1564,7 +1555,7 @@ class TestTemplateMacro:
             }
         )
 
-    def test_with_regex_context(self, macro_map: PropertyMacroMapping):
+    def test_with_regex_context(self, macro_map: MacroMap):
         """Test template macro with regex context."""
 
         # Inherits no defaults - specifies all values itself
@@ -2354,7 +2345,7 @@ macros:
 class TestSpecialValueTypes:
     """Tests for secret and vault macro value types."""
 
-    def test_secret(self, macro_map: PropertyMacroMapping):
+    def test_secret(self, macro_map: MacroMap):
         # Single value for secret macro
         assert macro_map.get_macros(["has_api_integration"], DEFAULT_FACTS) == snapshot(
             {
@@ -2367,7 +2358,7 @@ class TestSpecialValueTypes:
             }
         )
 
-    def test_vault(self, macro_map: PropertyMacroMapping):
+    def test_vault(self, macro_map: MacroMap):
         # Single value for vault macro
         assert macro_map.get_macros(["uses_vault_secrets"], DEFAULT_FACTS) == snapshot(
             {
@@ -2456,7 +2447,7 @@ macros:
 
     def test_builtin_keys_used_in_example_mapping(
         self,
-        macro_map: PropertyMacroMapping,
+        macro_map: MacroMap,
     ) -> None:
         """Test that template placeholder substitutions are resolved correctly and contain the expected keys."""
 

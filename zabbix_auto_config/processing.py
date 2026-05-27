@@ -51,7 +51,7 @@ from zabbix_auto_config.exceptions import ZabbixAPISessionExpired
 from zabbix_auto_config.exceptions import ZabbixNotFoundError
 from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.failsafe import check_failsafe
-from zabbix_auto_config.macros import PropertyMacroMapping
+from zabbix_auto_config.macros import MacroMap
 from zabbix_auto_config.macros import ResolvedMacro
 from zabbix_auto_config.pyzabbix.client import ZabbixAPI
 from zabbix_auto_config.pyzabbix.enums import InterfaceType
@@ -1134,7 +1134,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         # TODO: refactor along with other mapping files if application is
         # rewritten to read mapping files on each work iteration, as opposed
         # to only on startup!
-        self.property_macro_map = PropertyMacroMapping.from_config(self.config)
+        self.macro_map = MacroMap.from_config(self.config)
 
     def get_or_create_hostgroup(self, hostgroup: str) -> HostGroup:
         """Fetch a host group, creating it if it doesn't exist."""
@@ -1750,9 +1750,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
         # we determine macros here based on the mapping file, then compare them
         # with the macros from the Zabbix host. Macros are thus NOT synced
         # to the DB host, and we instead just calculate the desired macro
-        # state here.
+        # state here on each iteration.
 
-        result = self.property_macro_map.resolve_macros(db_host, zabbix_host)
+        result = self.macro_map.resolve_macros(db_host, zabbix_host)
         # Remove existing macros
         if result.remove:
             self.remove_macros_from_host(zabbix_host, result.remove)

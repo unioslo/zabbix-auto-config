@@ -121,21 +121,21 @@ class FailsafeError(ZACException):
         super().__init__(*args, **kwargs)
 
 
-class MacroMappingError(ZACException):
-    """Base exception for macro mapping errors."""
+class MacroMapError(ZACException):
+    """Base exception for macro map errors."""
 
 
-class MacroMappingFileReadError(MacroMappingError):
-    """Errors related to reading the macro mapping file."""
+class MacroMapFileReadError(MacroMapError):
+    """Errors related to reading the macro map file."""
 
 
-class MacroMappingFileNotFound(MacroMappingFileReadError, FileNotFoundError):
-    """Macro mapping file does not exist."""
+class MacroMapFileNotFound(MacroMapFileReadError, FileNotFoundError):
+    """Macro map file does not exist."""
 
 
-class InvalidMacroMappingFileError(MacroMappingError):
-    """Macro mapping file is invalid."""
+class InvalidMacroMapFileError(MacroMapError):
+    """Macro map file is invalid."""
 
 
-class EmptyMacroMappingError(MacroMappingError):
-    """Macro mapping file is empty."""
+class EmptyMacroMapError(MacroMapError):
+    """Macro map file is empty."""

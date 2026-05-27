@@ -18,9 +18,9 @@ from typing_extensions import assert_never
 
 from zabbix_auto_config.cli._app import ZacApp
 from zabbix_auto_config.macros import HostMacroResult
+from zabbix_auto_config.macros import MacroMap
 from zabbix_auto_config.macros import MacroMapFileIn
 from zabbix_auto_config.macros import MacroValueType
-from zabbix_auto_config.macros import PropertyMacroMapping
 from zabbix_auto_config.macros import PropertyValueIn
 from zabbix_auto_config.macros import ResolvedMacro
 
@@ -74,7 +74,7 @@ def _render_properties(properties: dict[str, PropertyValueIn]) -> str:
 
 
 def _render_macro_map_file(m: MacroMapFileIn) -> Table:
-    """Render the input macro mapping file as a table."""
+    """Render the input macro map file as a table."""
     # NOTE: this does not recurse/dig into
     table = Table(
         title="Macro Definitions",
@@ -103,7 +103,7 @@ def _render_macro_map_file(m: MacroMapFileIn) -> Table:
 def validate(
     ctx: typer.Context,
     file: Optional[Path] = typer.Argument(  # noqa: B008
-        None, help="Alternative path to macro mapping file"
+        None, help="Alternative path to macro map file"
     ),
     verbose: bool = typer.Option(  # noqa: B008
         False, "--verbose", "-v", help="Show traceback on failed validation"
@@ -114,12 +114,12 @@ def validate(
         help="Show validated macro definitions",
     ),
 ) -> None:
-    """Validate a macro mapping file. Uses the default macro mapping file unless otherwise specified."""
+    """Validate a macro map file. Uses the default macro map file unless otherwise specified."""
     if not file:
         file = macros_app.get_config().zabbix.macro_map_file
 
     try:
-        in_file = PropertyMacroMapping._load_infile(file)
+        in_file = MacroMap._load_infile(file)
     except Exception as e:
         # TODO: this is _not_ pretty! Need some nicer abstractions here.
         from rich.panel import Panel
@@ -138,7 +138,7 @@ def validate(
         p = Panel(_CONSOLE.render_str(e_str), title=title)
         _CONSOLE.print(p)
         _CONSOLE.print(
-            f":cross_mark:Failed to validate macro mapping file {file}", style="red"
+            f":cross_mark:Failed to validate macro map file {file}", style="red"
         )
         return  # Nothing more to do
 
@@ -146,9 +146,7 @@ def validate(
         table = _render_macro_map_file(in_file)
         _CONSOLE.print(table)
 
-    _CONSOLE.print(
-        f":white_check_mark:Macro mapping file {file} is valid", style="green"
-    )
+    _CONSOLE.print(f":white_check_mark:Macro map file {file} is valid", style="green")
 
 
 class OutputMode(str, Enum):
@@ -187,7 +185,7 @@ def preview_macros(
     If `hostname` is provided, only show macros for that host.
     """
     config = macros_app.get_config()
-    macro_map = PropertyMacroMapping.from_config(config)
+    macro_map = MacroMap.from_config(config)
 
     if offline:
         if not hostname:
@@ -214,7 +212,7 @@ def preview_macros(
 
 
 def _preview_offline(
-    macro_map: PropertyMacroMapping, hostname: str, properties: set[str]
+    macro_map: MacroMap, hostname: str, properties: set[str]
 ) -> dict[str, HostMacroResult]:
     """Preview macros to be assigned to a host based on its properties/hostname."""
     from zabbix_auto_config.models import Host
@@ -237,7 +235,7 @@ def _preview_offline(
 
 
 def _preview_online(
-    macro_map: PropertyMacroMapping, hostname: Optional[str]
+    macro_map: MacroMap, hostname: Optional[str]
 ) -> dict[str, HostMacroResult]:
     """Preview macros for real hosts in Zabbix, optionally filtered by hostname."""
     from zabbix_auto_config.processing import ZabbixHostUpdater

@@ -129,7 +129,7 @@ class ZabbixSettings(ConfigBaseModel):
 
     @property
     def macro_map_file(self) -> Path:
-        return Path(self.map_dir) / "property_macro_map.yaml"
+        return Path(self.map_dir) / "macro_map.yaml"
 
 
 class ZabbixHostSettings(ConfigBaseModel):

@@ -608,8 +608,8 @@ ZAC operates on a concept of mapping files to assign assign attributes to hosts 
   - Maps host properties (attributes for hosts gathered via source collectors) to host groups. If a host has a property that is present in the mapping file, the host will be added to the corresponding host group(s).
 - Property-template mapping
   - Maps host properties to templates. If a host has a property that is present in the mapping file, the corresponding template(s) will be linked to the host.
-- Property-macro mapping
-  - Maps host properties to macros. If a host has a property that is present in the mapping file, the corresponding macro(s) will be set for the host with the value(s) specified in the mapping file.
+- Macro mapping
+  - Defines macros whose values are selected by host properties and/or hostname overrides. Each macro declares the properties and/or hostnames that contribute to the macro value.
 
 All mapping files are expected to be found in the directory configured with the `zabbix.map_dir` option in the config file:
 
@@ -653,12 +653,12 @@ os_linux:Template OS Linux
 os_windows:Template OS Windows
 ```
 
-#### Property-macro mapping
+#### Macro mapping
 
-The property-macro mapping file is used to define macros that should be set on hosts based on their properties. In its most basic form it looks like this:
+The macro map file defines macros to set on hosts. Each macro declares the properties (and optionally hostnames) that contribute values. In its most basic form it looks like this:
 
 ```yaml
-# property_macro_map.yaml
+# macro_map.yaml
 
 macros:
   "{$ZAC.PLAIN_MACRO}":
@@ -760,7 +760,7 @@ macros:
           strict:
             value: 40
             description: "Overriding description for strict property in /var/log context"
-          very_strict: 50 # <- very_strict only used here!
+          very_strict: 50
 ```
 
 Contexts exist independently of the parent macro it is defined on, and properties for contexts do not have to match those defined on the parent macro.
