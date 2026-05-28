@@ -265,7 +265,7 @@ class ResolvedMacro:
 
     identity: MacroIdentity
     value: str
-    description: Optional[MacroDescription] = None
+    description: MacroDescription = field(default=MacroDescription(""))
     value_type: MacroValueType = MacroValueType.TEXT
 
     @property
@@ -929,15 +929,14 @@ class MacroMap:
 
         return factory.build()
 
-    def _get_description(self, description: str | None) -> Optional[MacroDescription]:
+    def _get_description(self, description: str | None) -> MacroDescription:
         """Get final description for a macro, with mapping-level prefix if defined."""
         parts: list[str] = []
         if self.description_prefix:
             parts.append(self.description_prefix.strip())
         if description:
             parts.append(description.strip())
-        if parts:  # avoid creating empty description if no parts -> "" semantically different from None
-            return MacroDescription(" ".join(parts))
+        return MacroDescription(" ".join(parts))
 
     def get_macros(
         self,
