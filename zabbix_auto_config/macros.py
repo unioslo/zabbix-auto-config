@@ -752,6 +752,7 @@ class MacroMapFactory(Generic[MacroMapT]):
     _definitions: dict[MacroIdentity, MacroDefinition] = field(default_factory=dict)
 
     def add(self, defn: MacroDefinition) -> None:
+        """Add a macro definition to the builder."""
         if defn.identity in self._definitions:
             # NOTE: pyyaml silently overwrites duplicate mapping keys on read,
             # so this branch is rarely reached from YAML loads.
@@ -808,7 +809,10 @@ class MacroMapFactory(Generic[MacroMapT]):
 
 @dataclass(frozen=True)
 class MacroMap:
-    """Mapping of macros to properties and hosts."""
+    """Mapping of macros to properties and hosts.
+
+    Immutable, constructed via MacroMapFactory.
+    """
 
     # NOTE: rewrite as property? let _by_property be the single source of truth
     # Either accept recalculation overhead, or cache and invalidate on add() call
