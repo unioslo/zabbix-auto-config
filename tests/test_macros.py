@@ -96,6 +96,7 @@ class TestMacroNameValidation:
             ("{$._._._.}", True),
             ("{$.}", True),
             # Invalid cases
+            ("{$macro_lowercase}", False),
             ("{$MACRO_FOREIGN_CHAR_Æ}", False),
             ("{$ÆØÅ}", False),
             ("{$MACRO-WITH-DASH}", False),
@@ -117,6 +118,7 @@ class TestMacroNameValidation:
             "{$ZAC.INVALID}EXTRA",
             "{$ZAC.INV@LID}",
             "ZAC.INVALID",
+            "{$ZAC.invalid.lowercase}",
         ],
     )
     def test_invalid_macro_name_in_yaml(
