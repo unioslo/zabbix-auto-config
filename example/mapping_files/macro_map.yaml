@@ -221,10 +221,12 @@ macros:
     properties:
       host_overridden_node:
     hosts:
-      special.example.com:           # exact match (preferred)
+      # exact match (preferred)
+      special.example.com: # valid hostnames are automatically detected and don't need to be escaped
         values:
           port: 9500
           endpoint: special-metrics
-      ".*\\.legacy\\.example\\.com": # regex fallback - must be escaped for YAML
+      # regex fallback - must be quoted and escaped (double backslash) for YAML
+      ".*\\.legacy\\.example\\.com":
         values:
           port: 9101

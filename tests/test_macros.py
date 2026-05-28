@@ -14,10 +14,13 @@ from zabbix_auto_config.macros import ContextType
 from zabbix_auto_config.macros import HostFacts
 from zabbix_auto_config.macros import HostMacroResult
 from zabbix_auto_config.macros import MacroDefIn
+from zabbix_auto_config.macros import MacroDefinition
 from zabbix_auto_config.macros import MacroIdentity
 from zabbix_auto_config.macros import MacroMap
+from zabbix_auto_config.macros import MacroValue
 from zabbix_auto_config.macros import MacroValueType
 from zabbix_auto_config.macros import ResolvedMacro
+from zabbix_auto_config.macros import ResolveStrategy
 from zabbix_auto_config.macros import get_host_facts
 from zabbix_auto_config.macros import get_placeholders
 from zabbix_auto_config.macros import get_substitutions
@@ -73,11 +76,6 @@ def contains_valid_regex(macros: dict[str, ResolvedMacro]) -> bool:
         except re.error:
             pytest.fail(f"Invalid regex pattern for macro {name}: {macro.value}")
     return True
-
-
-def get_all_properties_from_mapping(macro_map: MacroMap) -> list[str]:
-    """Helper function to get all properties defined in the macro map."""
-    return list(macro_map._by_property.keys())
 
 
 class TestMacroNameValidation:
@@ -217,542 +215,259 @@ macros:
 class TestMappingFileLoad:
     """Tests for loading and validating the macro map file."""
 
-    def test_read_example_mapping_snapshot(self, sample_macro_map_path: Path):
-        m = MacroMap.load(sample_macro_map_path)
+    def test_example_definitions_snapshot(self, macro_map: MacroMap):
+        """Test that macro definitions in example mapping remain stable."""
+        assert macro_map.definitions == snapshot(
+            (
+                MacroDefinition(
+                    identity=MacroIdentity(name="{$ZAC.PLAIN_MACRO}"),
+                    description="Macro description",
+                    properties={
+                        "barry": MacroValue(value="barry value"),
+                        "pizza": MacroValue(value="pizza value"),
+                        "spam": MacroValue(
+                            value="a spam value", description="Custom spam description"
+                        ),
+                    },
+                ),
+                MacroDefinition(
+                    identity=MacroIdentity(name="{$ZAC.LAST_MACRO}"),
+                    resolve=ResolveStrategy.LAST,
+                    properties={
+                        "tier_a": MacroValue(value="tier_a value"),
+                        "tier_m": MacroValue(value="tier_m value"),
+                        "tier_z": MacroValue(value="tier_z value"),
+                    },
+                ),
+                MacroDefinition(
+                    identity=MacroIdentity(name="{$ZAC.REGEX_MACRO}"),
+                    resolve=ResolveStrategy.REGEX,
+                    properties={
+                        "bazinga": MacroValue(value="bazinga"),
+                        "spam": MacroValue(value="spam value"),
+                        "grok": MacroValue(value="^grok value$"),
+                    },
+                ),
+                MacroDefinition(
+                    identity=MacroIdentity(name="{$ZAC.BASIC_TEMPLATE_MACRO}"),
+                    template="https://grafana.example.com/d/node?var-host={{hostname}}",
+                    properties={
+                        "dashboard_node": MacroValue(
+                            template="https://grafana.example.com/d/node?var-host={{hostname}}"
+                        )
+                    },
+                ),
+                MacroDefinition(
+                    identity=MacroIdentity(name="{$ZAC.ADVANCED_TEMPLATE_MACRO}"),
+                    description="Agent scrape URL",
+                    template="https://{{hostname}}:{{port}}/{{endpoint}}",
+                    defaults={"port": "9100", "endpoint": "metrics"},
+                    properties={
+                        "monitored_node": MacroValue(
+                            template="https://{{hostname}}:{{port}}/{{endpoint}}"
+                        ),
+                        "legacy_exporter": MacroValue(
+                            values={"port": "9101", "endpoint": "metrics"},
+                            template="https://{{hostname}}:{{port}}/{{endpoint}}",
+                        ),
+                    },
+                ),
+                MacroDefinition(
+                    identity=MacroIdentity(
+                        name="{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}"
+                    ),
+                    description="Ingestion endpoint",
+                    template="https://{{hostname}}:{{port}}/{{endpoint}}",
+                    defaults={"port": "9100", "endpoint": "ingestion"},
+                    properties={
+                        "logs_ingestor": MacroValue(
+                            template="https://{{hostname}}:{{port}}/{{endpoint}}"
+                        ),
+                        "legacy_ingestor": MacroValue(
+                            values={"port": "9100", "endpoint": "ingestion"},
+                            template="https://{{hostname}}:{{port}}/legacy/{{endpoint}}",
+                        ),
+                        "older_legacy_ingestor": MacroValue(
+                            values={
+                                "port": "9101",
+                                "different_placeholder": "old-ingestor",
+                                "endpoint": "ingestion",
+                            },
+                            template="https://{{hostname}}:{{port}}/legacy/{{different_placeholder}}",
+                        ),
+                    },
+                ),
+                MacroDefinition(
+                    identity=MacroIdentity(name="{$ZAC.SIMPLE_PARENT_ADVANCED_CHILD}"),
+                    description="Ingestion endpoint",
+                    template="{{value}}",
+                    defaults={"value": "defaultval"},
+                    properties={
+                        "default_ingestor": MacroValue(
+                            values={"value": "foo_val"}, template="{{value}}"
+                        ),
+                        "labeled_ingestor": MacroValue(
+                            values={"value": "defaultval"}, template="value: {{value}}"
+                        ),
+                        "json_ingestor": MacroValue(
+                            values={
+                                "port": "9101",
+                                "endpoint": "healthcheck",
+                                "value": "defaultval",
+                            },
+                            template='{"endpoint": "{{endpoint}}", "port": "{{port}}"}',
+                        ),
+                    },
+                ),
+                MacroDefinition(
+                    identity=MacroIdentity(name="{$ZAC.API_TOKEN}"),
+                    description="API token used by monitoring scripts",
+                    value_type=MacroValueType.SECRET,
+                    properties={
+                        "has_api_integration": MacroValue(value="s3cr3t-t0k3n")
+                    },
+                ),
+                MacroDefinition(
+                    identity=MacroIdentity(name="{$ZAC.DB_PASSWORD}"),
+                    description="DB password fetched from Vault",
+                    value_type=MacroValueType.VAULT,
+                    properties={
+                        "uses_vault_secrets": MacroValue(
+                            value="secret/zabbix/db:password"
+                        )
+                    },
+                ),
+                MacroDefinition(
+                    identity=MacroIdentity(name="{$ZAC.OPTIONAL_CONTEXT}"),
+                    description="This macro has contexts, but is optional",
+                    properties={
+                        "spam": MacroValue(value="value for non-context spam"),
+                        "eggs": MacroValue(value="value for non-context eggs"),
+                    },
+                ),
+                MacroDefinition(
+                    identity=MacroIdentity(
+                        name="{$ZAC.OPTIONAL_CONTEXT}", context="/tmp"
+                    ),
+                    description="Description for /tmp context used here",
+                    properties={
+                        "spam": MacroValue(value="20"),
+                        "foo": MacroValue(value="30"),
+                        "baz": MacroValue(value="40"),
+                    },
+                ),
+                MacroDefinition(
+                    identity=MacroIdentity(
+                        name="{$ZAC.OPTIONAL_CONTEXT}",
+                        context="^/var/log/.*$",
+                        context_type=ContextType.REGEX,
+                    ),
+                    description="This macro has contexts, but is optional",
+                    properties={
+                        "spam": MacroValue(value="30"),
+                        "bar": MacroValue(value="40"),
+                        "gux": MacroValue(value="50"),
+                    },
+                ),
+                MacroDefinition(
+                    identity=MacroIdentity(name="{$ZAC.TEMPLATE_AND_CONTEXT}"),
+                    description="This macro has a template and contexts",
+                    template="https://{{hostname}}:{{port}}/ctx/{{endpoint}}",
+                    defaults={"port": "9100", "endpoint": "defaultendpoint"},
+                ),
+                MacroDefinition(
+                    identity=MacroIdentity(
+                        name="{$ZAC.TEMPLATE_AND_CONTEXT}", context="internal"
+                    ),
+                    description="Description for internal context used here",
+                    template="https://{{hostname}}:{{port}}/ctx/{{endpoint}}",
+                    defaults={"port": "9100", "endpoint": "defaultendpoint"},
+                    properties={
+                        "qux": MacroValue(
+                            values={"port": "20", "endpoint": "quxpoint"},
+                            template="https://{{hostname}}:{{port}}/ctx/{{endpoint}}",
+                        ),
+                        "quux": MacroValue(
+                            values={"endpoint": "quuxpoint", "port": "9100"},
+                            template="https://{{hostname}}:{{port}}/ctx/{{endpoint}}",
+                        ),
+                        "corge": MacroValue(
+                            template="https://{{hostname}}:{{port}}/ctx/{{endpoint}}"
+                        ),
+                    },
+                ),
+                MacroDefinition(
+                    identity=MacroIdentity(
+                        name="{$ZAC.TEMPLATE_AND_CONTEXT}",
+                        context="^site:.*",
+                        context_type=ContextType.REGEX,
+                    ),
+                    description="This macro has a template and contexts",
+                    template="https://{{hostname}}:{{port}}/internal/{{ctxpoint}}",
+                    defaults={
+                        "ctxpoint": "regexpoint",
+                        "port": "9100",
+                        "endpoint": "defaultendpoint",
+                    },
+                    properties={
+                        "waldo": MacroValue(
+                            values={
+                                "port": "30",
+                                "ctxpoint": "waldopoint",
+                                "endpoint": "defaultendpoint",
+                            },
+                            template="https://{{hostname}}:{{port}}/internal/{{ctxpoint}}",
+                        ),
+                        "plugh": MacroValue(
+                            values={
+                                "ctxpoint": "plughpoint",
+                                "port": "9100",
+                                "endpoint": "defaultendpoint",
+                            },
+                            template="https://{{hostname}}:{{port}}/internal/{{ctxpoint}}",
+                        ),
+                        "xyzzy": MacroValue(
+                            template="https://{{hostname}}:{{port}}/internal/{{ctxpoint}}"
+                        ),
+                    },
+                ),
+                MacroDefinition(
+                    identity=MacroIdentity(name="{$ZAC.HOST_OVERRIDDEN}"),
+                    description="Per-host scrape URL",
+                    template="https://{{hostname}}:{{port}}/{{endpoint}}",
+                    defaults={"port": "9100", "endpoint": "metrics"},
+                    properties={
+                        "host_overridden_node": MacroValue(
+                            template="https://{{hostname}}:{{port}}/{{endpoint}}"
+                        )
+                    },
+                    hosts={
+                        "special.example.com": MacroValue(
+                            values={"port": "9500", "endpoint": "special-metrics"},
+                            template="https://{{hostname}}:{{port}}/{{endpoint}}",
+                        ),
+                        ".*\\.legacy\\.example\\.com": MacroValue(
+                            values={"port": "9101", "endpoint": "metrics"},
+                            template="https://{{hostname}}:{{port}}/{{endpoint}}",
+                        ),
+                    },
+                ),
+            )
+        )
 
-        # Dump internal representation of the macro map
-        assert m.model_dump_json(indent=2) == snapshot("""\
-{
-  "definitions": [
-    {
-      "identity": {
-        "name": "{$ZAC.PLAIN_MACRO}",
-        "context": null,
-        "context_type": "static"
-      },
-      "description": "Macro description",
-      "value_type": "text",
-      "resolve": "first",
-      "template": null,
-      "defaults": {},
-      "properties": {
-        "barry": {
-          "value": "barry value",
-          "description": null,
-          "values": {},
-          "template": null
-        },
-        "pizza": {
-          "value": "pizza value",
-          "description": null,
-          "values": {},
-          "template": null
-        },
-        "spam": {
-          "value": "a spam value",
-          "description": "Custom spam description",
-          "values": {},
-          "template": null
-        }
-      },
-      "hosts": {}
-    },
-    {
-      "identity": {
-        "name": "{$ZAC.LAST_MACRO}",
-        "context": null,
-        "context_type": "static"
-      },
-      "description": null,
-      "value_type": "text",
-      "resolve": "last",
-      "template": null,
-      "defaults": {},
-      "properties": {
-        "tier_a": {
-          "value": "tier_a value",
-          "description": null,
-          "values": {},
-          "template": null
-        },
-        "tier_m": {
-          "value": "tier_m value",
-          "description": null,
-          "values": {},
-          "template": null
-        },
-        "tier_z": {
-          "value": "tier_z value",
-          "description": null,
-          "values": {},
-          "template": null
-        }
-      },
-      "hosts": {}
-    },
-    {
-      "identity": {
-        "name": "{$ZAC.REGEX_MACRO}",
-        "context": null,
-        "context_type": "static"
-      },
-      "description": null,
-      "value_type": "text",
-      "resolve": "regex",
-      "template": null,
-      "defaults": {},
-      "properties": {
-        "bazinga": {
-          "value": "bazinga",
-          "description": null,
-          "values": {},
-          "template": null
-        },
-        "spam": {
-          "value": "spam value",
-          "description": null,
-          "values": {},
-          "template": null
-        },
-        "grok": {
-          "value": "^grok value$",
-          "description": null,
-          "values": {},
-          "template": null
-        }
-      },
-      "hosts": {}
-    },
-    {
-      "identity": {
-        "name": "{$ZAC.BASIC_TEMPLATE_MACRO}",
-        "context": null,
-        "context_type": "static"
-      },
-      "description": null,
-      "value_type": "text",
-      "resolve": "first",
-      "template": "https://grafana.example.com/d/node?var-host={{hostname}}",
-      "defaults": {},
-      "properties": {
-        "dashboard_node": {
-          "value": null,
-          "description": null,
-          "values": {},
-          "template": "https://grafana.example.com/d/node?var-host={{hostname}}"
-        }
-      },
-      "hosts": {}
-    },
-    {
-      "identity": {
-        "name": "{$ZAC.ADVANCED_TEMPLATE_MACRO}",
-        "context": null,
-        "context_type": "static"
-      },
-      "description": "Agent scrape URL",
-      "value_type": "text",
-      "resolve": "first",
-      "template": "https://{{hostname}}:{{port}}/{{endpoint}}",
-      "defaults": {
-        "port": "9100",
-        "endpoint": "metrics"
-      },
-      "properties": {
-        "monitored_node": {
-          "value": null,
-          "description": null,
-          "values": {},
-          "template": "https://{{hostname}}:{{port}}/{{endpoint}}"
-        },
-        "legacy_exporter": {
-          "value": null,
-          "description": null,
-          "values": {
-            "port": "9101",
-            "endpoint": "metrics"
-          },
-          "template": "https://{{hostname}}:{{port}}/{{endpoint}}"
-        }
-      },
-      "hosts": {}
-    },
-    {
-      "identity": {
-        "name": "{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}",
-        "context": null,
-        "context_type": "static"
-      },
-      "description": "Ingestion endpoint",
-      "value_type": "text",
-      "resolve": "first",
-      "template": "https://{{hostname}}:{{port}}/{{endpoint}}",
-      "defaults": {
-        "port": "9100",
-        "endpoint": "ingestion"
-      },
-      "properties": {
-        "logs_ingestor": {
-          "value": null,
-          "description": null,
-          "values": {},
-          "template": "https://{{hostname}}:{{port}}/{{endpoint}}"
-        },
-        "legacy_ingestor": {
-          "value": null,
-          "description": null,
-          "values": {
-            "port": "9100",
-            "endpoint": "ingestion"
-          },
-          "template": "https://{{hostname}}:{{port}}/legacy/{{endpoint}}"
-        },
-        "older_legacy_ingestor": {
-          "value": null,
-          "description": null,
-          "values": {
-            "port": "9101",
-            "different_placeholder": "old-ingestor",
-            "endpoint": "ingestion"
-          },
-          "template": "https://{{hostname}}:{{port}}/legacy/{{different_placeholder}}"
-        }
-      },
-      "hosts": {}
-    },
-    {
-      "identity": {
-        "name": "{$ZAC.SIMPLE_PARENT_ADVANCED_CHILD}",
-        "context": null,
-        "context_type": "static"
-      },
-      "description": "Ingestion endpoint",
-      "value_type": "text",
-      "resolve": "first",
-      "template": "{{value}}",
-      "defaults": {
-        "value": "defaultval"
-      },
-      "properties": {
-        "default_ingestor": {
-          "value": null,
-          "description": null,
-          "values": {
-            "value": "foo_val"
-          },
-          "template": "{{value}}"
-        },
-        "labeled_ingestor": {
-          "value": null,
-          "description": null,
-          "values": {
-            "value": "defaultval"
-          },
-          "template": "value: {{value}}"
-        },
-        "json_ingestor": {
-          "value": null,
-          "description": null,
-          "values": {
-            "port": "9101",
-            "endpoint": "healthcheck",
-            "value": "defaultval"
-          },
-          "template": "{\\"endpoint\\": \\"{{endpoint}}\\", \\"port\\": \\"{{port}}\\"}"
-        }
-      },
-      "hosts": {}
-    },
-    {
-      "identity": {
-        "name": "{$ZAC.API_TOKEN}",
-        "context": null,
-        "context_type": "static"
-      },
-      "description": "API token used by monitoring scripts",
-      "value_type": "secret",
-      "resolve": "first",
-      "template": null,
-      "defaults": {},
-      "properties": {
-        "has_api_integration": {
-          "value": "s3cr3t-t0k3n",
-          "description": null,
-          "values": {},
-          "template": null
-        }
-      },
-      "hosts": {}
-    },
-    {
-      "identity": {
-        "name": "{$ZAC.DB_PASSWORD}",
-        "context": null,
-        "context_type": "static"
-      },
-      "description": "DB password fetched from Vault",
-      "value_type": "vault",
-      "resolve": "first",
-      "template": null,
-      "defaults": {},
-      "properties": {
-        "uses_vault_secrets": {
-          "value": "secret/zabbix/db:password",
-          "description": null,
-          "values": {},
-          "template": null
-        }
-      },
-      "hosts": {}
-    },
-    {
-      "identity": {
-        "name": "{$ZAC.OPTIONAL_CONTEXT}",
-        "context": null,
-        "context_type": "static"
-      },
-      "description": "This macro has contexts, but is optional",
-      "value_type": "text",
-      "resolve": "first",
-      "template": null,
-      "defaults": {},
-      "properties": {
-        "spam": {
-          "value": "value for non-context spam",
-          "description": null,
-          "values": {},
-          "template": null
-        },
-        "eggs": {
-          "value": "value for non-context eggs",
-          "description": null,
-          "values": {},
-          "template": null
-        }
-      },
-      "hosts": {}
-    },
-    {
-      "identity": {
-        "name": "{$ZAC.OPTIONAL_CONTEXT}",
-        "context": "/tmp",
-        "context_type": "static"
-      },
-      "description": "Description for /tmp context used here",
-      "value_type": "text",
-      "resolve": "first",
-      "template": null,
-      "defaults": {},
-      "properties": {
-        "spam": {
-          "value": "20",
-          "description": null,
-          "values": {},
-          "template": null
-        },
-        "foo": {
-          "value": "30",
-          "description": null,
-          "values": {},
-          "template": null
-        },
-        "baz": {
-          "value": "40",
-          "description": null,
-          "values": {},
-          "template": null
-        }
-      },
-      "hosts": {}
-    },
-    {
-      "identity": {
-        "name": "{$ZAC.OPTIONAL_CONTEXT}",
-        "context": "^/var/log/.*$",
-        "context_type": "regex"
-      },
-      "description": "This macro has contexts, but is optional",
-      "value_type": "text",
-      "resolve": "first",
-      "template": null,
-      "defaults": {},
-      "properties": {
-        "spam": {
-          "value": "30",
-          "description": null,
-          "values": {},
-          "template": null
-        },
-        "bar": {
-          "value": "40",
-          "description": null,
-          "values": {},
-          "template": null
-        },
-        "gux": {
-          "value": "50",
-          "description": null,
-          "values": {},
-          "template": null
-        }
-      },
-      "hosts": {}
-    },
-    {
-      "identity": {
-        "name": "{$ZAC.TEMPLATE_AND_CONTEXT}",
-        "context": null,
-        "context_type": "static"
-      },
-      "description": "This macro has a template and contexts",
-      "value_type": "text",
-      "resolve": "first",
-      "template": "https://{{hostname}}:{{port}}/ctx/{{endpoint}}",
-      "defaults": {
-        "port": "9100",
-        "endpoint": "defaultendpoint"
-      },
-      "properties": {},
-      "hosts": {}
-    },
-    {
-      "identity": {
-        "name": "{$ZAC.TEMPLATE_AND_CONTEXT}",
-        "context": "internal",
-        "context_type": "static"
-      },
-      "description": "Description for internal context used here",
-      "value_type": "text",
-      "resolve": "first",
-      "template": "https://{{hostname}}:{{port}}/ctx/{{endpoint}}",
-      "defaults": {
-        "port": "9100",
-        "endpoint": "defaultendpoint"
-      },
-      "properties": {
-        "qux": {
-          "value": null,
-          "description": null,
-          "values": {
-            "port": "20",
-            "endpoint": "quxpoint"
-          },
-          "template": "https://{{hostname}}:{{port}}/ctx/{{endpoint}}"
-        },
-        "quux": {
-          "value": null,
-          "description": null,
-          "values": {
-            "endpoint": "quuxpoint",
-            "port": "9100"
-          },
-          "template": "https://{{hostname}}:{{port}}/ctx/{{endpoint}}"
-        },
-        "corge": {
-          "value": null,
-          "description": null,
-          "values": {},
-          "template": "https://{{hostname}}:{{port}}/ctx/{{endpoint}}"
-        }
-      },
-      "hosts": {}
-    },
-    {
-      "identity": {
-        "name": "{$ZAC.TEMPLATE_AND_CONTEXT}",
-        "context": "^site:.*",
-        "context_type": "regex"
-      },
-      "description": "This macro has a template and contexts",
-      "value_type": "text",
-      "resolve": "first",
-      "template": "https://{{hostname}}:{{port}}/internal/{{ctxpoint}}",
-      "defaults": {
-        "ctxpoint": "regexpoint",
-        "port": "9100",
-        "endpoint": "defaultendpoint"
-      },
-      "properties": {
-        "waldo": {
-          "value": null,
-          "description": null,
-          "values": {
-            "port": "30",
-            "ctxpoint": "waldopoint",
-            "endpoint": "defaultendpoint"
-          },
-          "template": "https://{{hostname}}:{{port}}/internal/{{ctxpoint}}"
-        },
-        "plugh": {
-          "value": null,
-          "description": null,
-          "values": {
-            "ctxpoint": "plughpoint",
-            "port": "9100",
-            "endpoint": "defaultendpoint"
-          },
-          "template": "https://{{hostname}}:{{port}}/internal/{{ctxpoint}}"
-        },
-        "xyzzy": {
-          "value": null,
-          "description": null,
-          "values": {},
-          "template": "https://{{hostname}}:{{port}}/internal/{{ctxpoint}}"
-        }
-      },
-      "hosts": {}
-    },
-    {
-      "identity": {
-        "name": "{$ZAC.HOST_OVERRIDDEN}",
-        "context": null,
-        "context_type": "static"
-      },
-      "description": "Per-host scrape URL",
-      "value_type": "text",
-      "resolve": "first",
-      "template": "https://{{hostname}}:{{port}}/{{endpoint}}",
-      "defaults": {
-        "port": "9100",
-        "endpoint": "metrics"
-      },
-      "properties": {
-        "host_overridden_node": {
-          "value": null,
-          "description": null,
-          "values": {},
-          "template": "https://{{hostname}}:{{port}}/{{endpoint}}"
-        }
-      },
-      "hosts": {
-        "special.example.com": {
-          "value": null,
-          "description": null,
-          "values": {
-            "port": "9500",
-            "endpoint": "special-metrics"
-          },
-          "template": "https://{{hostname}}:{{port}}/{{endpoint}}"
-        },
-        ".*\\\\.legacy\\\\.example\\\\.com": {
-          "value": null,
-          "description": null,
-          "values": {
-            "port": "9101",
-            "endpoint": "metrics"
-          },
-          "template": "https://{{hostname}}:{{port}}/{{endpoint}}"
-        }
-      }
-    }
-  ],
-  "description_prefix": null
-}\
-""")
+    def test_example_hostname_overrides_snapshot(self, macro_map: MacroMap) -> None:
+        """Test that hostname literals in example mapping file remain stable."""
+        assert sorted(macro_map._by_host_exact) == snapshot(["special.example.com"])
+
+    def test_example_hostname_patterns_snapshot(self, macro_map: MacroMap) -> None:
+        """Test that hostname patterns in example mapping file remain stable."""
+        assert [
+            defn.identity.to_zabbix() for defn in macro_map._by_host_regex
+        ] == snapshot(["{$ZAC.HOST_OVERRIDDEN}"])
 
     def test_example_properties_snapshot(self, macro_map: MacroMap) -> None:
-        """Snapshot test for verifying changes to defined properties in example mapping."""
-        assert get_all_properties_from_mapping(macro_map) == snapshot(
+        """Test that properties in example mapping file remain stable."""
+        assert list(macro_map._by_property) == snapshot(
             [
                 "barry",
                 "pizza",
@@ -791,7 +506,7 @@ class TestMappingFileLoad:
     def test_resolve_all_example_properties(self, macro_map: MacroMap):
         """Test resolving macros for _all_ defined properties."""
         assert macro_map.get_macros(
-            get_all_properties_from_mapping(macro_map),
+            list(macro_map._by_property),
             DEFAULT_FACTS,
         ) == snapshot(
             {
@@ -2585,6 +2300,43 @@ macros:
                     identity=MacroIdentity(name="{$ZAC.DUPLICATE_MACRO}"),
                     value="last def val",
                     description="I am defined last and will win!",
+                )
+            }
+        )
+
+    def test_case_insensitive_property(self, tmp_path: Path):
+        """Test that casing doesn't matter for properties."""
+
+        m = _load_mapping(
+            tmp_path,
+            """
+macros:
+  "{$ZAC.CASE_SENS}":
+    properties:
+      foo: foo val
+""",
+        )
+        assert m.get_macros(["foo"], DEFAULT_FACTS) == m.get_macros(
+            ["FOO"], DEFAULT_FACTS
+        )
+
+    def test_case_insensitive_hostname(self, tmp_path: Path):
+        """Test that casing doesn't matter for exact hostnames."""
+
+        m = _load_mapping(
+            tmp_path,
+            """
+macros:
+  "{$ZAC.CASE_SENS_HOST}":
+    hosts:
+      TESTHOST.examplE.cOm: testval
+""",
+        )
+        assert m.get_macros([], HostFacts(hostname="testhost.example.com")) == snapshot(
+            {
+                "{$ZAC.CASE_SENS_HOST}": ResolvedMacro(
+                    identity=MacroIdentity(name="{$ZAC.CASE_SENS_HOST}"),
+                    value="testval",
                 )
             }
         )

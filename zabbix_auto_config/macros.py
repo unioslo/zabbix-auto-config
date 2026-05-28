@@ -12,9 +12,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Annotated
 from typing import Any
+from typing import Generic
 from typing import NewType
 from typing import Optional
 from typing import TypedDict
+from typing import TypeVar
 
 import structlog.stdlib
 import yaml
@@ -22,7 +24,6 @@ from pydantic import BaseModel
 from pydantic import BeforeValidator
 from pydantic import ConfigDict
 from pydantic import Field
-from pydantic import PrivateAttr
 from pydantic import ValidationError
 from pydantic import field_validator
 from pydantic import model_validator
@@ -53,7 +54,10 @@ MACRO_NAME_PATTERN = re.compile(r"^\{\$[A-Z0-9_.]+\}$")
 
 
 MacroName = NewType("MacroName", str)
-"""Validated and normalized macro name."""
+"""Validated and normalized macro name.
+
+Guaranteed to be uppercase and only contain valid macro characters.
+"""
 
 
 MacroDescription = NewType("MacroDescription", str)
@@ -702,9 +706,11 @@ BUILTIN_PLACEHOLDERS = _HOST_FACT_PLACEHOLDERS | _INJECTED_PLACEHOLDERS
 
 
 def get_host_facts(host: Host) -> HostFacts:
-    """Extract host facts from a Host model instance for use in template macros."""
+    """Extract host facts from a Host model instance for use in template macros.
+
+    Normalizes values for use in comparisons and templates."""
     return {
-        "hostname": host.hostname,
+        "hostname": host.hostname.casefold(),
         # future: "proxy": host.proxy_pattern, etc.
     }
 
@@ -722,40 +728,119 @@ class HostMacroResult(NamedTuple):
     """Macros to remove from the host, keyed by macro identity."""
 
 
-class MacroMap(BaseModel):
-    """All macro definitions, indexed by the property names that contribute to them."""
+_REGEX_META_RE = re.compile(
+    r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]",
+    re.IGNORECASE,
+)
+
+
+@lru_cache(maxsize=1000)
+def is_valid_hostname(key: str) -> bool:
+    """Return True if `key` is a valid hostname."""
+    return _REGEX_META_RE.fullmatch(key) is not None
+
+
+MacroMapT = TypeVar("MacroMapT", bound="MacroMap")
+
+
+@dataclass
+class MacroMapFactory(Generic[MacroMapT]):
+    """Factory for constructing a MacroMap instance."""
+
+    cls: type[MacroMapT]
+    description_prefix: Optional[str] = None
+    _definitions: dict[MacroIdentity, MacroDefinition] = field(default_factory=dict)
+
+    def add(self, defn: MacroDefinition) -> None:
+        if defn.identity in self._definitions:
+            # NOTE: pyyaml silently overwrites duplicate mapping keys on read,
+            # so this branch is rarely reached from YAML loads.
+            logger.error(  # pragma: no cover
+                "Duplicate macro identity; ignoring later occurrence",
+                identity=defn.identity.to_zabbix(),
+            )
+            return  # pragma: no cover
+        self._definitions[defn.identity] = defn
+
+    def build(self) -> MacroMapT:
+        """Build the macro mapping from the added definitions.
+
+        Constructs lookup tables for properties and hostnames/hostname patterns.
+        """
+        by_property: dict[str, list[MacroDefinition]] = defaultdict(list)
+        by_host: dict[str, list[tuple[MacroDefinition, MacroValue]]] = defaultdict(list)
+        by_host_regex: list[MacroDefinition] = []
+        managed: set[str] = set()
+
+        for defn in self._definitions.values():
+            managed.add(
+                defn.macro
+            )  # no casefold. TODO: add MacroIdentity type so we know we can compare with this!
+            for prop in defn.properties:
+                by_property[prop.casefold()].append(defn)
+            if not defn.hosts:
+                continue
+            has_pattern = False
+            for key, mv in defn.hosts.items():
+                if not is_valid_hostname(key) and is_valid_regexp(key):
+                    has_pattern = True
+                else:
+                    # Index every hostname key for O(1) literal lookup.
+                    by_host[key.casefold()].append((defn, mv))
+
+            # Regex metacharacters in key only matter on the fallback pass.
+            # NOTE: at this point we should have checked that the pattern is valid
+            # but we have no guarantees that the expected validators have run
+            # at this point.
+            # TODO: type for validated hostname pattern!
+            if has_pattern:
+                by_host_regex.append(defn)
+
+        return self.cls(
+            description_prefix=self.description_prefix,
+            definitions=tuple(self._definitions.values()),
+            _by_property=dict(by_property),
+            _by_host_exact=dict(by_host),
+            _by_host_regex=tuple(by_host_regex),
+            _managed_macros=frozenset(managed),
+        )
+
+
+@dataclass(frozen=True)
+class MacroMap:
+    """Mapping of macros to properties and hosts."""
 
     # NOTE: rewrite as property? let _by_property be the single source of truth
     # Either accept recalculation overhead, or cache and invalidate on add() call
-    definitions: list[MacroDefinition] = Field(default_factory=list)
+    definitions: tuple[MacroDefinition, ...] = field(default_factory=tuple)
     """List of all macro definitions."""
 
-    description_prefix: Optional[str] = None
+    description_prefix: Optional[str] = field(default=None)
     """Prefix to append to descriptions of all macros derived from this mapping, to provide context in Zabbix UI."""
 
-    _by_property: dict[str, list[MacroDefinition]] = PrivateAttr(
+    _by_property: dict[str, list[MacroDefinition]] = field(
         default_factory=lambda: defaultdict(list)
     )
-    """Macros indexed by properties that contribute to them.
-
-    This mapping is populated manually as definitions are added. This is not
-    ideal, as it opens up for inconsistency between the list of macros
-    and the index, but it is necessary to have efficient lookup by name
-    when dealing with thousands of hosts.
+    """Lookup table for macros with properties. Indexed by property.
     """
 
-    _host_bearing: list[MacroDefinition] = PrivateAttr(default_factory=list)
-    """Definitions that have at least one entry in `hosts`.
+    _by_host_exact: dict[str, list[tuple[MacroDefinition, MacroValue]]] = field(
+        default_factory=dict
+    )
+    """Lookup table for macros with exact hostname overrides. Indexed by hostname."""
 
-    Shortcut for iterating over macros with host overrides, so we can resolve
-    them separately from property-derived macros.
+    _by_host_regex: tuple[MacroDefinition, ...] = field(default_factory=tuple)
+    """Macros with hostname pattern overrides.
+
+    Allows faster iteration over macros with hostname regex overrides by skipping
+    macros without regex patterns entirely.
     """
 
-    _managed_macros: set[str] = PrivateAttr(default_factory=set)
+    _managed_macros: frozenset[str] = field(default_factory=frozenset)
     """Identities of all macros managed by the macro map."""
 
     @property
-    def managed_macros(self) -> set[str]:
+    def managed_macros(self) -> frozenset[str]:
         """Identities of all macros managed by the macro map."""
         return self._managed_macros
 
@@ -775,7 +860,7 @@ class MacroMap(BaseModel):
     @classmethod
     def load(cls, path: Path, description_prefix: Optional[str] = None) -> Self:
         """Load and validate a macro map YAML file."""
-        mapping = cls(description_prefix=description_prefix)
+        factory = MacroMapFactory(cls=cls, description_prefix=description_prefix)
 
         try:
             file_in = cls._load_infile(path)
@@ -784,28 +869,13 @@ class MacroMap(BaseModel):
                 "Macro map file does not exist; using empty mapping",
                 file=str(path),
             )
-            return mapping
+            return factory.build()  # empty
         except InvalidMacroMapFileError as e:
             logger.error("Invalid macro map file", file=str(path), error=str(e))
             raise
         except Exception as e:
             logger.error("Failed to read macro map file", file=str(path), error=str(e))
             raise
-
-        seen: set[MacroIdentity] = set()
-
-        def register(defn: MacroDefinition) -> None:
-            # NOTE: duplicate def error will likely not ever be emitted
-            # because pyyaml silently overwrites duplicate mapping keys on read!
-            if defn.identity in seen:
-                logger.error(  # pragma: no cover
-                    "Duplicate macro identity in macro map file; ignoring later occurrence",
-                    file=str(path),
-                    identity=defn.identity.to_zabbix(),
-                )
-                return  # pragma: no cover
-            seen.add(defn.identity)
-            mapping.add(defn)
 
         for name, macro_def in file_in.macros.items():
             # Register macro
@@ -814,7 +884,7 @@ class MacroMap(BaseModel):
                     "Macro definition has no properties or hosts. Will be used for removal only.",
                     macro_name=name,
                 )
-            register(
+            factory.add(
                 MacroDefinition(
                     identity=MacroIdentity(name=name),
                     description=macro_def.description,
@@ -838,7 +908,7 @@ class MacroMap(BaseModel):
                         context=variant.context,
                     )
                 variant_template = variant.template or macro_def.template
-                register(
+                factory.add(
                     MacroDefinition(
                         identity=MacroIdentity(
                             name=name,
@@ -857,26 +927,7 @@ class MacroMap(BaseModel):
                     )
                 )
 
-        return mapping
-
-    def add(self, definition: MacroDefinition) -> None:
-        """Add a macro definition to the mapping."""
-        # NOTE: this feels like a code smell: we update 4 different data structures
-        # on each add. There are no defined constraints that prevent inconsistencies
-        # between them. Don't even get me started on a potential `remove()` method...
-        #
-        # We need a single source of truth that we derive these alternate
-        # datastructures from when accessed via some caching mechanism.
-        # Any rewrite needs to provide interfaces that maintain efficient lookups for:
-        # - definitions by property (for resolving macros for hosts)
-        # - definitions with host overrides (for resolving host-specific macros)
-        # - identities of managed macros (for pruning old macros from hosts)
-        self.definitions.append(definition)
-        for prop in definition.properties:
-            self._by_property[prop].append(definition)
-        if definition.hosts:
-            self._host_bearing.append(definition)
-        self._managed_macros.add(definition.macro)
+        return factory.build()
 
     def _get_description(self, description: str | None) -> Optional[MacroDescription]:
         """Get final description for a macro, with mapping-level prefix if defined."""
@@ -897,52 +948,39 @@ class MacroMap(BaseModel):
 
         Returned dict is keyed by the Zabbix macro string (including context).
         """
+        # dedup and casefold properties
+        properties = {prop.casefold() for prop in properties}
+
         # Mapping of macro identity to its definition and all contributing property->value pairs
         per_identity: dict[
             MacroIdentity, tuple[MacroDefinition, list[tuple[str, MacroValue]]]
         ] = {}
 
-        # The property dedup code is overkill in practice!
-        # In tests, we call this method with a list of properties
-        # but in the actual ZAC code, we always pass in a set of properties
-        # making the deduplication part of this loop redundant.
-        # However, in order to ensure ordering in tests, it's very useful
-        # for this method to be able to take in lists... So we keep the dedup code.
-
         # Get macros associated with each property
-        seen_props: set[str] = set()
         for prop in properties:
-            if prop in seen_props:  # ignore repeated properties
-                continue
-            seen_props.add(prop)
-            for defn in self._by_property.get(prop, []):
+            for defn in self._by_property.get(prop, ()):
                 macro_value = defn.properties.get(prop)
                 if macro_value is None:
                     continue
                 slot = per_identity.setdefault(defn.identity, (defn, []))
                 slot[1].append((prop, macro_value))
 
-        # Resolve macros by host overrides
-        #
-        # Host match always wins: replaces any property-derived
-        # contributions and bypasses the resolve strategy.
-        # Maps identity -> (matched_key, MacroValue) for the resolution loop below.
+        # Resolve macros by hostname (exact)
         host_overrides: dict[MacroIdentity, tuple[str, MacroValue]] = {}
         hostname = host_facts["hostname"]
-        for defn in self._host_bearing:
-            mv = defn.hosts.get(hostname)
-            matched_key = hostname
-            if mv is None:
-                for pattern, key in defn.host_patterns:
-                    if pattern.fullmatch(hostname):
-                        mv = defn.hosts[key]
-                        matched_key = key
-                        break
-            if mv is not None:
-                host_overrides[defn.identity] = (matched_key, mv)
-                # Ensure a slot exists so the resolution loop visits this identity
-                # even if no property contributed.
-                per_identity.setdefault(defn.identity, (defn, []))
+        for defn, mv in self._by_host_exact.get(hostname, ()):
+            host_overrides[defn.identity] = (hostname, mv)
+            _ = per_identity.setdefault(defn.identity, (defn, []))
+
+        # Resolve macros by hostname (pattern)
+        for defn in self._by_host_regex:
+            if defn.identity in host_overrides:
+                continue  # exact-hostname match already won
+            for pattern, key in defn.host_patterns:
+                if pattern.fullmatch(hostname) and key in defn.hosts:
+                    host_overrides[defn.identity] = (key, defn.hosts[key])
+                    _ = per_identity.setdefault(defn.identity, (defn, []))
+                    break  # we have a match
 
         # Resolve macro values by properties
         result: dict[str, ResolvedMacro] = {}
@@ -965,7 +1003,7 @@ class MacroMap(BaseModel):
                     ),
                     value_type=defn.value_type,
                 )
-                continue
+                continue  # nothing more to resolve
 
             if not contributions:  # safety for 0-indexing
                 continue
