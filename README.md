@@ -655,7 +655,7 @@ os_windows:Template OS Windows
 
 #### Macro mapping
 
-The macro map file defines macros to set on hosts. Each macro declares the properties (and optionally hostnames) that contribute values. In its most basic form it looks like this:
+The macro mapping file defines macros to set on hosts. Each macro declares the properties (and optionally hostnames) that contribute values. In its most basic form it looks like this:
 
 ```yaml
 # macro_map.yaml

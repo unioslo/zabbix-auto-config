@@ -57,7 +57,7 @@ def _load_mapping(
 
 @pytest.fixture(scope="session")
 def sample_macro_map_path(tmp_path_factory: TempPathFactory):
-    """Creates a sample macro map file for testing."""
+    """Creates a sample macro mapping file for testing."""
     tmp_path = tmp_path_factory.mktemp("data")
     p = _write_yaml(tmp_path, SAMPLE_MACRO_MAP)
     yield p
@@ -156,7 +156,7 @@ macros:
         # Check logs
         assert len(log_output.entries) == 1
         entry = log_output.entries[0]
-        assert entry["event"] == "Invalid macro name in macro map file; skipping"
+        assert entry["event"] == "Invalid macro name in macro mapping file; skipping"
         assert entry["macro_name"] == name
 
     @pytest.mark.parametrize(
@@ -215,7 +215,7 @@ macros:
 
 
 class TestMappingFileLoad:
-    """Tests for loading and validating the macro map file."""
+    """Tests for loading and validating the macro mapping file."""
 
     def test_example_definitions_snapshot(self, macro_map: MacroMap):
         """Test that macro definitions in example mapping remain stable."""
@@ -635,7 +635,7 @@ macros:
         assert len(log_output.entries) == 1
         assert (
             log_output.entries[0]["event"]
-            == "Macro map file does not exist; using empty mapping"
+            == "Macro mapping file does not exist; using empty mapping"
         )
 
     def test_macrodefin_requires_no_args(self) -> None:

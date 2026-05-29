@@ -74,7 +74,7 @@ def _render_properties(properties: dict[str, PropertyValueIn]) -> str:
 
 
 def _render_macro_map_file(m: MacroMapFileIn) -> Table:
-    """Render the input macro map file as a table."""
+    """Render the input macro mapping file as a table."""
     # NOTE: this does not recurse/dig into
     table = Table(
         title="Macro Definitions",
@@ -103,7 +103,7 @@ def _render_macro_map_file(m: MacroMapFileIn) -> Table:
 def validate(
     ctx: typer.Context,
     file: Optional[Path] = typer.Argument(  # noqa: B008
-        None, help="Alternative path to macro map file"
+        None, help="Alternative path to macro mapping file"
     ),
     verbose: bool = typer.Option(  # noqa: B008
         False, "--verbose", "-v", help="Show traceback on failed validation"
@@ -114,7 +114,7 @@ def validate(
         help="Show validated macro definitions",
     ),
 ) -> None:
-    """Validate a macro map file. Uses the default macro map file unless otherwise specified."""
+    """Validate a macro mapping file. Uses the default macro mapping file unless otherwise specified."""
     if not file:
         file = macros_app.get_config().zabbix.macro_map_file
 
@@ -138,7 +138,7 @@ def validate(
         p = Panel(_CONSOLE.render_str(e_str), title=title)
         _CONSOLE.print(p)
         _CONSOLE.print(
-            f":cross_mark:Failed to validate macro map file {file}", style="red"
+            f":cross_mark:Failed to validate macro mapping file {file}", style="red"
         )
         return  # Nothing more to do
 
@@ -146,7 +146,9 @@ def validate(
         table = _render_macro_map_file(in_file)
         _CONSOLE.print(table)
 
-    _CONSOLE.print(f":white_check_mark:Macro map file {file} is valid", style="green")
+    _CONSOLE.print(
+        f":white_check_mark:Macro mapping file {file} is valid", style="green"
+    )
 
 
 class OutputMode(str, Enum):

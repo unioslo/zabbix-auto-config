@@ -122,20 +122,20 @@ class FailsafeError(ZACException):
 
 
 class MacroMapError(ZACException):
-    """Base exception for macro map errors."""
+    """Base exception for macro mapping errors."""
 
 
 class MacroMapFileReadError(MacroMapError):
-    """Errors related to reading the macro map file."""
+    """Errors related to reading the macro mapping file."""
 
 
 class MacroMapFileNotFound(MacroMapFileReadError, FileNotFoundError):
-    """Macro map file does not exist."""
+    """Macro mapping file does not exist."""
 
 
 class InvalidMacroMapFileError(MacroMapError):
-    """Macro map file is invalid."""
+    """Macro mapping file is invalid."""
 
 
 class EmptyMacroMapError(MacroMapError):
-    """Macro map file is empty."""
+    """Macro mapping file is empty."""

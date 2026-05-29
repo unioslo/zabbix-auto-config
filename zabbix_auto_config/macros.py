@@ -434,7 +434,7 @@ def _validate_template_props(
 
     Raises ValueError if validation fails.
 
-    NOTE: this function should only be called when reading from the macro map file.
+    NOTE: this function should only be called when reading from the macro mapping file.
     We do not want to raise exceptions when resolving macros for hosts!
     """
     hosts = hosts or {}
@@ -483,7 +483,7 @@ def _inject_template_into_entries(
 
 
 class MacroContextIn(BaseModel):
-    """Macro context from macro map file."""
+    """Macro context from macro mapping file."""
 
     context: str
     context_type: ContextType = ContextType.STATIC
@@ -507,7 +507,7 @@ HostValuesIn = dict[str, str]  # May add validator to this
 
 
 class MacroDefIn(BaseModel):
-    """Top-level macro definition entry from macro map file."""
+    """Top-level macro definition entry from macro mapping file."""
 
     description: Optional[str] = None
     value_type: MacroValueType = MacroValueType.TEXT
@@ -598,13 +598,13 @@ class MacroDefIn(BaseModel):
 
 
 class MacroMapFileIn(BaseModel):
-    """Top-level YAML schema for macro map files.
+    """Top-level YAML schema for macro mapping files.
 
-    Used for input validation of the macro map YAML file.
+    Used for input validation of the macro mapping YAML file.
     """
 
     macros: dict[MacroName, MacroDefIn] = Field(default_factory=dict)
-    """Mapping of all loaded macro definitions from the macro map file."""
+    """Mapping of all loaded macro definitions from the macro mapping file."""
 
     @field_validator("macros", mode="before")
     @classmethod
@@ -645,7 +645,7 @@ class MacroMapFileIn(BaseModel):
                 macro_name = validate_macro_name(raw_name)
             except ValueError as e:
                 logger.error(
-                    "Invalid macro name in macro map file; skipping",
+                    "Invalid macro name in macro mapping file; skipping",
                     macro_name=raw_name,
                     error=str(e),
                 )
@@ -668,25 +668,29 @@ class MacroMapFileIn(BaseModel):
             with open(path) as f:
                 data = yaml.load(f, Loader=_YamlLoader)
         except FileNotFoundError as e:
-            raise MacroMapFileNotFound(f"Macro map file {path} not found: {e}") from e
+            raise MacroMapFileNotFound(
+                f"Macro mapping file {path} not found: {e}"
+            ) from e
         except Exception as e:
             raise MacroMapFileReadError(
-                f"Failed to read macro map file {path}: {e}"
+                f"Failed to read macro mapping file {path}: {e}"
             ) from e
 
         if data is None:  # NOTE: why not {}, "" and other empty data?
-            raise EmptyMacroMapError("Macro map file is empty")
+            raise EmptyMacroMapError("Macro mapping file is empty")
 
         try:
             file_in = cls.model_validate(data)
         except ValidationError:  # re-raise as-is
             raise
         except Exception as e:
-            raise InvalidMacroMapFileError(f"Invalid macro map file {path}: {e}") from e
+            raise InvalidMacroMapFileError(
+                f"Invalid macro mapping file {path}: {e}"
+            ) from e
         return file_in
 
 
-# ----- Macro map (resolved, public API) -----
+# ----- Macro mapping (resolved, public API) -----
 
 
 class HostFacts(TypedDict):
@@ -841,16 +845,16 @@ class MacroMap:
     """
 
     _managed_macros: frozenset[str] = field(default_factory=frozenset)
-    """Identities of all macros managed by the macro map."""
+    """Identities of all macros managed by the macro mapping."""
 
     @property
     def managed_macros(self) -> frozenset[str]:
-        """Identities of all macros managed by the macro map."""
+        """Identities of all macros managed by the macro mapping."""
         return self._managed_macros
 
     @classmethod
     def from_config(cls, config: Settings) -> Self:
-        """Alternate constructor for deriving the macro map file settings from config."""
+        """Alternate constructor for deriving the macro mapping file settings from config."""
         return cls.load(
             config.zabbix.macro_map_file,
             description_prefix=config.zabbix.macro_description_prefix,
@@ -858,27 +862,29 @@ class MacroMap:
 
     @classmethod
     def _load_infile(cls, path: Path) -> MacroMapFileIn:
-        """Attempt to load a macro map input file."""
+        """Attempt to load a macro mapping input file."""
         return MacroMapFileIn.load(path)
 
     @classmethod
     def load(cls, path: Path, description_prefix: Optional[str] = None) -> Self:
-        """Load and validate a macro map YAML file."""
+        """Load and validate a macro mapping YAML file."""
         factory = MacroMapFactory(cls=cls, description_prefix=description_prefix)
 
         try:
             file_in = cls._load_infile(path)
         except MacroMapFileNotFound:
             logger.warning(
-                "Macro map file does not exist; using empty mapping",
+                "Macro mapping file does not exist; using empty mapping",
                 file=str(path),
             )
             return factory.build()  # empty
         except InvalidMacroMapFileError as e:
-            logger.error("Invalid macro map file", file=str(path), error=str(e))
+            logger.error("Invalid macro mapping file", file=str(path), error=str(e))
             raise
         except Exception as e:
-            logger.error("Failed to read macro map file", file=str(path), error=str(e))
+            logger.error(
+                "Failed to read macro mapping file", file=str(path), error=str(e)
+            )
             raise
 
         for name, macro_def in file_in.macros.items():
