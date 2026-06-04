@@ -87,9 +87,6 @@ def is_valid_regexp(regex: str) -> bool:
         return False
 
 
-# ----- Resolved macro model (internal + public) -----
-
-
 class ContextType(str, Enum):
     """Type of macro context."""
 
@@ -272,9 +269,6 @@ class ResolvedMacro:
     def macro(self) -> str:
         """The name of the macro used in Zabbix."""
         return self.identity.to_zabbix()
-
-
-# ----- Pydantic input models (YAML schema) -----
 
 
 class PropertyValueIn(BaseModel):
@@ -688,9 +682,6 @@ class MacroMapFileIn(BaseModel):
                 f"Invalid macro mapping file {path}: {e}"
             ) from e
         return file_in
-
-
-# ----- Macro mapping (resolved, public API) -----
 
 
 class HostFacts(TypedDict):
