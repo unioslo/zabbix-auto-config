@@ -10,6 +10,7 @@ import warnings
 from enum import Enum
 from pathlib import Path
 from typing import Any
+from typing import Literal
 from typing import Optional
 from typing import Union
 
@@ -407,6 +408,13 @@ class ConsoleLoggerConfig(LoggerConfigBase):
     format: LoggerFormat = Field(
         default=LoggerFormat.TEXT,
         description="The format of the logger output.",
+    )
+    exception_formatter: Literal["rich", "plain"] = Field(
+        default="rich",
+        description=(
+            "The formatter to use for exceptions in the console logger. "
+            "`rich` uses rich's pretty traceback rendering, while `plain` uses structlog's default exception rendering. "
+        ),
     )
 
 
