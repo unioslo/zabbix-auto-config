@@ -1731,18 +1731,6 @@ class ZabbixHostUpdater(ZabbixUpdater):
                         ignored_inventory=ignored_inventory,
                     )
 
-    # TODO: move somewhere else, cache results?
-    # FIXME: this does _not_ need to take in the entire macro object!
-    #       we can just pass the description (str | None)!
-    def _get_macro_description(self, macro: ResolvedMacro) -> str:
-        """Get the macro description prefixed by the configured macro prefix."""
-        parts: list[str] = []
-        if self.config.zabbix.macro_description_prefix:
-            parts.append(self.config.zabbix.macro_description_prefix.strip())
-        if macro.description:
-            parts.append(macro.description.strip())
-        return " ".join(parts)
-
     def _sync_macros(self, db_host: models.Host, zabbix_host: Host) -> None:
         """Sync macros of a Zabbix host with the macros defined on the DB host."""
         # HACK: in order to sync macros using the ZabbixHostGroupUpdater
@@ -1753,27 +1741,24 @@ class ZabbixHostUpdater(ZabbixUpdater):
         # state here on each iteration.
 
         result = self.macro_map.resolve_macros(db_host, zabbix_host)
-        # Remove existing macros
-        if result.remove:
+
+        if result.remove:  # Batch removal, no iteration needed
             self.remove_macros_from_host(zabbix_host, result.remove)
-        # Create new macros
-        if result.add:
-            for macro in result.add.values():
-                self.add_macro_to_host(zabbix_host, macro)
-        # Update existing macros
-        if result.update:
-            for current_macro, new_macro in result.update.values():
-                self.update_host_macro(zabbix_host, current_macro, new_macro)
+
+        for macro in result.add.values():
+            self.add_macro_to_host(zabbix_host, macro)
+
+        for current_macro, new_macro in result.update.values():
+            self.update_host_macro(zabbix_host, current_macro, new_macro)
 
     def add_macro_to_host(self, host: Host, macro: ResolvedMacro) -> None:
         """Add a single macro to a host."""
-        description = self._get_macro_description(macro)
         log = logger.bind(
             host=host.host,
             hostid=host.hostid,
             macro=macro.macro,  # TODO: property calculated here and in API call. Can be optimized
             value=macro.value,
-            description=description,
+            description=macro.description,
             type=macro.value_type,  # show string representation
         )
         if self.zabbix_config.dryrun:
@@ -1785,7 +1770,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 host,
                 macro=macro.macro,
                 value=macro.value,
-                description=description,
+                description=macro.description,
             )
         except ZabbixAPIException as e:
             log.error("Failed to add macro to host", error=str(e))
@@ -1818,13 +1803,12 @@ class ZabbixHostUpdater(ZabbixUpdater):
         self, host: Host, current_macro: Macro, new_macro: ResolvedMacro
     ) -> None:
         """Update a single macro on a host."""
-        description = self._get_macro_description(new_macro)
         log = logger.bind(
             host=host.host,
             hostid=host.hostid,
             macro=current_macro.macro,
             value=new_macro.value,
-            description=description,
+            description=new_macro.description,
         )
         if self.zabbix_config.dryrun:
             log.info("DRYRUN: Updating macro on host")
@@ -1834,7 +1818,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             _ = self.api.update_macro(
                 current_macro.hostmacroid,
                 value=new_macro.value,
-                description=description,
+                description=new_macro.description,
             )
         except ZabbixAPIException as e:
             log.error("Failed to update macro on host", error=str(e))
