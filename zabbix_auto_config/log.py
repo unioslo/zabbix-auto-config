@@ -77,6 +77,19 @@ def _serialize_sets(logger: Any, method_name: str, event_dict: EventDict) -> Eve
     return event_dict
 
 
+SECRETS_KEYS = {"password", "token", "auth"}
+
+
+def _redact_secrets(logger: Any, method_name: str, event_dict: EventDict) -> EventDict:
+    """Recursively redact sensitive information in the event dictionary."""
+    for key, value in event_dict.items():
+        if isinstance(value, dict):
+            event_dict[key] = _redact_secrets(logger, method_name, value)
+        elif key in SECRETS_KEYS:
+            event_dict[key] = "<REDACTED>"
+    return event_dict
+
+
 timestamper = structlog.processors.TimeStamper(fmt="iso")
 
 pre_chain = [
@@ -84,6 +97,7 @@ pre_chain = [
     timestamper,
     structlog.stdlib.ExtraAdder(),
     _serialize_sets,
+    _redact_secrets,
 ]
 """Pre chain for non-structlog loggers (e.g. standard library)."""
 
@@ -204,6 +218,7 @@ def configure_logging(config: Settings) -> None:
             structlog.processors.StackInfoRenderer(),
             structlog.processors.UnicodeDecoder(),
             _serialize_sets,
+            _redact_secrets,
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         wrapper_class=structlog.stdlib.BoundLogger,

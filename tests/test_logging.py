@@ -153,3 +153,35 @@ def test_log_exceptions_after_processing_external_logger(config: Settings) -> No
     assert "exc_info" not in logfile
     assert '"exception": [' in logfile  # Formatted exception
     assert "division by zero" in logfile
+
+
+def test_log_redaction_simple(config: Settings) -> None:
+    """Test that sensitive information is redacted in logs (no recursion needed)."""
+    zabbix_auto_config.log.configure_logging(config)
+    logger = structlog.stdlib.get_logger("test_logger")
+
+    with capture_logs_with_processors() as log:
+        logger.info("Test message", password="secret", token="12345")
+        assert len(log) == 1
+        assert log[0]["password"] == "<REDACTED>"
+        assert log[0]["token"] == "<REDACTED>"
+
+
+def test_log_redaction_recursion(config: Settings) -> None:
+    """Test that sensitive information is redacted in logs (with recursion)."""
+    zabbix_auto_config.log.configure_logging(config)
+    logger = structlog.stdlib.get_logger("test_logger")
+
+    with capture_logs_with_processors() as log:
+        logger.info(
+            "Test message",
+            request_body={
+                "username": "user",
+                "password": "secret",
+                "auth": "12345",
+            },
+        )
+        assert len(log) == 1
+        assert log[0]["request_body"]["username"] == "user"
+        assert log[0]["request_body"]["password"] == "<REDACTED>"
+        assert log[0]["request_body"]["auth"] == "<REDACTED>"
