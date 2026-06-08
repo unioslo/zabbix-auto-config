@@ -169,6 +169,7 @@ use_mp_handler = false
 enabled = true
 level = "INFO"
 format = "text"
+exception_formatter = "rich" # rich | plain
 
 [zac.logging.file]
 enabled = true

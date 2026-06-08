@@ -10,6 +10,7 @@ import structlog
 from structlog.dev import Column
 from structlog.typing import EventDict
 
+from zabbix_auto_config.config import ConsoleLoggerConfig
 from zabbix_auto_config.config import FileLoggerConfig
 from zabbix_auto_config.config import LoggerConfigBase
 from zabbix_auto_config.config import Settings
@@ -53,9 +54,17 @@ class ZacConsoleRenderer(structlog.dev.ConsoleRenderer):
             )
 
     @classmethod
-    def create(cls) -> ZacConsoleRenderer:
+    def create(cls, config: ConsoleLoggerConfig) -> ZacConsoleRenderer:
         """Create a new instance of the ZacConsoleRenderer."""
-        instance = cls(colors=True, sort_keys=False)
+        if config.exception_formatter == "rich":
+            exc_fmt = structlog.dev.rich_traceback
+        else:
+            exc_fmt = structlog.dev.plain_traceback
+        instance = cls(
+            colors=True,
+            sort_keys=False,
+            exception_formatter=exc_fmt,
+        )
         instance.add_process_name_formatter()
         return instance
 
@@ -141,13 +150,14 @@ def configure_logging(config: Settings) -> None:
                 "()": structlog.stdlib.ProcessorFormatter,
                 "processors": [
                     structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-                    ZacConsoleRenderer.create(),
+                    ZacConsoleRenderer.create(config.zac.logging.console),
                 ],
                 "foreign_pre_chain": pre_chain,
             },
             "file": {
                 "()": structlog.stdlib.ProcessorFormatter,
                 "processors": [
+                    timestamper,
                     structlog.processors.dict_tracebacks,
                     structlog.stdlib.ProcessorFormatter.remove_processors_meta,
                     structlog.processors.JSONRenderer(),
@@ -188,7 +198,6 @@ def configure_logging(config: Settings) -> None:
         processors=[
             structlog.stdlib.add_log_level,
             structlog.stdlib.PositionalArgumentsFormatter(),
-            timestamper,
             structlog.processors.CallsiteParameterAdder(
                 parameters=[structlog.processors.CallsiteParameter.PROCESS_NAME]
             ),

@@ -110,7 +110,7 @@ def test_log_exceptions_before_processing(config: Settings) -> None:
         except ZeroDivisionError:
             logger.exception("An error occurred")
         assert len(log_output) == 1
-        del log_output[0]["timestamp"]
+        log_output[0].pop("timestamp", None)  # remove timestamp if present
 
         # Before processing, we should still have exc_info=True
         assert log_output[0] == snapshot(
