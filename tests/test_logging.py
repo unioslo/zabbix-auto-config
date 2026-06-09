@@ -4,6 +4,7 @@ import logging
 from collections.abc import Generator
 from contextlib import contextmanager
 
+import pytest
 import structlog
 import zabbix_auto_config.log
 from inline_snapshot import snapshot
@@ -33,8 +34,14 @@ def capture_logs_with_processors() -> Generator[list[EventDict], None, None]:
         processors[:] = old_processors
 
 
-def test_set_serialization(config: Settings) -> None:
+@pytest.fixture(autouse=True)
+def configure_logging_fixture(config: Settings) -> Generator[None, None, None]:
+    """Configure logging using the test config for all tests in this module."""
     zabbix_auto_config.log.configure_logging(config)
+    yield
+
+
+def test_set_serialization() -> None:
     logger = structlog.stdlib.get_logger("test_logger")
     with capture_logs_with_processors() as log:
         logger.info("Test message", myset={"a", "b", "c"})
@@ -101,8 +108,7 @@ def test_logging_config_both_disabled(config: Settings) -> None:
         assert len(log) == 1
 
 
-def test_log_exceptions_before_processing(config: Settings) -> None:
-    zabbix_auto_config.log.configure_logging(config)
+def test_log_exceptions_before_processing() -> None:
     logger = structlog.stdlib.get_logger("test_logger")
 
     with capture_logs_with_processors() as log_output:
@@ -126,7 +132,6 @@ def test_log_exceptions_before_processing(config: Settings) -> None:
 
 
 def test_log_exceptions_after_processing(config: Settings) -> None:
-    zabbix_auto_config.log.configure_logging(config)
     logger = structlog.stdlib.get_logger("test_logger")
 
     try:
@@ -142,7 +147,6 @@ def test_log_exceptions_after_processing(config: Settings) -> None:
 
 
 def test_log_exceptions_after_processing_external_logger(config: Settings) -> None:
-    zabbix_auto_config.log.configure_logging(config)
     stdlib_logger = logging.getLogger("httpx")
 
     try:
@@ -156,9 +160,8 @@ def test_log_exceptions_after_processing_external_logger(config: Settings) -> No
     assert "division by zero" in logfile
 
 
-def test_log_redaction_simple(config: Settings) -> None:
+def test_log_redaction_simple() -> None:
     """Test that sensitive information is redacted in logs (no recursion needed)."""
-    zabbix_auto_config.log.configure_logging(config)
     logger = structlog.stdlib.get_logger("test_logger")
 
     with capture_logs_with_processors() as logs:
@@ -169,9 +172,8 @@ def test_log_redaction_simple(config: Settings) -> None:
         assert logs[0]["auth"] == REDACTED_STR
 
 
-def test_log_redaction_contains(config: Settings) -> None:
+def test_log_redaction_contains() -> None:
     """Test redaction where keys _contain_ the keywords."""
-    zabbix_auto_config.log.configure_logging(config)
     logger = structlog.stdlib.get_logger("test_logger")
 
     with capture_logs_with_processors() as logs:
@@ -187,9 +189,8 @@ def test_log_redaction_contains(config: Settings) -> None:
         assert logs[0]["admin_auth"] == REDACTED_STR
 
 
-def test_log_redaction_case_insensitive(config: Settings) -> None:
+def test_log_redaction_case_insensitive() -> None:
     """Test case insensitivity in redaction."""
-    zabbix_auto_config.log.configure_logging(config)
     logger = structlog.stdlib.get_logger("test_logger")
 
     with capture_logs_with_processors() as logs:
@@ -213,9 +214,8 @@ def test_log_redaction_case_insensitive(config: Settings) -> None:
         assert logs[0]["AUTH"] == REDACTED_STR
 
 
-def test_log_redaction_recursion(config: Settings) -> None:
+def test_log_redaction_recursion() -> None:
     """Test that sensitive information is redacted in logs (with recursion)."""
-    zabbix_auto_config.log.configure_logging(config)
     logger = structlog.stdlib.get_logger("test_logger")
 
     with capture_logs_with_processors() as logs:
@@ -233,9 +233,8 @@ def test_log_redaction_recursion(config: Settings) -> None:
         assert logs[0]["request_body"]["auth"] == REDACTED_STR
 
 
-def test_log_redaction_recursion_advanced_types(config: Settings) -> None:
+def test_log_redaction_recursion_advanced_types() -> None:
     """Test redaction with advanced types and nested structures."""
-    zabbix_auto_config.log.configure_logging(config)
     logger = structlog.stdlib.get_logger("test_logger")
 
     with capture_logs_with_processors() as logs:
