@@ -78,16 +78,38 @@ def _serialize_sets(logger: Any, method_name: str, event_dict: EventDict) -> Eve
 
 
 SECRETS_KEYS = {"password", "token", "auth"}
+"""Set of keywords in which values should be redacted in logs if keys contain them.
+
+I.e. "my_password", "auth_token" would be redacted, but "my_pass" would not.
+"""
+
+REDACTED_STR = "<REDACTED>"
 
 
 def _redact_secrets(logger: Any, method_name: str, event_dict: EventDict) -> EventDict:
     """Recursively redact sensitive information in the event dictionary."""
     for key, value in event_dict.items():
-        if isinstance(value, dict):
-            event_dict[key] = _redact_secrets(logger, method_name, value)
-        elif key in SECRETS_KEYS:
-            event_dict[key] = "<REDACTED>"
+        event_dict[key] = _do_redact_secrets(key, value)
     return event_dict
+
+
+def _do_redact_secrets(key: str, value: Any) -> Any:
+    """Helper function to recursively redact secrets in a value."""
+    if isinstance(value, dict):
+        return {k: _do_redact_secrets(k, v) for k, v in value.items()}
+    # Do not redact simple list values (["password", "auth"], etc.)
+    # Pass empty key, so that simple iterate values are not redacted.
+    elif isinstance(value, list):
+        return [_do_redact_secrets("", v) for v in value]
+    elif isinstance(value, set):
+        return {_do_redact_secrets("", v) for v in value}
+    elif isinstance(value, tuple):
+        return tuple(_do_redact_secrets("", v) for v in value)
+    else:
+        if key and any(k in key.lower() for k in SECRETS_KEYS):
+            return REDACTED_STR
+        else:
+            return value
 
 
 timestamper = structlog.processors.TimeStamper(fmt="iso")
