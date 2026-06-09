@@ -3,8 +3,11 @@ from __future__ import annotations
 import logging
 import logging.config
 import logging.handlers
+from collections.abc import MutableMapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+from typing import Union
 
 import structlog
 from structlog.dev import Column
@@ -16,6 +19,8 @@ from zabbix_auto_config.config import LoggerConfigBase
 from zabbix_auto_config.config import Settings
 from zabbix_auto_config.dirs import ensure_directory
 from zabbix_auto_config.exceptions import ZACException
+
+HandlerDict = MutableMapping[str, Union[str, int]]
 
 
 @dataclass
@@ -69,11 +74,15 @@ class ZacConsoleRenderer(structlog.dev.ConsoleRenderer):
         return instance
 
 
-def _serialize_sets(logger: Any, method_name: str, event_dict: EventDict) -> EventDict:
-    """Convert sets to lists for JSON serialization."""
+def _serialize_types(logger: Any, method_name: str, event_dict: EventDict) -> EventDict:
+    """Convert types without native JSON representation to a serializable format.
+
+    Unknown types are converted to their their repr() string, which is not always ideal."""
     for key, value in event_dict.items():
         if isinstance(value, set):
             event_dict[key] = list(value)
+        elif isinstance(value, Path):
+            event_dict[key] = str(value)
     return event_dict
 
 
@@ -114,12 +123,18 @@ def _do_redact_secrets(key: str, value: Any) -> Any:
 
 timestamper = structlog.processors.TimeStamper(fmt="iso")
 
-pre_chain = [
+shared_processors = [
     structlog.stdlib.add_log_level,
-    timestamper,
+    structlog.processors.CallsiteParameterAdder(
+        parameters=[structlog.processors.CallsiteParameter.PROCESS_NAME]
+    ),
+]
+transformers = [_serialize_types, _redact_secrets]
+
+pre_chain = [
+    *shared_processors,
     structlog.stdlib.ExtraAdder(),
-    _serialize_sets,
-    _redact_secrets,
+    *transformers,
 ]
 """Pre chain for non-structlog loggers (e.g. standard library)."""
 
@@ -148,7 +163,16 @@ def get_formatter_name(config: LoggerConfigBase) -> str:
     return "console"
 
 
-def get_file_handler_config(config: FileLoggerConfig) -> dict[str, str | int]:
+def get_console_handler_config(config: ConsoleLoggerConfig) -> HandlerDict:
+    """Get a dict config for a console handler based on the configuration."""
+    return {
+        "level": config.level.name,
+        "class": "logging.StreamHandler",
+        "formatter": get_formatter_name(config),
+    }
+
+
+def get_file_handler_config(config: FileLoggerConfig) -> HandlerDict:
     """Get a dict config for a file handler based on the configuration."""
 
     logging_class = (
@@ -156,7 +180,7 @@ def get_file_handler_config(config: FileLoggerConfig) -> dict[str, str | int]:
         if config.rotate
         else "logging.FileHandler"
     )
-    handler_config: dict[str, str | int] = {
+    handler_config: HandlerDict = {
         "class": logging_class,
         "filename": str(config.path),
         "encoding": "utf8",
@@ -177,6 +201,13 @@ def configure_logging(config: Settings) -> None:
     # Create the root logger and clear its default handlers
     root_logger = logging.getLogger()
     root_logger.setLevel(config.zac.logging.level)
+
+    # Build handlers conditionally based on config
+    handlers: dict[str, HandlerDict] = {}
+    if config.zac.logging.console.enabled:
+        handlers["default"] = get_console_handler_config(config.zac.logging.console)
+    if config.zac.logging.file.enabled:
+        handlers["file"] = get_file_handler_config(config.zac.logging.file)
 
     config_dict: dict[str, Any] = {
         "version": 1,
@@ -201,46 +232,29 @@ def configure_logging(config: Settings) -> None:
                 "foreign_pre_chain": pre_chain,
             },
         },
-        "handlers": {
-            "default": {
-                "level": config.zac.logging.console.level.name,
-                "class": "logging.StreamHandler",
-                "formatter": get_formatter_name(config.zac.logging.console),
-            },
-            "file": get_file_handler_config(config.zac.logging.file),
-        },
+        "handlers": handlers,
         "loggers": {
             "": {
-                "handlers": ["default", "file"],
+                "handlers": list(handlers),
                 "level": "DEBUG",  # handlers filter by their own level
                 "propagate": True,
             },
         },
     }
+
+    # Create log directory _before_ instantiating logger
     if config.zac.logging.file.enabled:
         ensure_directory(config.zac.logging.file.path.parent)
-
-    # NOTE: this seems hacky?
-    if not config.zac.logging.file.enabled:
-        del config_dict["handlers"]["file"]
-        config_dict["loggers"][""]["handlers"].remove("file")
-    if not config.zac.logging.console.enabled:
-        del config_dict["handlers"]["default"]
-        config_dict["loggers"][""]["handlers"].remove("default")
 
     logging.config.dictConfig(config_dict)
 
     structlog.configure(
         processors=[
-            structlog.stdlib.add_log_level,
+            *shared_processors,
             structlog.stdlib.PositionalArgumentsFormatter(),
-            structlog.processors.CallsiteParameterAdder(
-                parameters=[structlog.processors.CallsiteParameter.PROCESS_NAME]
-            ),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.UnicodeDecoder(),
-            _serialize_sets,
-            _redact_secrets,
+            *transformers,
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         wrapper_class=structlog.stdlib.BoundLogger,
