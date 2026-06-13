@@ -36,13 +36,13 @@ def test_zabbixupdater_connect_timeout(
     mock_psycopg2_connect, config: Settings, map_dir_with_files: Path
 ):
     config.zabbix = ZabbixSettings(
-        map_dir=str(map_dir_with_files),
         url="",
         username="",
         password="",
         dryrun=False,
         timeout=1,
     )
+    config.zac.map_dir = map_dir_with_files
     with pytest.raises(exceptions.ZACException) as exc_info:
         ZabbixUpdater(
             name="connect-timeout",
@@ -62,13 +62,13 @@ def test_zabbixupdater_read_timeout(
     mock_psycopg2_connect, config: Settings, map_dir_with_files: Path
 ):
     config.zabbix = ZabbixSettings(
-        map_dir=str(map_dir_with_files.absolute()),
         url="",
         username="",
         password="",
         dryrun=False,
         timeout=1,
     )
+    config.zac.map_dir = map_dir_with_files
     process = TimeoutUpdater(
         name="read-timeout",
         state=get_manager().State(),

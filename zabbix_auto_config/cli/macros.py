@@ -116,7 +116,7 @@ def validate(
 ) -> None:
     """Validate a macro mapping file. Uses the default macro mapping file unless otherwise specified."""
     if not file:
-        file = macros_app.get_config().zabbix.macro_map_file
+        file = macros_app.get_config().zac.get_macro_map_file_path()
 
     try:
         in_file = MacroMap._load_infile(file)

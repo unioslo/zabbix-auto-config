@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Any
 from typing import Optional
@@ -198,6 +199,10 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
             "zac": {
                 "source_collector_dir": "example/source_collectors/",
                 "host_modifier_dir": "example/host_modifiers/",
+                "map_dir": "example/mapping_files",
+                "property_template_map_file": None,
+                "property_hostgroup_map_file": None,
+                "siteadmin_hostgroup_map_file": None,
                 "health_file": "/tmp/zac_health.json",
                 "failsafe_file": "/tmp/zac_failsafe.json",
                 "failsafe_ok_file": "/tmp/zac_failsafe_ok",
@@ -243,10 +248,15 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
                         "maintenances": {"enabled": True, "delete_empty": False},
                     },
                 },
+                "macros": {
+                    "enabled": False,
+                    "macro_map_file": "example/mapping_files/macro_map.yaml",
+                    "description_prefix": "[ZAC]",
+                },
                 "db_uri": "",
             },
             "zabbix": {
-                "map_dir": "example/mapping_files/",
+                "map_dir": "",
                 "url": "http://zabbix-web-nginx:8080",
                 "username": "Admin",
                 "password": "zabbix",
@@ -255,7 +265,6 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
                 "verify_ssl": True,
                 "tags_prefix": "zac_",
                 "managed_inventory": ["location"],
-                "macro_description_prefix": "[ZAC]",
                 "failsafe": 20,
                 "hostgroup_all": "All-hosts",
                 "hostgroup_manual": "All-manual-hosts",
@@ -457,7 +466,6 @@ def test_logging_settings_log_level_serialize() -> None:
 )
 def test_zabbix_settings_timeout(timeout: int, expect: Optional[int]) -> None:
     settings = ZabbixSettings(
-        map_dir="",
         url="",
         username="",
         password="",
@@ -480,6 +488,7 @@ def _get_zac_settings(config: Settings, db_uri: str) -> ZacSettings:
     return ZacSettings(
         source_collector_dir=config.zac.source_collector_dir,
         host_modifier_dir=config.zac.host_modifier_dir,
+        map_dir=config.zac.map_dir,
         db_uri=db_uri,
         # Omit DBSettings
     )
@@ -812,3 +821,53 @@ def test_garbagecollectorsettings_schedule_and_update_interval():
     settings = GarbageCollectorSettings()
     assert settings.schedule == snapshot("0 0 * * *")
     assert settings.update_interval == snapshot(60)
+
+
+def test_settings_map_dir() -> None:
+    """Test that `map_dir` when only set in `[zabbix]` is correctly propagated to `[zac]` settings."""
+
+    with pytest.warns(DeprecationWarning, match="zabbix.map_dir is deprecated"):
+        conf = Settings(
+            zac=ZacSettings(
+                source_collector_dir="",
+                host_modifier_dir="",
+                # map_dir unset here
+                db_uri="",
+            ),
+            zabbix=ZabbixSettings(
+                map_dir="example/mapping_files/",
+                url="",
+                username="",
+                password="",
+                dryrun=False,
+                timeout=60,
+            ),
+        )
+
+    assert str(conf.zac.map_dir) == "example/mapping_files"
+
+
+def test_settings_map_dir_in_both() -> None:
+    """Test that map_dir from `[zac]` is used when both `[zac]` and `[zabbix]` have map_dir set."""
+
+    # No warnings should be raised
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # error if warning is raised
+        conf = Settings(
+            zac=ZacSettings(
+                source_collector_dir="",
+                host_modifier_dir="",
+                map_dir=Path("example/mapping_files_zac/"),
+                db_uri="",
+            ),
+            zabbix=ZabbixSettings(
+                map_dir="example/mapping_files_zabbix/",  # ignored
+                url="",
+                username="",
+                password="",
+                dryrun=False,
+                timeout=60,
+            ),
+        )
+
+    assert str(conf.zac.map_dir) == "example/mapping_files_zac"

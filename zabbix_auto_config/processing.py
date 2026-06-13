@@ -14,7 +14,6 @@ from collections import defaultdict
 from datetime import datetime
 from datetime import timedelta
 from enum import Enum
-from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Optional
@@ -751,17 +750,11 @@ class ZabbixUpdater(BaseProcess):
 
         self.update_interval = 60  # default. Overriden in subclasses
 
+        zac = self.config.zac
         # TODO: configure paths, read on every work iteration
-        map_dir = Path(self.zabbix_config.map_dir)
-        self.property_template_map = utils.read_map_file(
-            map_dir / "property_template_map.txt"
-        )
-        self.property_hostgroup_map = utils.read_map_file(
-            map_dir / "property_hostgroup_map.txt"
-        )
-        self.siteadmin_hostgroup_map = utils.read_map_file(
-            map_dir / "siteadmin_hostgroup_map.txt"
-        )
+        self.property_template_map = zac.get_property_template_map_file().read()
+        self.property_hostgroup_map = zac.get_property_hostgroup_map_file().read()
+        self.siteadmin_hostgroup_map = zac.get_siteadmin_hostgroup_map_file().read()
 
         pyzabbix_logger = logging.getLogger("pyzabbix")
         pyzabbix_logger.setLevel(logging.ERROR)
@@ -1134,7 +1127,10 @@ class ZabbixHostUpdater(ZabbixUpdater):
         # TODO: refactor along with other mapping files if application is
         # rewritten to read mapping files on each work iteration, as opposed
         # to only on startup!
-        self.macro_map = MacroMap.from_config(self.config)
+        if self.config.zac.macros.enabled:
+            self.macro_map = MacroMap.from_config(self.config)
+        else:
+            self.macro_map = MacroMap.new()  # empty mapping
 
     def get_or_create_hostgroup(self, hostgroup: str) -> HostGroup:
         """Fetch a host group, creating it if it doesn't exist."""
@@ -1739,7 +1735,6 @@ class ZabbixHostUpdater(ZabbixUpdater):
         # with the macros from the Zabbix host. Macros are thus NOT synced
         # to the DB host, and we instead just calculate the desired macro
         # state here on each iteration.
-
         result = self.macro_map.resolve_macros(db_host, zabbix_host)
 
         if result.remove:  # Batch removal, no iteration needed
@@ -1835,7 +1830,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
         self._sync_interfaces(db_host, zabbix_host)
         self._sync_tags(db_host, zabbix_host)
         self._sync_inventory(db_host, zabbix_host)
-        self._sync_macros(db_host, zabbix_host)
+
+        if self.config.zac.macros.enabled:
+            self._sync_macros(db_host, zabbix_host)
 
     def do_update(self) -> None:
         db_hosts = self.get_db_hosts()

@@ -809,8 +809,6 @@ class MacroMap:
     Immutable, constructed via MacroMapFactory.
     """
 
-    # NOTE: rewrite as property? let _by_property be the single source of truth
-    # Either accept recalculation overhead, or cache and invalidate on add() call
     definitions: tuple[MacroDefinition, ...] = field(default_factory=tuple)
     """List of all macro definitions."""
 
@@ -844,11 +842,23 @@ class MacroMap:
         return self._managed_macros
 
     @classmethod
+    def new(cls) -> Self:
+        """Construct a new empty MacroMap."""
+        return cls()
+
+    @classmethod
     def from_config(cls, config: Settings) -> Self:
         """Alternate constructor for deriving the macro mapping file settings from config."""
+        # NOTE: mostly exists as a way to remember to pass in optional
+        # arguments from config, such as description prefix wherever
+        # we want to load the mapping file using options from config.
+        # Maybe making all `load()` parameters required would be better?
+        # It would make tests more verbose, but we would
+        # never risk forgetting to pass in arguments if new parameters are added
+        # in the future.
         return cls.load(
-            config.zabbix.macro_map_file,
-            description_prefix=config.zabbix.macro_description_prefix,
+            config.zac.get_macro_map_file_path(),
+            description_prefix=config.zac.macros.description_prefix,
         )
 
     @classmethod

@@ -48,61 +48,6 @@ def zac_tags2zabbix_tags(zac_tags: ZacTags) -> list[HostTag]:
     return [HostTag(tag=tag[0], value=tag[1]) for tag in zac_tags]
 
 
-def read_map_file(path: Path) -> dict[str, list[str]]:
-    log = logger.bind(file=str(path))
-    if not path.is_file():
-        log.warning("Map file does not exist")
-        return {}
-
-    _map: dict[str, list[str]] = {}
-
-    with open(path) as f:
-        for lineno, line in enumerate(f, start=1):
-            line = line.strip()
-
-            # empty line or comment
-            if not line or line.startswith("#"):
-                continue
-
-            try:
-                line = line.partition("#")[0].strip()  # remove trailing comments
-                key, value = line.split(":", 1)
-
-                # Remove whitespace and check for empty key
-                key = key.strip()
-                if not key:
-                    raise ValueError(f"Emtpy key on line {lineno} in map file {path}")
-
-                # Split on comma, but only keep non-empty values
-                # remove trailing comments and whitespace
-                values = list(filter(None, [s.strip() for s in value.split(",")]))
-                if not values or all(not s for s in values):
-                    raise ValueError(
-                        f"Empty value(s) on line {lineno} in map file {path}"
-                    )
-            except ValueError:
-                log.warning(
-                    "Invalid line in map file. Expected 'key:value'",
-                    lineno=lineno,
-                    line=line,
-                )
-                continue
-
-            if key in _map:
-                log.warning("Duplicate key in map file", key=key, lineno=lineno)
-                _map[key].extend(values)
-            else:
-                _map[key] = values
-
-    # Final pass to remove duplicate values
-    for key, values in _map.items():
-        values_dedup = list(dict.fromkeys(values))  # dict.fromkeys() guarantees order
-        if len(values) != len(values_dedup):
-            logger.warning("Ignoring duplicate values in map file.", key=key)
-        _map[key] = values_dedup
-    return _map
-
-
 def with_prefix(
     text: str,
     prefix: str,

@@ -2487,3 +2487,9 @@ macros:
                 },
             )
         )
+
+
+def test_macro_map_new() -> None:
+    """Test the `new` classmethod for constructing an empty MacroMap."""
+    m = MacroMap.new()
+    assert m.definitions == ()
