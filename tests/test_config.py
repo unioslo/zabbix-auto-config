@@ -222,7 +222,12 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
                     "init": {"db": True, "tables": True},
                 },
                 "logging": {
-                    "console": {"enabled": True, "format": "text", "level": "INFO"},
+                    "console": {
+                        "enabled": True,
+                        "format": "text",
+                        "level": "INFO",
+                        "exception_formatter": "rich",
+                    },
                     "file": {
                         "enabled": True,
                         "format": "json",
@@ -427,7 +432,8 @@ def test_logging_settings_log_level_serialize() -> None:
   "console": {
     "enabled": true,
     "format": "text",
-    "level": "INFO"
+    "level": "INFO",
+    "exception_formatter": "rich"
   },
   "file": {
     "enabled": true,

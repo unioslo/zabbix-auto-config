@@ -257,9 +257,7 @@ class SourceCollectorProcess(BaseProcess):
         try:
             self.collect()
         except Exception as e:
-            logger.exception(
-                "Failed to collect from source", error=str(e), source=self.name
-            )
+            logger.error("Source collector exception", error=str(e), source=self.name)
             self.handle_error(e)
         else:
             self.handle_success()
@@ -315,7 +313,7 @@ class SourceCollectorProcess(BaseProcess):
                 handler()
             else:
                 logger.debug(
-                    "Source has not reached error tolerance of. Keeping it enabled",
+                    "Source has not reached error tolerance. Keeping it enabled",
                     error_tolerance=self.settings.error_tolerance,
                     count=self.error_counter.count(),
                 )

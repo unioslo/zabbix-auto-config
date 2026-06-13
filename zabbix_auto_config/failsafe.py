@@ -23,12 +23,7 @@ def check_failsafe(config: Settings, to_add: list[str], to_remove: list[str]) ->
     # Failsafe OK file validation failed
     # We must write the hosts to add/remove and raise an exception
     write_failsafe_hosts(config.zac, to_add, to_remove)
-    logger.warning(
-        "Too many hosts to change (failsafe=%d). Remove: %d, Add: %d. Aborting",
-        failsafe,
-        len(to_remove),
-        len(to_add),
-    )
+
     raise FailsafeError(to_add, to_remove)
 
 

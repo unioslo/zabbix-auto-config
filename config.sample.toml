@@ -82,21 +82,14 @@ use_mp_handler = false
 
 # Settings for the console logger.
 [zac.logging.console]
-# Enable/disable the console logger.
 enabled = true
-
-# Log level for the console logger.
 level = "INFO"
-
-# Log format for the console logger.
 format = "text"
+exception_formatter = "rich" # rich | plain
 
 # Settings for the file logger.
 [zac.logging.file]
-# Enable/disable the file logger.
 enabled = true
-
-# Log level for the file logger.
 level = "INFO"
 
 # Log format for the file logger.
