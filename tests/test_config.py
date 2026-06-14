@@ -200,9 +200,6 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
                 "source_collector_dir": "example/source_collectors/",
                 "host_modifier_dir": "example/host_modifiers/",
                 "map_dir": "example/mapping_files",
-                "property_template_map_file": None,
-                "property_hostgroup_map_file": None,
-                "siteadmin_hostgroup_map_file": None,
                 "health_file": "/tmp/zac_health.json",
                 "failsafe_file": "/tmp/zac_failsafe.json",
                 "failsafe_ok_file": "/tmp/zac_failsafe_ok",
@@ -220,6 +217,12 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
                         "hosts_pending_deletion": "hosts_pending_deletion",
                     },
                     "init": {"db": True, "tables": True},
+                },
+                "mapping_files": {
+                    "property_template": None,
+                    "property_hostgroup": None,
+                    "siteadmin_hostgroup": None,
+                    "macro": None,
                 },
                 "logging": {
                     "console": {
