@@ -24,10 +24,6 @@ failsafe_ok_file = "/tmp/zac_failsafe_ok"
 # It is then up to the administrator to manually delete the file afterwards.
 failsafe_ok_file_strict = true
 
-# Override default mapping file locations instead of deriving from `map_dir`
-# property_template_map_file = "example/mapping_files/property_template_map.txt"
-# property_hostgroup_map_file  = "example/mapping_files/property_hostgroup_map.txt"
-# siteadmin_hostgroup_map_file = "example/mapping_files/siteadmin_hostgroup_map.txt"
 
 
 # Postgres DB settings
@@ -110,6 +106,14 @@ max_size_mb = 50
 # Maximum number of log files to keep.
 max_logs = 5
 
+[zac.mapping_files]
+# Override default mapping file locations instead of deriving from `map_dir`
+# property_template = "example/mapping_files/property_template_map.txt"
+# property_hostgroup = "example/mapping_files/property_hostgroup_map.txt"
+# siteadmin_hostgroup = "example/mapping_files/siteadmin_hostgroup_map.txt"
+# macro = "example/mapping_files/macro_map.yaml"
+
+
 # Macro management settings
 [zac.macros]
 # Whether to manage macros in Zabbix based on the macro map file.
@@ -153,8 +157,6 @@ enabled = true # Enabled by default if GC is enabled.
 retention_days = 90 # Number of days to keep disabled hosts before deleting them
 
 [zabbix]
-
-
 url = "http://zabbix-web-nginx:8080"
 username = "Admin"
 password = "zabbix"

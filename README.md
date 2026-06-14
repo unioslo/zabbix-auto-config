@@ -605,18 +605,32 @@ ZAC operates on a concept of mapping files to assign assign attributes to hosts 
 
 - Siteadmin-hostgroup mapping
   - Maps siteadmins (owners) to host groups. If a host has a siteadmin that is present in the mapping file, the host will be added to the corresponding host group(s).
+  - Default filename: `siteadmin_hostgroup_map.txt`
 - Property-hostgroup mapping
   - Maps host properties (attributes for hosts gathered via source collectors) to host groups. If a host has a property that is present in the mapping file, the host will be added to the corresponding host group(s).
+  - Default filename: `property_hostgroup_map.txt`
 - Property-template mapping
   - Maps host properties to templates. If a host has a property that is present in the mapping file, the corresponding template(s) will be linked to the host.
+  - Default filename: `property_template_map.txt`
 - Macro mapping
   - Defines macros whose values are selected by host properties and/or hostname overrides. Each macro declares the properties and/or hostnames that contribute to the macro value.
+  - Default filename: `macro_map.yaml`
 
-All mapping files are expected to be found in the directory configured with the `zabbix.map_dir` option in the config file:
+Mapping files are expected to be found in the directory configured with the `zac.map_dir` option in the config file:
 
 ```toml
-[zabbix]
+[zac]
 map_dir = "example/mapping_files/"
+```
+
+However, the location of each mapping file can optionally be overridden by setting the corresponding option in the config file:
+
+```toml
+[zac.mapping_files]
+siteadmin_hostgroup = "example/mapping_files/siteadmin_hostgroup_map.txt"
+property_hostgroup = "example/mapping_files/property_hostgroup_map.txt"
+property_template = "example/mapping_files/property_template_map.txt"
+macro = "example/mapping_files/macro_map.yaml"
 ```
 
 #### Siteadmin-hostgroup mapping
@@ -655,6 +669,13 @@ os_windows:Template OS Windows
 ```
 
 #### Macro mapping
+
+> [!IMPORTANT]
+> Macro management must be enabled in the config file before ZAC can manage macros.
+> ```toml
+> [zac.macros]
+> enabled = true
+> ```
 
 The macro mapping file defines macros to set on hosts. Each macro declares the properties (and optionally hostnames) that contribute values. In its most basic form it looks like this:
 

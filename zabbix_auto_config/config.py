@@ -493,6 +493,19 @@ class MacrosSettings(ConfigBaseModel):
     description_prefix: str = "[ZAC]"
 
 
+class MappingFilesSettings(ConfigBaseModel):
+    """Settings for mapping files."""
+
+    # Override default mapping file locations instead of deriving from `map_dir`
+    # NOTE: should we set the defaults here and instead check `model_fields_set`
+    # to determine if they are not set instead of checking for None?
+    # That would let us declare the default paths here _and only here_.
+    property_template: Optional[Path] = None
+    property_hostgroup: Optional[Path] = None
+    siteadmin_hostgroup: Optional[Path] = None
+    macro: Optional[Path] = None
+
+
 class ZacSettings(ConfigBaseModel):
     source_collector_dir: str
     host_modifier_dir: str
@@ -500,9 +513,6 @@ class ZacSettings(ConfigBaseModel):
         default=Path("path/to/map_dir"),
         description="Path to the directory containing mapping files.",
     )
-    property_template_map_file: Optional[Path] = None
-    property_hostgroup_map_file: Optional[Path] = None
-    siteadmin_hostgroup_map_file: Optional[Path] = None
     health_file: Optional[Path] = None
     failsafe_file: Optional[Path] = None
     failsafe_ok_file: Optional[Path] = None
@@ -511,6 +521,7 @@ class ZacSettings(ConfigBaseModel):
     process: ProcessesSettings = ProcessesSettings()
     logging: LoggingSettings = LoggingSettings()
     macros: MacrosSettings = MacrosSettings()
+    mapping_files: MappingFilesSettings = MappingFilesSettings()
 
     # Deprecated options
     db_uri: str = Field(default="", deprecated=True)
@@ -603,43 +614,46 @@ class ZacSettings(ConfigBaseModel):
     ) -> Path:
         return file_path or (self.map_dir / default_filename)
 
-    def _do_get_file(
+    def _get_map_file(
         self,
         file_path: Optional[Path],
         default_filename: str,
         name: str,
         required: bool = False,
     ) -> MapFile:
+        """Resolve a file path and return a MapFile object."""
         path = self._resolve_map_file_path(file_path, default_filename)
         return MapFile(path=path, name=name, required=required)
 
     def get_siteadmin_hostgroup_map_file(self) -> MapFile:
         """Return the siteadmin:hostgroup map file object."""
-        return self._do_get_file(
-            self.siteadmin_hostgroup_map_file,
+        return self._get_map_file(
+            self.mapping_files.siteadmin_hostgroup,
             "siteadmin_hostgroup_map.txt",
             "Siteadmin hostgroup map",
         )
 
     def get_property_hostgroup_map_file(self) -> MapFile:
         """Return property:hostgroup map file object."""
-        return self._do_get_file(
-            self.property_hostgroup_map_file,
+        return self._get_map_file(
+            self.mapping_files.property_hostgroup,
             "property_hostgroup_map.txt",
             "Property hostgroup map",
         )
 
     def get_property_template_map_file(self) -> MapFile:
         """Return property:template map file object."""
-        return self._do_get_file(
-            self.property_template_map_file,
+        return self._get_map_file(
+            self.mapping_files.property_template,
             "property_template_map.txt",
             "Property template map",
         )
 
     def get_macro_map_file_path(self) -> Path:
         """Return the path to the macro map file."""
-        return self._resolve_map_file_path(self.macros.macro_map_file, "macro_map.yaml")
+        # NOTE: we don't return a MapFile for MacroMap,
+        # since it operates on a different file format.
+        return self._resolve_map_file_path(self.mapping_files.macro, "macro_map.yaml")
 
 
 class FailureStrategy(str, Enum):

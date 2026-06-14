@@ -877,3 +877,81 @@ def test_settings_map_dir_in_both() -> None:
         )
 
     assert str(conf.zac.map_dir) == "example/mapping_files_zac"
+
+
+def test_get_siteadmin_hostgroup_map_file(
+    config: Settings, hostgroup_map_file: Path, tmp_path: Path
+):
+    """Test that get_siteadmin_hostgroup_map_file returns the correct path based on config
+    overrides of [zac.mapping_files]."""
+
+    # Create new dir + mapping file and set it in the config
+    new_dir = tmp_path / "new_mapping_files"
+    new_dir.mkdir()
+    new_map_file = new_dir / "custom_siteadmin_hostgroup_map.txt"
+    new_map_file.write_text(hostgroup_map_file.read_text())
+
+    # Set the new mapping file in the config
+    config.zac.mapping_files.siteadmin_hostgroup = new_map_file
+
+    map_file = config.zac.get_siteadmin_hostgroup_map_file()
+    assert map_file.path == new_map_file
+
+    # Unset path -> returns map_dir / default filename
+    config.zac.mapping_files.siteadmin_hostgroup = None
+    assert (
+        config.zac.get_siteadmin_hostgroup_map_file().path
+        == Path(config.zac.map_dir) / "siteadmin_hostgroup_map.txt"
+    )
+
+
+def test_get_property_hostgroup_map_file(
+    config: Settings, property_hostgroup_map_file: Path, tmp_path: Path
+):
+    """Test that get_property_hostgroup_map_file_path returns the correct path based on config
+    overrides of [zac.mapping_files]."""
+
+    # Create new dir + mapping file and set it in the config
+    new_dir = tmp_path / "new_mapping_files"
+    new_dir.mkdir()
+    new_map_file = new_dir / "custom_property_hostgroup_map.txt"
+    new_map_file.write_text(property_hostgroup_map_file.read_text())
+
+    # Set the new mapping file in the config
+    config.zac.mapping_files.property_hostgroup = new_map_file
+
+    map_file = config.zac.get_property_hostgroup_map_file()
+    assert map_file.path == new_map_file
+
+    # Unset path -> returns map_dir / default filename
+    config.zac.mapping_files.property_hostgroup = None
+    assert (
+        config.zac.get_property_hostgroup_map_file().path
+        == Path(config.zac.map_dir) / "property_hostgroup_map.txt"
+    )
+
+
+def test_get_property_template_map_file(
+    config: Settings, property_template_map_file: Path, tmp_path: Path
+):
+    """Test that get_property_template_map_file returns the correct path based on config
+    overrides of [zac.mapping_files]."""
+
+    # Create new dir + mapping file and set it in the config
+    new_dir = tmp_path / "new_mapping_files"
+    new_dir.mkdir()
+    new_map_file = new_dir / "custom_property_template_map.txt"
+    new_map_file.write_text(property_template_map_file.read_text())
+
+    # Set the new mapping file in the config
+    config.zac.mapping_files.property_template = new_map_file
+
+    map_file = config.zac.get_property_template_map_file()
+    assert map_file.path == new_map_file
+
+    # Unset path -> returns map_dir / default filename
+    config.zac.mapping_files.property_template = None
+    assert (
+        config.zac.get_property_template_map_file().path
+        == Path(config.zac.map_dir) / "property_template_map.txt"
+    )
