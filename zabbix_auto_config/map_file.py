@@ -18,7 +18,7 @@ logger = structlog.stdlib.get_logger()
 @dataclass(frozen=True)
 class MapFile:
     path: Path
-    name: str  # "Property template map"
+    name: str  # "Property template map", "Siteadmin hostgroup map", etc.
     required: bool = False  # tolerate missing file by default
     encoding: str = "utf-8"
 
@@ -76,7 +76,7 @@ class MapFile:
                 continue
 
             if key in _map:
-                self.logger.warning("Duplicate key in map file", key=key, lineno=lineno)
+                self.logger.debug("Duplicate key in map file", key=key, lineno=lineno)
                 _map[key].extend(values)
             else:
                 _map[key] = values
@@ -87,6 +87,6 @@ class MapFile:
                 dict.fromkeys(values)
             )  # dict.fromkeys() guarantees order
             if len(values) != len(values_dedup):
-                self.logger.warning("Ignoring duplicate values in map file.", key=key)
+                self.logger.debug("Duplicate values in map file", key=key)
             _map[key] = values_dedup
         return _map
