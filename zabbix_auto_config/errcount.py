@@ -5,11 +5,6 @@ from dataclasses import dataclass
 from dataclasses import field
 from functools import lru_cache
 from functools import wraps
-from typing import TYPE_CHECKING
-from typing import Optional
-
-if TYPE_CHECKING:
-    from typing import List  # noqa: F401
 
 
 @lru_cache
@@ -33,7 +28,7 @@ def compare(f):
 @dataclass
 class Error:
     timestamp: datetime.datetime = field(default_factory=datetime.datetime.now)
-    exception: Optional[Exception] = None
+    exception: Exception | None = None
 
     @compare
     def __lt__(self, other: Error) -> bool:
@@ -79,13 +74,13 @@ class RollingErrorCounter:
         self.errors: list[Error] = []
 
     @property
-    def last_error(self) -> Optional[Error]:
+    def last_error(self) -> Error | None:
         """Return the last error."""
         if len(self.errors) == 0:
             return None
         return self.errors[-1]
 
-    def add(self, exception: Optional[Exception] = None) -> None:
+    def add(self, exception: Exception | None = None) -> None:
         """Add an error to the counter."""
         self.errors.append(Error(exception=exception))
 

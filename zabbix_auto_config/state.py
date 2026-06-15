@@ -7,7 +7,6 @@ from datetime import timedelta
 from multiprocessing.managers import BaseManager
 from multiprocessing.managers import NamespaceProxy  # type: ignore # why unexported?
 from typing import Any
-from typing import Optional
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -35,17 +34,17 @@ class State(BaseModel):
 
     # Error tracking
     ok: bool = True
-    error: Optional[str] = None
-    error_type: Optional[str] = None
-    error_time: Optional[float] = None
+    error: str | None = None
+    error_type: str | None = None
+    error_time: float | None = None
     error_count: int = 0
 
     # Execution metrics
     execution_count: int = 0
     total_duration: timedelta = Field(default_factory=timedelta)
     max_duration: timedelta = Field(default_factory=timedelta)
-    last_duration_warning: Optional[datetime] = None
-    next_update: Optional[datetime] = None
+    last_duration_warning: datetime | None = None
+    next_update: datetime | None = None
 
     @field_serializer("total_duration", "max_duration", when_used="json")
     def _serialize_timedelta(self, value: timedelta) -> float:
@@ -90,7 +89,7 @@ class State(BaseModel):
         self.next_update = next_update
 
     @property
-    def avg_duration(self) -> Optional[timedelta]:
+    def avg_duration(self) -> timedelta | None:
         """Calculate average execution duration.
 
         Returns:

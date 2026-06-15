@@ -4,7 +4,6 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from typing import Optional
 
 import structlog
 from pydantic import BaseModel
@@ -23,7 +22,7 @@ logger = structlog.stdlib.get_logger(__name__)
 
 class ProcessInfo(BaseModel):
     name: str
-    pid: Optional[int]
+    pid: int | None
     alive: bool
     state: State
 

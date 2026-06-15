@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from pydantic import TypeAdapter
 from pydantic import ValidationError
@@ -14,7 +13,7 @@ class JsonFileSourceConfig(CollectorConfig):
     __collector_name__ = "JSON file source"
 
     filename: Path = Path(__file__).parent / "hosts.json"
-    opt_optional: Optional[str] = None
+    opt_optional: str | None = None
     opt_default: str = "default"
 
 

@@ -5,7 +5,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from dataclasses import field
-from enum import Enum
+from enum import StrEnum
 from functools import cached_property
 from functools import lru_cache
 from pathlib import Path
@@ -14,9 +14,10 @@ from typing import Annotated
 from typing import Any
 from typing import Generic
 from typing import NewType
-from typing import Optional
+from typing import Self
 from typing import TypedDict
 from typing import TypeVar
+from typing import assert_never
 
 import structlog.stdlib
 import yaml
@@ -28,8 +29,6 @@ from pydantic import ValidationError
 from pydantic import field_validator
 from pydantic import model_validator
 from typing_extensions import NamedTuple
-from typing_extensions import Self
-from typing_extensions import assert_never
 
 from zabbix_auto_config.exceptions import EmptyMacroMapError
 from zabbix_auto_config.exceptions import InvalidMacroMapFileError
@@ -87,14 +86,14 @@ def is_valid_regexp(regex: str) -> bool:
         return False
 
 
-class ContextType(str, Enum):
+class ContextType(StrEnum):
     """Type of macro context."""
 
     STATIC = "static"
     REGEX = "regex"
 
 
-class ResolveStrategy(str, Enum):
+class ResolveStrategy(StrEnum):
     """Strategy for resolving multiple property contributions to the same macro identity."""
 
     FIRST = "first"  # alphabetically first contributing property wins
@@ -102,7 +101,7 @@ class ResolveStrategy(str, Enum):
     REGEX = "regex"  # values join into (v1|v2|...), values can be regex patterns
 
 
-class MacroValueType(str, Enum):
+class MacroValueType(StrEnum):
     """Zabbix usermacro value type (text/secret/vault)."""
 
     TEXT = "text"  # Zabbix usermacro type=0
@@ -121,7 +120,7 @@ class MacroValueType(str, Enum):
             raise ValueError(f"Unknown macro value type: {self.value!r}")
 
 
-class MacroKind(str, Enum):
+class MacroKind(StrEnum):
     """Kind of macro: literal value or rendered template.
 
     Derived during parse from presence of `template:` field; not a YAML field.
@@ -134,7 +133,7 @@ class MacroKind(str, Enum):
 @lru_cache(maxsize=1000)
 def macro_to_zabbix(
     name: str,
-    context: Optional[str] = None,
+    context: str | None = None,
     context_type: ContextType = ContextType.STATIC,
 ) -> str:
     if context is None:
@@ -155,7 +154,7 @@ class MacroIdentity:
     """Unique identity of a Zabbix user macro: (name, context, context_type)."""
 
     name: MacroName  # This NewType breaks mypy for test snapshots in <3.10 :(
-    context: Optional[str] = None
+    context: str | None = None
     context_type: ContextType = ContextType.STATIC
 
     def to_zabbix(self) -> str:
@@ -190,10 +189,10 @@ TemplateMacroValues = Annotated[
 class MacroValue:
     """Value contribution from one property mapping."""
 
-    value: Optional[str] = None
-    description: Optional[str] = None
+    value: str | None = None
+    description: str | None = None
     values: TemplateMacroValues = field(default_factory=dict)
-    template: Optional[str] = None  # per-property template override
+    template: str | None = None  # per-property template override
 
     @classmethod
     def via_mapping(
@@ -223,10 +222,10 @@ class MacroDefinition:
     """
 
     identity: MacroIdentity
-    description: Optional[str] = None
+    description: str | None = None
     value_type: MacroValueType = MacroValueType.TEXT
     resolve: ResolveStrategy = ResolveStrategy.FIRST
-    template: Optional[str] = None
+    template: str | None = None
     defaults: TemplateMacroValues = field(default_factory=dict)
     properties: dict[str, MacroValue] = field(default_factory=dict)
     hosts: dict[str, MacroValue] = field(default_factory=dict)  # per-host overrides
@@ -275,11 +274,11 @@ class PropertyValueIn(BaseModel):
     """Per-property value entry. Accepts scalar shorthand or expanded form."""
 
     # Used by plain macros
-    value: Optional[str] = None
+    value: str | None = None
     # Used by templates
     values: TemplateMacroValues = Field(default_factory=dict)  # for overriden template
-    description: Optional[str] = None
-    template: Optional[str] = None
+    description: str | None = None
+    template: str | None = None
 
     model_config = ConfigDict(extra="ignore")
 
@@ -338,7 +337,7 @@ def _apply_template(
 
 
 def _validate_template_entries(
-    template: Optional[str],
+    template: str | None,
     defaults: TemplateMacroValues,
     entries: dict[str, PropertyValueIn],
     label: str,
@@ -419,10 +418,10 @@ def _validate_template_entries(
 
 
 def _validate_template_props(
-    template: Optional[str],
+    template: str | None,
     defaults: TemplateMacroValues,
     properties: dict[str, PropertyValueIn],
-    hosts: Optional[dict[str, PropertyValueIn]] = None,
+    hosts: dict[str, PropertyValueIn] | None = None,
 ) -> None:
     """Validate template/defaults/properties/hosts consistency.
 
@@ -481,8 +480,8 @@ class MacroContextIn(BaseModel):
 
     context: str
     context_type: ContextType = ContextType.STATIC
-    description: Optional[str] = None
-    template: Optional[str] = None
+    description: str | None = None
+    template: str | None = None
     defaults: TemplateMacroValues = Field(default_factory=dict)
     properties: dict[str, PropertyValueIn] = Field(default_factory=dict)
     hosts: dict[str, PropertyValueIn] = Field(default_factory=dict)
@@ -503,10 +502,10 @@ HostValuesIn = dict[str, str]  # May add validator to this
 class MacroDefIn(BaseModel):
     """Top-level macro definition entry from macro mapping file."""
 
-    description: Optional[str] = None
+    description: str | None = None
     value_type: MacroValueType = MacroValueType.TEXT
     resolve: ResolveStrategy = ResolveStrategy.FIRST
-    template: Optional[str] = None
+    template: str | None = None
     defaults: TemplateMacroValues = Field(default_factory=dict)
     properties: dict[str, PropertyValueIn] = Field(default_factory=dict)
     contexts: list[MacroContextIn] = Field(default_factory=list)
@@ -743,7 +742,7 @@ class MacroMapFactory(Generic[MacroMapT]):
     """Factory for constructing a MacroMap instance."""
 
     cls: type[MacroMapT]
-    description_prefix: Optional[str] = None
+    description_prefix: str | None = None
     _definitions: dict[MacroIdentity, MacroDefinition] = field(default_factory=dict)
 
     def add(self, defn: MacroDefinition) -> None:
@@ -812,7 +811,7 @@ class MacroMap:
     definitions: tuple[MacroDefinition, ...] = field(default_factory=tuple)
     """List of all macro definitions."""
 
-    description_prefix: Optional[str] = field(default=None)
+    description_prefix: str | None = field(default=None)
     """Prefix to append to descriptions of all macros derived from this mapping, to provide context in Zabbix UI."""
 
     _by_property: dict[str, list[MacroDefinition]] = field(
@@ -867,7 +866,7 @@ class MacroMap:
         return MacroMapFileIn.load(path)
 
     @classmethod
-    def load(cls, path: Path, description_prefix: Optional[str] = None) -> Self:
+    def load(cls, path: Path, description_prefix: str | None = None) -> Self:
         """Load and validate a macro mapping YAML file."""
         factory = MacroMapFactory(cls=cls, description_prefix=description_prefix)
 

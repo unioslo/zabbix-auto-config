@@ -5,14 +5,14 @@ from __future__ import annotations
 
 import logging
 import re
-import sys
+import tomllib
 import warnings
 from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 from typing import Literal
-from typing import Optional
-from typing import Union
+from typing import Self
 
 import structlog
 from pydantic import BaseModel
@@ -23,7 +23,6 @@ from pydantic import ValidationInfo
 from pydantic import field_validator
 from pydantic import model_validator
 from pydantic_core import core_schema
-from typing_extensions import Self
 
 from zabbix_auto_config import utils
 from zabbix_auto_config.dirs import CONFIG_FILE_DEFAULT
@@ -32,12 +31,6 @@ from zabbix_auto_config.dirs import LOG_FILE_DEFAULT
 from zabbix_auto_config.exceptions import ConfigFileNotFoundError
 from zabbix_auto_config.exceptions import ConfigValidationError
 from zabbix_auto_config.map_file import MapFile
-
-# Use standard library for Python 3.11+, fallback to tomli for older versions
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
 
 logger = structlog.stdlib.get_logger(__name__)
 
@@ -86,12 +79,12 @@ class ZabbixSettings(ConfigBaseModel):
     username: str
     password: str
     dryrun: bool
-    timeout: Optional[int] = Field(
+    timeout: int | None = Field(
         60,
         description="The timeout in seconds for HTTP requests to Zabbix.",
         ge=0,
     )
-    verify_ssl: Union[bool, Path] = True
+    verify_ssl: bool | Path = True
     """Path to a CA bundle file or `True` to use the system's CA bundle. False to disable SSL verification."""
 
     tags_prefix: str = "zac_"
@@ -125,7 +118,7 @@ class ZabbixSettings(ConfigBaseModel):
 
     @field_validator("timeout")
     @classmethod
-    def _validate_timeout(cls, v: Optional[int]) -> Optional[int]:
+    def _validate_timeout(cls, v: int | None) -> int | None:
         if v == 0:
             return None
         return v
@@ -187,7 +180,7 @@ class GarbageCollectorSettings(ProcessSettings):
     enabled: bool = Field(
         default=False, description="Enable/disable all garbage collection features."
     )
-    schedule: Optional[str] = Field(
+    schedule: str | None = Field(
         default="0 0 * * *",
         description="Cron schedule for running the garbage collector.",
     )
@@ -381,7 +374,7 @@ class LogLevel(int, Enum):
         return cls.ERROR
 
 
-class LoggerFormat(str, Enum):
+class LoggerFormat(StrEnum):
     JSON = "json"
     TEXT = "text"
 
@@ -487,7 +480,7 @@ class MacrosSettings(ConfigBaseModel):
         default=False,
         description="Whether to manage macros in Zabbix based on the macro map file.",
     )
-    macro_map_file: Optional[Path] = None
+    macro_map_file: Path | None = None
     """Path to the macro map file. If not set, will look for 'macro_map.yaml' in the map_dir."""
 
     description_prefix: str = "[ZAC]"
@@ -500,10 +493,10 @@ class MappingFilesSettings(ConfigBaseModel):
     # NOTE: should we set the defaults here and instead check `model_fields_set`
     # to determine if they are not set instead of checking for None?
     # That would let us declare the default paths here _and only here_.
-    property_template: Optional[Path] = None
-    property_hostgroup: Optional[Path] = None
-    siteadmin_hostgroup: Optional[Path] = None
-    macro: Optional[Path] = None
+    property_template: Path | None = None
+    property_hostgroup: Path | None = None
+    siteadmin_hostgroup: Path | None = None
+    macro: Path | None = None
 
 
 class ZacSettings(ConfigBaseModel):
@@ -513,9 +506,9 @@ class ZacSettings(ConfigBaseModel):
         default=Path("path/to/map_dir"),
         description="Path to the directory containing mapping files.",
     )
-    health_file: Optional[Path] = None
-    failsafe_file: Optional[Path] = None
-    failsafe_ok_file: Optional[Path] = None
+    health_file: Path | None = None
+    failsafe_file: Path | None = None
+    failsafe_ok_file: Path | None = None
     failsafe_ok_file_strict: bool = True
     db: DBSettings = DBSettings()
     process: ProcessesSettings = ProcessesSettings()
@@ -598,9 +591,7 @@ class ZacSettings(ConfigBaseModel):
 
     @field_validator("health_file", "failsafe_file", "failsafe_ok_file", mode="after")
     @classmethod
-    def _validate_file_path(
-        cls, v: Optional[Path], info: ValidationInfo
-    ) -> Optional[Path]:
+    def _validate_file_path(cls, v: Path | None, info: ValidationInfo) -> Path | None:
         if v is None:
             return v
         if v.exists() and v.is_dir():
@@ -610,13 +601,13 @@ class ZacSettings(ConfigBaseModel):
         return v
 
     def _resolve_map_file_path(
-        self, file_path: Optional[Path], default_filename: str
+        self, file_path: Path | None, default_filename: str
     ) -> Path:
         return file_path or (self.map_dir / default_filename)
 
     def _get_map_file(
         self,
-        file_path: Optional[Path],
+        file_path: Path | None,
         default_filename: str,
         name: str,
         required: bool = False,
@@ -656,7 +647,7 @@ class ZacSettings(ConfigBaseModel):
         return self._resolve_map_file_path(self.mapping_files.macro, "macro_map.yaml")
 
 
-class FailureStrategy(str, Enum):
+class FailureStrategy(StrEnum):
     """Strategies for handling collector failures."""
 
     EXIT = "exit"
@@ -806,7 +797,7 @@ class Settings(ConfigBaseModel):
         description="A mapping of source collector names to their settings.",
     )
 
-    config_path: Optional[Path] = Field(
+    config_path: Path | None = Field(
         default=None, description="Path the config was loaded from.", exclude=True
     )
 
@@ -829,7 +820,7 @@ class Settings(ConfigBaseModel):
         return self
 
 
-def get_config(path: Optional[Path] = None) -> Settings:
+def get_config(path: Path | None = None) -> Settings:
     """Load the ZAC configuration from the first available valid configuration file."""
     # We have a specific path, load it
     if path:

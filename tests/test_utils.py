@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import sys
 from datetime import timedelta
 from ipaddress import IPv4Address
 from ipaddress import IPv6Address
 from pathlib import Path
-from typing import Union
 
 import pytest
 import structlog
@@ -20,11 +20,19 @@ from zabbix_auto_config.pyzabbix.types import HostTag
     [
         (r"\d", True),
         (r"\D", True),
-        (r"\z", False),
         (r"hello", True),
         (r"\.", True),
         (r"\(", True),
         (r"\)", True),
+        # \z became a valid pattern from 3.14 for some reason... :)
+        pytest.param(
+            r"\z",
+            False,
+            marks=pytest.mark.xfail(
+                sys.version_info >= (3, 14),
+                reason="\\z is not a valid pattern in Python < 3.14",
+            ),
+        ),
     ],
 )
 def test_is_valid_regexp(input: str, expected: bool):
@@ -32,7 +40,7 @@ def test_is_valid_regexp(input: str, expected: bool):
 
 
 @given(st.ip_addresses())
-def test_is_valid_ip(ip_address: Union[IPv4Address, IPv6Address]):
+def test_is_valid_ip(ip_address: IPv4Address | IPv6Address):
     assert utils.is_valid_ip(str(ip_address))
 
 

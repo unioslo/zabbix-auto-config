@@ -43,7 +43,7 @@ Note: Primarily tested with Zabbix 7.0 and 6.4, but should work with 6.0 and 5.2
 
 ## Requirements
 
-- Python >=3.9
+- Python >=3.11
 - pip >=21.3 or [uv](https://docs.astral.sh/uv/getting-started/installation/) >= 0.5.0
 - Zabbix >=6.4
 

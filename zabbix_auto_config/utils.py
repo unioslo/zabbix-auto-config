@@ -10,8 +10,6 @@ from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Optional
-from typing import Union
 
 import structlog
 from typing_extensions import deprecated
@@ -50,7 +48,7 @@ def zac_tags2zabbix_tags(zac_tags: ZacTags) -> list[HostTag]:
 
 
 @deprecated("Use zabbix_auto_config.map_file.MapFile.read() instead")
-def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
+def read_map_file(path: str | Path) -> dict[str, list[str]]:
     _map: dict[str, list[str]] = {}
 
     with open(path) as f:
@@ -174,7 +172,7 @@ def drain_queue(q: multiprocessing.Queue[Any]) -> None:
             break
 
 
-def format_timedelta(td: Optional[timedelta] = None) -> str:
+def format_timedelta(td: timedelta | None = None) -> str:
     """Format a timedelta object showing only hours, minutes, and seconds.
 
     Args:
@@ -198,7 +196,7 @@ def format_timedelta(td: Optional[timedelta] = None) -> str:
     return f"{sign}{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
-def write_file(path: Union[str, Path], content: str, end: str = "\n") -> None:
+def write_file(path: str | Path, content: str, end: str = "\n") -> None:
     """Writes `content` to `path`. Ensures content ends with a given character."""
     path = Path(path)
     # Ensure parent dirs exist
@@ -214,7 +212,7 @@ def write_file(path: Union[str, Path], content: str, end: str = "\n") -> None:
         raise
 
 
-def make_parent_dirs(path: Union[str, Path]) -> Path:
+def make_parent_dirs(path: str | Path) -> Path:
     """Attempts to create all parent directories given a path.
 
     NOTE: Intended for usage with Pydantic models, and as such it will raise

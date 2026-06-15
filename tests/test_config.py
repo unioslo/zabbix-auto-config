@@ -3,7 +3,6 @@ from __future__ import annotations
 import warnings
 from pathlib import Path
 from typing import Any
-from typing import Optional
 from unittest.mock import patch
 
 import pytest
@@ -473,7 +472,7 @@ def test_logging_settings_log_level_serialize() -> None:
         ),
     ],
 )
-def test_zabbix_settings_timeout(timeout: int, expect: Optional[int]) -> None:
+def test_zabbix_settings_timeout(timeout: int, expect: int | None) -> None:
     settings = ZabbixSettings(
         url="",
         username="",

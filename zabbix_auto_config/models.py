@@ -4,8 +4,7 @@ import datetime
 from pathlib import Path
 from typing import Annotated
 from typing import Any
-from typing import Optional
-from typing import Union
+from typing import Self
 
 import structlog
 from pydantic import BaseModel
@@ -14,7 +13,6 @@ from pydantic import Field
 from pydantic import RootModel
 from pydantic import field_validator
 from pydantic import model_validator
-from typing_extensions import Self
 
 from zabbix_auto_config import utils
 
@@ -22,7 +20,7 @@ logger = structlog.stdlib.get_logger(__name__)
 
 
 class Interface(BaseModel):
-    details: Optional[dict[str, Union[int, str]]] = {}
+    details: dict[str, int | str] | None = {}
     endpoint: str
     port: str  # Ports could be macros, i.e. strings
     type: int
@@ -47,12 +45,12 @@ class Host(BaseModel):
     enabled: bool
     hostname: str
     # Optional fields
-    importance: Optional[Annotated[int, Field(ge=0)]] = None
+    importance: Annotated[int, Field(ge=0)] | None = None
     interfaces: list[Interface] = []
     inventory: dict[str, str] = {}
-    macros: Optional[Any] = None
+    macros: Any | None = None
     properties: set[str] = set()
-    proxy_pattern: Optional[str] = None
+    proxy_pattern: str | None = None
     siteadmins: set[str] = set()
     sources: set[str] = set()
     tags: set[tuple[str, str]] = set()
@@ -84,7 +82,7 @@ class Host(BaseModel):
 
     @field_validator("proxy_pattern")
     @classmethod
-    def must_be_valid_regexp_pattern(cls, v: Optional[str]) -> Optional[str]:
+    def must_be_valid_regexp_pattern(cls, v: str | None) -> str | None:
         if v is not None:
             assert utils.is_valid_regexp(v), f"Must be valid regexp pattern: {v!r}"
         return v
