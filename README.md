@@ -24,6 +24,7 @@ Note: Primarily tested with Zabbix 7.0 and 6.4, but should work with 6.0 and 5.2
 - [Concepts](#concepts)
   - [Source collectors](#source-collectors)
   - [Host modifiers](#host-modifiers)
+  - [Mapping files](#mapping-files)
   - [Host inventory](#host-inventory)
   - [Garbage Collection](#garbage-collection)
 - [Development](#development)
@@ -419,6 +420,39 @@ def collect(*args: Any, **kwargs: Any) -> list[Host]:
 
 A module is recognized by ZAC as a source collector if it contains a `collect()` function that accepts an arbitrary number of arguments and keyword arguments and returns a list of `Host` objects. Type annotations are optional but recommended.
 
+#### Running source collectors manually
+
+> [!NOTE]
+> Optional section - not required for basic operation
+
+A collector can optionally also provide a `if __name__ == "__main__"` block to provide an interface for running the collector in a standalone fashion. This is useful if you want to test the collector module without running the entire application, debug it, or use it in a different context.
+
+> [!IMPORTANT]
+> Running collectors standalone requires passing configuration manually as keyword arguments to the `collect()` function.
+
+```py
+if __name__ == "__main__":
+    # Print hosts as a JSON array when running standalone
+    from zabbix_auto_config.models import print_hosts
+    print_hosts(collect())
+```
+
+#### Collecting JSON output
+
+> [!NOTE]
+> Optional section - not required for basic operation
+
+If you wish to collect just the JSON output from a source collector and write it to a file or otherwise manipulate it, you can import `zabbix_auto_config.models.hosts_to_json` and use it like this:
+
+```py
+if __name__ == "__main__":
+    from zabbix_auto_config.models import hosts_to_json
+    with open("output.json", "w") as f:
+        f.write(hosts_to_json(collect()))
+```
+
+`hosts_to_json` takes a list of `Host` objects and returns a JSON string.
+
 #### Configuration
 
 The configuration for loading a source collector module, like the `jsonsource_basic.py` module above, includes both required and optional fields:
@@ -544,39 +578,6 @@ required_option
 
 Host modifiers are Python modules (files) that are placed in a directory defined by the option `host_modifier_dir` in the `[zac]` table of the config file. A host modifier is a module that contains a function named `modify` that takes a `Host` object as its only argument, modifies it, and returns it. Zabbix-auto-config will attempt to load all modules in the given directory.
 
-#### Running source collectors manually
-
-> [!NOTE]
-> Optional section - not required for basic operation
-
-A collector can optionally also provide a `if __name__ == "__main__"` block to provide an interface for running the collector in a standalone fashion. This is useful if you want to test the collector module without running the entire application, debug it, or use it in a different context.
-
-> [!IMPORTANT]
-> Running collectors standalone requires passing configuration manually as keyword arguments to the `collect()` function.
-
-```py
-if __name__ == "__main__":
-    # Print hosts as a JSON array when running standalone
-    from zabbix_auto_config.models import print_hosts
-    print_hosts(collect())
-```
-
-#### Collecting JSON output
-
-> [!NOTE]
-> Optional section - not required for basic operation
-
-If you wish to collect just the JSON output from a source collector and write it to a file or otherwise manipulate it, you can import `zabbix_auto_config.models.hosts_to_json` and use it like this:
-
-```py
-if __name__ == "__main__":
-    from zabbix_auto_config.models import hosts_to_json
-    with open("output.json", "w") as f:
-        f.write(hosts_to_json(collect()))
-```
-
-`hosts_to_json` takes a list of `Host` objects and returns a JSON string.
-
 #### Writing a host modifier
 
 A host modifier module that adds a given siteadmin to all hosts could look like this:
@@ -597,6 +598,234 @@ def modify(host: Host) -> Host:
 Any module that contains a function named `modify` which takes a `Host` and returns a `Host` is recognized as a host modifier module. Type annotations are optional, but recommended.
 
 See the [`Host`](https://github.com/unioslo/zabbix-auto-config/blob/2b45f1cb7da0d46b8b218005ebbf751cb17f8793/zabbix_auto_config/models.py#L111-L123) class in `zabbix_auto_config/models.py` for the available fields that can be accessed and modified. One restriction applies: the `modify` function should _never_ modify the hostname of the host. Attempting to do so will result in an error.
+
+### Mapping files
+
+ZAC operates on a concept of mapping files to assign assign attributes to hosts and group them. They are:
+
+- Siteadmin-hostgroup mapping
+  - Maps siteadmins (owners) to host groups. If a host has a siteadmin that is present in the mapping file, the host will be added to the corresponding host group(s).
+  - Default filename: `siteadmin_hostgroup_map.txt`
+- Property-hostgroup mapping
+  - Maps host properties (attributes for hosts gathered via source collectors) to host groups. If a host has a property that is present in the mapping file, the host will be added to the corresponding host group(s).
+  - Default filename: `property_hostgroup_map.txt`
+- Property-template mapping
+  - Maps host properties to templates. If a host has a property that is present in the mapping file, the corresponding template(s) will be linked to the host.
+  - Default filename: `property_template_map.txt`
+- Macro mapping
+  - Defines macros whose values are selected by host properties and/or hostname overrides. Each macro declares the properties and/or hostnames that contribute to the macro value.
+  - Default filename: `macro_map.yaml`
+
+Mapping files are expected to be found in the directory configured with the `zac.map_dir` option in the config file:
+
+```toml
+[zac]
+map_dir = "example/mapping_files/"
+```
+
+However, the location of each mapping file can optionally be overridden by setting the corresponding option in the config file:
+
+```toml
+[zac.mapping_files]
+siteadmin_hostgroup = "example/mapping_files/siteadmin_hostgroup_map.txt"
+property_hostgroup = "example/mapping_files/property_hostgroup_map.txt"
+property_template = "example/mapping_files/property_template_map.txt"
+macro = "example/mapping_files/macro_map.yaml"
+```
+
+#### Siteadmin-hostgroup mapping
+
+The siteadmin-hostgroup mapping file is the central concept around which ZAC uses to group hosts. Hosts are grouped by their siteadmins (owners). These host groups are created automatically by ZAC if they do not exist in Zabbix:
+
+```txt
+# siteadmin_hostgroup_map.txt
+
+alice@example.com:Siteadmin-alice-hosts
+bob@example.com:Siteadmin-bob-hosts
+```
+
+Furthermore, if `zabbix.create_templategroups` is enabled in the config file, template groups (with the same name as the host groups, but with the prefix replaced by `Templates-`) will also be created automatically if they do not exist.
+
+
+#### Property-hostgroup mapping
+
+The property-hostgroup mapping file is used to group hosts based on their properties. For example, if you have a property called `location_downtown`, you can create a mapping that adds all hosts with this property to a host group called `Downtown`:
+
+```txt
+# property_hostgroup_map.txt
+
+location_downtown:Downtown
+```
+
+#### Property-template mapping
+
+The property-template mapping file is used to link templates to hosts based on their properties. For example, if you have properties for OS types, they can be mapped to their relevant templates:
+
+```txt
+# property_template_map.txt
+
+os_linux:Template OS Linux
+os_windows:Template OS Windows
+```
+
+#### Macro mapping
+
+> [!IMPORTANT]
+> Macro management must be enabled in the config file before ZAC can manage macros.
+> ```toml
+> [zac.macros]
+> enabled = true
+> ```
+
+The macro mapping file defines macros to set on hosts. Each macro declares the properties (and optionally hostnames) that contribute values. In its most basic form it looks like this:
+
+```yaml
+# macro_map.yaml
+
+macros:
+  "{$ZAC.PLAIN_MACRO}":
+    properties:
+      barry: "barry value"
+      pizza: "pizza value"
+```
+
+If a host has the property `barry`, the macro `{$ZAC.PLAIN_MACRO}` will be set to `barry value`. If a host has the property `pizza`, the same macro will be set to `pizza value`. If a host has both properties, the macro will use the alphabetically first property name to determine the value, in this case `barry`.
+
+When multiple properties contribute to the same macro, the `resolve` field controls the resolution strategy. Supported values:
+
+- `resolve: first` (default) — alphabetically first contributing property wins.
+- `resolve: last` — alphabetically last contributing property wins.
+- `resolve: regex` — values are joined into a regex alternation `(v1|v2|...)`. See [Regular expression macros](#regular-expression-macros).
+
+A default description can be defined for the macro using the `description` field. Furthermore, per-property descriptions can also be defined to override the default description when certain properties are matched.
+
+```yaml
+macros:
+  "{$ZAC.PLAIN_MACRO}":
+    description: "This is a default description for the macro"
+    properties:
+      barry:
+        description: "Description for barry property"
+        value: "barry value"
+      pizza: "pizza value" # uses default description
+```
+
+##### Regular expression macros
+
+Some macros support regular expressions, and can thus combine multiple matching properties into a single regular expression. For example, the [Systemd monitoring with Agent 2](https://www.zabbix.com/integrations/systemd) integration uses the `{$SYSTEMD.NAME.SERVICE.MATCHES}` macro to determine which services to monitor.
+
+To specify a regex macro, use `resolve: regex`.
+
+```yaml
+macros:
+  "{$SYSTEMD.NAME.SERVICE.MATCHES}":
+    description: "Systemd service name matches regex"
+    resolve: regex
+    properties:
+      is_pgsql_server: postgresql
+      zabbix_agent: zabbix-agent
+      use_zabbix_agent2: zabbix-agent2
+```
+
+Given a host with the properties `is_pgsql_server` and `use_zabbix_agent2`, the resulting macro value for `{$SYSTEMD.NAME.SERVICE.MATCHES}` will be `(postgresql|zabbix-agent2)`.
+
+##### Macro templates
+
+Some macros require a value such as a DNS name (for all intents and purposes, this is a hostname in Zabbix context). In these cases, the mapping file can specify a template for how the macro value should be constructed using the `template` field.
+
+```yaml
+macros:
+  "{$NODE.DASHBOARD}":
+    template: "https://grafana.example.com/d/node?var-host={{hostname}}"
+    properties:
+      dashboard_node: # no need to specify a value
+```
+
+More advanced templates are also supported, with multiple placeholders. Each placeholder must have a default defined in the `defaults` field, and can optionally be overridden per property:
+
+```yaml
+macros:
+  "{$AGENT.URL}":
+    description: "Agent scrape URL"
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+    defaults:
+      port: 9100 # required
+      endpoint: metrics # required
+    properties:
+      monitored_node:           # uses default port 9100
+      legacy_exporter:
+        port: 9101              # overrides default port
+```
+
+##### Macros with context
+
+Zabbix macros can also include optional context that is used to determine which macro value should be selected given an input argument, turning the macros into pseudo-functions. Read the [Zabbix docs](https://www.zabbix.com/documentation/current/en/manual/config/macros/user_macros_context) for a primer on how macro contexts work.
+
+
+```yaml
+macros:
+  "{$LOW_SPACE_LIMIT}":
+    description: "We can override the default description"
+    properties:
+      regular: 10
+      strict: 20
+    contexts:
+      - context: "/tmp" # text context (exact match)
+        description: "Description for /tmp context used here"
+        properties:
+          regular: 20
+          strict: 30
+      - context: "^/var/log/.*$" # regex context
+        context_type: regex
+        properties:
+          regular: 30
+          strict:
+            value: 40
+            description: "Overriding description for strict property in /var/log context"
+          very_strict: 50
+```
+
+Contexts exist independently of the parent macro it is defined on, and properties for contexts do not have to match those defined on the parent macro.
+
+
+##### Overriding macros on specific hosts
+
+If one or more hosts require specific macro values independent of their properties, the `hosts:` value can be set to one or more hostnames or hostname patterns:
+
+```yaml
+macros:
+  "{$ZAC.HOST_OVERRIDDEN}":
+    description: "Per-host scrape URL"
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+    defaults:
+      port: 9100
+      endpoint: metrics
+    properties:
+      host_overridden_node:
+    hosts:
+      special.example.com:           # exact match (preferred)
+        values:
+          port: 9500
+          endpoint: special-metrics
+      ".*\\.legacy\\.example\\.com": # regex fallback
+        values:
+          port: 9101
+```
+
+Given the above example, the host `special.example.com` would match the first pattern (exact match). Another host, `other.legacy.example.com`, would match the second pattern (regex match). A third host, `unmatched.example.com`, would not match any pattern and match on properties (if any).
+
+##### Removing managed macros
+
+All macros defined in the mapping file are considered "managed", and are thus removed from hosts if the corresponding properties are removed from the host. If a macro has been managed by ZAC at some point, and should be retired (i.e. removed from all hosts), a macro definition with no properties can be used to remove it from all hosts.
+
+```yaml
+macros:
+  "{$ZAC.PLAIN_MACRO}":
+    properties:
+      # no properties will match this -> {$ZAC.PLAIN_MACRO} removed from all hosts
+```
+
+
 
 ### Host inventory
 

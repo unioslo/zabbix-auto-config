@@ -5,6 +5,9 @@ source_collector_dir = "example/source_collectors/"
 # Directory containing the host modifier modules.
 host_modifier_dir = "example/host_modifiers/"
 
+# Directory containing mapping files.
+map_dir = "example/mapping_files/"
+
 # Health status for each ZAC process.
 health_file = "/tmp/zac_health.json"
 
@@ -20,6 +23,7 @@ failsafe_ok_file = "/tmp/zac_failsafe_ok"
 # If false, the application will make changes even if it fails to delete the file.
 # It is then up to the administrator to manually delete the file afterwards.
 failsafe_ok_file_strict = true
+
 
 
 # Postgres DB settings
@@ -102,6 +106,25 @@ max_size_mb = 50
 # Maximum number of log files to keep.
 max_logs = 5
 
+[zac.mapping_files]
+# Override default mapping file locations instead of deriving from `map_dir`
+# property_template = "example/mapping_files/property_template_map.txt"
+# property_hostgroup = "example/mapping_files/property_hostgroup_map.txt"
+# siteadmin_hostgroup = "example/mapping_files/siteadmin_hostgroup_map.txt"
+# macro = "example/mapping_files/macro_map.yaml"
+
+
+# Macro management settings
+[zac.macros]
+# Whether to manage macros in Zabbix based on the macro map file.
+enabled = false
+
+# Path to the macro map file. If not set, will look for 'macro_map.yaml' in the map_dir.
+macro_map_file = "example/mapping_files/macro_map.yaml"
+
+# Prefix for descriptions of macros managed by ZAC
+description_prefix = "[ZAC]"
+
 
 # Configuration for ZAC processes.
 [zac.process.source_merger]
@@ -134,9 +157,6 @@ enabled = true # Enabled by default if GC is enabled.
 retention_days = 90 # Number of days to keep disabled hosts before deleting them
 
 [zabbix]
-# Directory containing mapping files.
-map_dir = "example/mapping_files/"
-
 url = "http://zabbix-web-nginx:8080"
 username = "Admin"
 password = "zabbix"

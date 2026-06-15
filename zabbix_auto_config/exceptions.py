@@ -119,3 +119,23 @@ class FailsafeError(ZACException):
         self.add: list[str] = add or []
         self.remove: list[str] = remove or []
         super().__init__(*args, **kwargs)
+
+
+class MacroMapError(ZACException):
+    """Base exception for macro mapping errors."""
+
+
+class MacroMapFileReadError(MacroMapError):
+    """Errors related to reading the macro mapping file."""
+
+
+class MacroMapFileNotFound(MacroMapFileReadError, FileNotFoundError):
+    """Macro mapping file does not exist."""
+
+
+class InvalidMacroMapFileError(MacroMapError):
+    """Macro mapping file is invalid."""
+
+
+class EmptyMacroMapError(MacroMapError):
+    """Macro mapping file is empty."""

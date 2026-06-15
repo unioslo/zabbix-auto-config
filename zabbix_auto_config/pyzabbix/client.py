@@ -1384,10 +1384,22 @@ class ZabbixAPI:
 
         return [GlobalMacro(**macro) for macro in result]
 
-    def create_macro(self, host: Host, macro: str, value: str) -> str:
+    def create_macro(
+        self,
+        host: Host,
+        macro: str,
+        value: str,
+        description: str | None = None,
+        type: Optional[int] = None,
+    ) -> str:
         """Create a macro given a host ID, macro name and value."""
+        params: ParamsType = {"hostid": host.hostid, "macro": macro, "value": value}
+        if description is not None:
+            params["description"] = description
+        if type is not None:
+            params["type"] = type
         try:
-            resp = self.usermacro.create(hostid=host.hostid, macro=macro, value=value)
+            resp = self.usermacro.create(**params)
         except ZabbixAPIException as e:
             raise ZabbixAPICallError(
                 f"Failed to create macro {macro!r} for host {host}"
@@ -1398,22 +1410,21 @@ class ZabbixAPI:
             )
         return resp["hostmacroids"][0]
 
-    def create_global_macro(self, macro: str, value: str) -> str:
-        """Create a global macro given a macro name and value."""
-        try:
-            resp = self.usermacro.createglobal(macro=macro, value=value)
-        except ZabbixAPIException as e:
-            raise ZabbixAPICallError(f"Failed to create global macro {macro!r}.") from e
-        if not resp or not resp.get("globalmacroids"):
-            raise ZabbixNotFoundError(
-                f"No macro ID returned when creating global macro {macro!r}."
-            )
-        return resp["globalmacroids"][0]
-
-    def update_macro(self, macroid: str, value: str) -> str:
+    def update_macro(
+        self,
+        macroid: str,
+        value: str,
+        description: str | None = None,
+        type: Optional[int] = None,
+    ) -> str:
         """Update a macro given a macro ID and value."""
+        params: ParamsType = {"hostmacroid": macroid, "value": value}
+        if description is not None:
+            params["description"] = description
+        if type is not None:
+            params["type"] = type
         try:
-            resp = self.usermacro.update(hostmacroid=macroid, value=value)
+            resp = self.usermacro.update(**params)
         except ZabbixAPIException as e:
             raise ZabbixAPICallError(f"Failed to update macro with ID {macroid}") from e
         if not resp or not resp.get("hostmacroids"):
@@ -1421,6 +1432,15 @@ class ZabbixAPI:
                 f"No macro ID returned when updating macro with ID {macroid}"
             )
         return resp["hostmacroids"][0]
+
+    def delete_macro(self, macroid: list[str] | str) -> None:
+        """Delete a host macro given its ID."""
+        if isinstance(macroid, str):
+            macroid = [macroid]
+        try:
+            self.usermacro.delete(*macroid)
+        except ZabbixAPIException as e:
+            raise ZabbixAPICallError(f"Failed to delete macro with ID {macroid}") from e
 
     def update_host_inventory(self, host: Host, inventory: dict[str, str]) -> str:
         """Update a host inventory given a host and inventory."""
@@ -1435,6 +1455,18 @@ class ZabbixAPI:
                 f"No host ID returned when updating inventory for host {host.host!r} (ID {host.hostid})"
             )
         return resp["hostids"][0]
+
+    def create_global_macro(self, macro: str, value: str) -> str:
+        """Create a global macro given a macro name and value."""
+        try:
+            resp = self.usermacro.createglobal(macro=macro, value=value)
+        except ZabbixAPIException as e:
+            raise ZabbixAPICallError(f"Failed to create global macro {macro!r}.") from e
+        if not resp or not resp.get("globalmacroids"):
+            raise ZabbixNotFoundError(
+                f"No macro ID returned when creating global macro {macro!r}."
+            )
+        return resp["globalmacroids"][0]
 
     def update_host_proxy(self, host: Host, proxy: Proxy) -> str:
         """Update a host's proxy."""

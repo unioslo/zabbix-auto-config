@@ -1,0 +1,232 @@
+macros:
+  # Plain macro that matches one or more properties.
+  # If a host has the property `barry`:
+  # - {$ZAC.PLAIN_MACRO} -> "barry value"
+  # If a host has the properties `barry` and `pizza`:
+  # - {$ZAC.PLAIN_MACRO} -> "barry value" (since `barry` is the alphabetically first property)
+  "{$ZAC.PLAIN_MACRO}":
+    resolve: first # default, can be omitted
+    description: "Macro description" # can be omitted
+    properties:
+      barry: "barry value" # short form - inherits description
+      pizza: "pizza value"
+      spam:
+        # Override the description for this property only
+        value: "a spam value"
+        description: "Custom spam description"
+
+  # `resolve: last` picks the alphabetically last contributing property.
+  # Useful for tier-style overrides where the highest-priority property name
+  # is intentionally placed at the end of the alphabet/numbered sequence.
+  # If a host has properties `tier_a` and `tier_z`:
+  # - {$ZAC.LAST_MACRO} -> "tier_z value"
+  "{$ZAC.LAST_MACRO}":
+    resolve: last
+    properties:
+      tier_a: "tier_a value"
+      tier_m: "tier_m value"
+      tier_z: "tier_z value"
+
+  # Regex macros are also supported, and can be used to combine values from
+  # multiple matching properties into a single regex alternation.
+  # I.e. a host with the properties `spam` and `bazinga`:
+  # - {$ZAC.REGEX_MACRO} -> "(bazinga|spam value)"
+  # With all matching properties:
+  # - {$ZAC.REGEX_MACRO} -> "(bazinga|spam value|^grok value$)"
+  "{$ZAC.REGEX_MACRO}":
+    resolve: regex
+    properties:
+      bazinga: "bazinga"
+      spam: "spam value"
+      grok: "^grok value$" # can be regex pattern
+
+  # Macros can also be rendered using templates that have placeholders.
+  # This allows for more complex macros where value substitution based on
+  # information about the host is needed.
+  # The following placeholders values are always available:
+  # - `{{hostname}}` - the hostname of the host the macro is rendered for
+  # - `{{property}}` - the property that was chosen to resolve the macro value with
+  "{$ZAC.BASIC_TEMPLATE_MACRO}":
+    template: "https://grafana.example.com/d/node?var-host={{hostname}}"
+    properties:
+      dashboard_node: # no values to substitute, just uses hostname
+
+  # More advanced template patterns can also be defined where each property can
+  # override one or more defaults. The top-level definition _must_ define
+  # defaults for all template variables used in the macro template.
+  "{$ZAC.ADVANCED_TEMPLATE_MACRO}":
+    description: "Agent scrape URL"
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+    defaults:
+      port: 9100 # must be specified in defaults since `{{port}}` is used in the template
+      endpoint: metrics # ditto for `{{endpoint}}`
+    properties:
+      monitored_node:           # uses default port 9100
+      legacy_exporter:
+        values:
+          port: 9101              # overrides default
+
+  # We can also override the template and defaults on a per-property basis if needed.
+  "{$ZAC.ADVANCED_TEMPLATE_MACRO_PROPERTY_OVERRIDE}":
+    description: "Ingestion endpoint"
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+    defaults:
+      port: 9100
+      endpoint: ingestion
+    properties:
+      # inherits top-level template and defaults
+      logs_ingestor:
+      # Overrides template only (same placeholders)
+      legacy_ingestor:
+        template: "https://{{hostname}}:{{port}}/legacy/{{endpoint}}"
+      # Overrides template and placeholders
+      older_legacy_ingestor:
+        template: "https://{{hostname}}:{{port}}/legacy/{{different_placeholder}}"
+        values:
+          port: 9101 # also exists in top-level, redefined
+          different_placeholder: old-ingestor
+
+  # Mixing non-templated macros with templated properties is forbidden.
+  # If rendering simple values is required for most properties,
+  # but a few need advanced templates, define a template that renders
+  # a single placeholder as-is, then override the template on the properties
+  # that require more advanced rendering.
+  "{$ZAC.SIMPLE_PARENT_ADVANCED_CHILD}":
+    description: "Ingestion endpoint"
+    template: "{{value}}"
+    defaults:
+      value: defaultval
+    properties:
+      # inherits top-level template (render value as is)
+      default_ingestor:
+        values:
+          value: foo_val
+      # Overrides template only (same placeholders)
+      labeled_ingestor:
+        template: "value: {{value}}"
+      # Overrides template and placeholders
+      json_ingestor:
+        template: '{"endpoint": "{{endpoint}}", "port": "{{port}}"}'
+        values:
+          port: 9101
+          endpoint: healthcheck
+
+  # `value_type` controls the Zabbix usermacro value type. Defaults to `text`.
+  # Use `secret` for values that should be masked in the Zabbix UI.
+  "{$ZAC.API_TOKEN}":
+    description: "API token used by monitoring scripts"
+    value_type: secret
+    properties:
+      has_api_integration: "s3cr3t-t0k3n"
+
+  # Use `vault` to reference a secret stored in an external vault.
+  # The macro value should be the vault path Zabbix will resolve at runtime.
+  "{$ZAC.DB_PASSWORD}":
+    description: "DB password fetched from Vault"
+    value_type: vault
+    properties:
+      uses_vault_secrets: "secret/zabbix/db:password"
+
+  # Macros with context are also supported, and are defined similarly to
+  # plain macros, but with an additional "contexts" section.
+  # Context docs: <https://www.zabbix.com/documentation/current/en/manual/config/macros/user_macros_context>
+  #
+  # Each context defines one or more properties, just like regular macros.
+  # Contexts also default to `resolve: first`
+  #
+  # To illustrate:
+  # With property "spam", the following macros are created for the host from this definition:
+  # - {$ZAC.OPTIONAL_CONTEXT} -> "value for non-context spam"
+  # - {$ZAC.OPTIONAL_CONTEXT:/tmp} -> 20
+  # - {$ZAC.OPTIONAL_CONTEXT:regex:"^/var/log/.*$"} -> 30
+
+  "{$ZAC.OPTIONAL_CONTEXT}":
+    description: "This macro has contexts, but is optional"
+    properties:
+      spam: "value for non-context spam"
+      eggs: "value for non-context eggs"
+    contexts:
+      - context: "/tmp" # text context (exact match)
+        description: "Description for /tmp context used here"
+        properties:
+          spam: 20
+          foo: 30 # only used here
+          baz: 40 # only used here
+      - context: "^/var/log/.*$" # regex context
+        context_type: regex # marks the context as regex
+        properties:
+          spam: 30
+          bar: 40 # only used here
+          gux: 50 # only used here
+
+  # We can define macros with contexts that are rendered using templates as well.
+  # In this case, the text context `internal` inherits the top-level template,
+  # while the regex context `^site:.*` defines its own template and new placeholders.
+  "{$ZAC.TEMPLATE_AND_CONTEXT}":
+    description: "This macro has a template and contexts"
+    template: "https://{{hostname}}:{{port}}/ctx/{{endpoint}}"
+    defaults:
+      port: 9100
+      endpoint: defaultendpoint
+    contexts:
+      - context: "internal" # text context (exact match)
+        # Template is automatically injected into the context
+        description: "Description for internal context used here"
+        properties:
+         # Full or partial overrides of template variables
+          qux:
+            values:
+              port: 20
+              endpoint: "quxpoint"
+          quux:
+            values:
+              endpoint: "quuxpoint"
+          corge:
+      - context: "^site:.*"
+        context_type: regex
+        # Contexts can also override the template itself and define new placeholders
+        template: "https://{{hostname}}:{{port}}/internal/{{ctxpoint}}"
+        # New defaults MUST be provided for any new placeholders!
+        defaults:
+          # inherits port from top-level
+          ctxpoint: "regexpoint"
+        properties:
+          waldo:
+            values:
+              port: 30
+              ctxpoint: "waldopoint"
+          plugh:
+            values:
+              ctxpoint: "plughpoint"
+          xyzzy:
+
+  # Hostname-based overrides. Per-host (or per-pattern) values that override any
+  # property-derived value for the same macro identity. Host match always wins
+  # over properties and bypasses the `resolve` strategy. No properties are required
+  # for a host to match.
+  #
+  # Match precedence:
+  #  1. Exact hostname dict lookup
+  #  2. Regex fullmatch, longest pattern wins
+  #  3. Alphabetical tiebreak between patterns of equal length
+  #
+  # Host keys should be exact Zabbix hostnames or regex patterns.
+  # Exact hostnames always take precedence over regex patterns.
+  "{$ZAC.HOST_OVERRIDDEN}":
+    description: "Per-host scrape URL"
+    template: "https://{{hostname}}:{{port}}/{{endpoint}}"
+    defaults:
+      port: 9100
+      endpoint: metrics
+    properties:
+      host_overridden_node:
+    hosts:
+      # exact match (preferred)
+      special.example.com: # valid hostnames are automatically detected and don't need to be escaped
+        values:
+          port: 9500
+          endpoint: special-metrics
+      # regex fallback - must be quoted and escaped (double backslash) for YAML
+      ".*\\.legacy\\.example\\.com":
+        values:
+          port: 9101

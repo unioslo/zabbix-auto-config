@@ -29,12 +29,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - `rotate`: Enable log rotation. Defaults to `true`.
       - `max_size_mb`: Maximum size of the log file in megabytes before it is rotated. Defaults to `50`.
       - `max_logs`: Maximum number of log files to keep. Defaults to `5`.
+- Managed macros via a new macro mapping file (default: `macro_map.yaml`).
+  - Configured via new section `[zac.macros]` with the following options:
+    - `enabled`: Enable macro management. Defaults to `false`.
+    - `macro_map_file`: Path to the macro mapping file. Defaults to `<map_dir>/macro_map.yaml` if not specified.
+    - `description_prefix`: Prefix for the description field of managed macros. Defaults to `[ZAC]` (space is added automatically if a prefix is set).
 
 ### Changed
 
 - The application now looks in all valid config file locations for the config file. In order of preference:
   - Current working directory (`./config.toml`)
   - `$XDG_CONFIG_HOME` or `~/.config/zabbix-auto-config/config.toml`
+- `zabbix.map_dir` setting moved to `zac.map_dir`.
+  - Part of a larger effort to move non-Zabbix settings to the `zac` section to better separate them from Zabbix API settings.
 
 ### Deprecated
 

@@ -4,8 +4,6 @@ import itertools
 import logging
 import multiprocessing
 import multiprocessing.synchronize
-import os
-import os.path
 import queue
 import random
 import re
@@ -52,6 +50,8 @@ from zabbix_auto_config.exceptions import ZabbixAPISessionExpired
 from zabbix_auto_config.exceptions import ZabbixNotFoundError
 from zabbix_auto_config.exceptions import ZACException
 from zabbix_auto_config.failsafe import check_failsafe
+from zabbix_auto_config.macros import MacroMap
+from zabbix_auto_config.macros import ResolvedMacro
 from zabbix_auto_config.pyzabbix.client import ZabbixAPI
 from zabbix_auto_config.pyzabbix.enums import InterfaceType
 from zabbix_auto_config.pyzabbix.enums import InventoryMode
@@ -60,6 +60,7 @@ from zabbix_auto_config.pyzabbix.types import CreateHostInterfaceDetails
 from zabbix_auto_config.pyzabbix.types import Host
 from zabbix_auto_config.pyzabbix.types import HostGroup
 from zabbix_auto_config.pyzabbix.types import HostInterface
+from zabbix_auto_config.pyzabbix.types import Macro
 from zabbix_auto_config.pyzabbix.types import Maintenance
 from zabbix_auto_config.pyzabbix.types import ModelWithHosts
 from zabbix_auto_config.pyzabbix.types import Proxy
@@ -88,11 +89,7 @@ class BaseProcess(multiprocessing.Process):
         self.stop_event = multiprocessing.Event()
 
     def get_db_connection(self) -> psycopg2.extensions.connection:
-        try:
-            return db.get_connection(self.config.zac.db)
-        except psycopg2.OperationalError as e:
-            logger.error("Unable to connect to database.")
-            raise ZACException(*e.args) from e
+        return db.get_connection(self.config.zac.db)
 
     def get_next_update(self) -> datetime:
         """Get the time the process should run next."""
@@ -751,15 +748,11 @@ class ZabbixUpdater(BaseProcess):
 
         self.update_interval = 60  # default. Overriden in subclasses
 
-        self.property_template_map = utils.read_map_file(
-            os.path.join(self.zabbix_config.map_dir, "property_template_map.txt")
-        )
-        self.property_hostgroup_map = utils.read_map_file(
-            os.path.join(self.zabbix_config.map_dir, "property_hostgroup_map.txt")
-        )
-        self.siteadmin_hostgroup_map = utils.read_map_file(
-            os.path.join(self.zabbix_config.map_dir, "siteadmin_hostgroup_map.txt")
-        )
+        zac = self.config.zac
+        # TODO: configure paths, read on every work iteration
+        self.property_template_map = zac.get_property_template_map_file().read()
+        self.property_hostgroup_map = zac.get_property_hostgroup_map_file().read()
+        self.siteadmin_hostgroup_map = zac.get_siteadmin_hostgroup_map_file().read()
 
         pyzabbix_logger = logging.getLogger("pyzabbix")
         pyzabbix_logger.setLevel(logging.ERROR)
@@ -1128,6 +1121,14 @@ class ZabbixHostUpdater(ZabbixUpdater):
         self.enabled_hostgroup = self.get_or_create_hostgroup(
             self.zabbix_config.hostgroup_all
         )
+
+        # TODO: refactor along with other mapping files if application is
+        # rewritten to read mapping files on each work iteration, as opposed
+        # to only on startup!
+        if self.config.zac.macros.enabled:
+            self.macro_map = MacroMap.from_config(self.config)
+        else:
+            self.macro_map = MacroMap.new()  # empty mapping
 
     def get_or_create_hostgroup(self, hostgroup: str) -> HostGroup:
         """Fetch a host group, creating it if it doesn't exist."""
@@ -1724,6 +1725,101 @@ class ZabbixHostUpdater(ZabbixUpdater):
                         ignored_inventory=ignored_inventory,
                     )
 
+    def _sync_macros(self, db_host: models.Host, zabbix_host: Host) -> None:
+        """Sync macros of a Zabbix host with the macros defined on the DB host."""
+        # HACK: in order to sync macros using the ZabbixHostGroupUpdater
+        # instead of making another process (i.e. ZabbixHostMacroUpdater),
+        # we determine macros here based on the mapping file, then compare them
+        # with the macros from the Zabbix host. Macros are thus NOT synced
+        # to the DB host, and we instead just calculate the desired macro
+        # state here on each iteration.
+        result = self.macro_map.resolve_macros(db_host, zabbix_host)
+
+        if result.remove:  # Batch removal, no iteration needed
+            self.remove_macros_from_host(zabbix_host, result.remove)
+
+        for macro in result.add.values():
+            self.add_macro_to_host(zabbix_host, macro)
+
+        for current_macro, new_macro in result.update.values():
+            self.update_host_macro(zabbix_host, current_macro, new_macro)
+
+    def add_macro_to_host(self, host: Host, macro: ResolvedMacro) -> None:
+        """Add a single macro to a host."""
+        log = logger.bind(
+            host=host.host,
+            hostid=host.hostid,
+            macro=macro.macro,  # TODO: property calculated here and in API call. Can be optimized
+            value=macro.value,
+            description=macro.description,
+            type=macro.value_type,  # show string representation
+        )
+        if self.zabbix_config.dryrun:
+            log.info("DRYRUN: Adding macro to host")
+            return
+
+        try:
+            macro_id = self.api.create_macro(
+                host,
+                macro=macro.macro,
+                value=macro.value,
+                description=macro.description,
+            )
+        except ZabbixAPIException as e:
+            log.error("Failed to add macro to host", error=str(e))
+        except Exception as e:
+            log.exception("Unexpected error adding macro to host", error=str(e))
+        else:
+            log.info("Added macro to host", macro_id=macro_id)
+
+    def remove_macros_from_host(self, host: Host, macros: dict[str, Macro]) -> None:
+        """Remove multiple macros from a host."""
+        log = logger.bind(
+            host=host.host, hostid=host.hostid, macros=list(macros.keys())
+        )
+        if self.zabbix_config.dryrun:
+            log.info("DRYRUN: Removing macros from host")
+            return
+
+        try:
+            self.api.delete_macro(
+                [macro.hostmacroid for macro in macros.values()],
+            )
+        except ZabbixAPIException as e:
+            log.error("Failed to remove macros from host", error=str(e))
+        except Exception as e:
+            log.exception("Unexpected error removing macros from host", error=str(e))
+        else:
+            log.info("Removed macros from host")
+
+    def update_host_macro(
+        self, host: Host, current_macro: Macro, new_macro: ResolvedMacro
+    ) -> None:
+        """Update a single macro on a host."""
+        log = logger.bind(
+            host=host.host,
+            hostid=host.hostid,
+            macro=current_macro.macro,
+            value=new_macro.value,
+            description=new_macro.description,
+        )
+        if self.zabbix_config.dryrun:
+            log.info("DRYRUN: Updating macro on host")
+            return
+
+        try:
+            _ = self.api.update_macro(
+                current_macro.hostmacroid,
+                value=new_macro.value,
+                description=new_macro.description,
+            )
+        except ZabbixAPIException as e:
+            log.error("Failed to update macro on host", error=str(e))
+        except Exception as e:
+            log.exception("Unexpected error updating macro on host", error=str(e))
+        else:
+            log.info("Updated macro on host")
+
     def _update_host(
         self, db_host: models.Host, zabbix_host: Host, zabbix_proxies: dict[str, Proxy]
     ) -> None:
@@ -1732,6 +1828,9 @@ class ZabbixHostUpdater(ZabbixUpdater):
         self._sync_interfaces(db_host, zabbix_host)
         self._sync_tags(db_host, zabbix_host)
         self._sync_inventory(db_host, zabbix_host)
+
+        if self.config.zac.macros.enabled:
+            self._sync_macros(db_host, zabbix_host)
 
     def do_update(self) -> None:
         db_hosts = self.get_db_hosts()
@@ -1745,6 +1844,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             select_templates=True,
             select_tags=True,
             select_groups=True,
+            select_macros=True,
         )
         zabbix_hosts = {host.host: host for host in zhosts}
 

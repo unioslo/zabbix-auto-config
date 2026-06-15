@@ -31,6 +31,7 @@ from zabbix_auto_config.dirs import CONFIG_FILENAME
 from zabbix_auto_config.dirs import LOG_FILE_DEFAULT
 from zabbix_auto_config.exceptions import ConfigFileNotFoundError
 from zabbix_auto_config.exceptions import ConfigValidationError
+from zabbix_auto_config.map_file import MapFile
 
 # Use standard library for Python 3.11+, fallback to tomli for older versions
 if sys.version_info >= (3, 11):
@@ -81,7 +82,6 @@ class ConfigBaseModel(BaseModel):
 
 
 class ZabbixSettings(ConfigBaseModel):
-    map_dir: str
     url: str
     username: str
     password: str
@@ -96,6 +96,7 @@ class ZabbixSettings(ConfigBaseModel):
 
     tags_prefix: str = "zac_"
     managed_inventory: list[str] = []
+
     failsafe: int = 20
 
     hostgroup_all: str = "All-hosts"
@@ -117,6 +118,10 @@ class ZabbixSettings(ConfigBaseModel):
     extra_siteadmin_hostgroup_prefixes: set[str] = set()
 
     prefix_separator: str = "-"
+
+    map_dir: str = Field(
+        default="", deprecated="zabbix.map_dir is deprecated, use zac.map_dir instead."
+    )
 
     @field_validator("timeout")
     @classmethod
@@ -474,9 +479,40 @@ class LoggingSettings(ConfigBaseModel):
         return self
 
 
+class MacrosSettings(ConfigBaseModel):
+    """Settings for macro management."""
+
+    # Whether to manage macros in Zabbix based on the macro map file.
+    enabled: bool = Field(
+        default=False,
+        description="Whether to manage macros in Zabbix based on the macro map file.",
+    )
+    macro_map_file: Optional[Path] = None
+    """Path to the macro map file. If not set, will look for 'macro_map.yaml' in the map_dir."""
+
+    description_prefix: str = "[ZAC]"
+
+
+class MappingFilesSettings(ConfigBaseModel):
+    """Settings for mapping files."""
+
+    # Override default mapping file locations instead of deriving from `map_dir`
+    # NOTE: should we set the defaults here and instead check `model_fields_set`
+    # to determine if they are not set instead of checking for None?
+    # That would let us declare the default paths here _and only here_.
+    property_template: Optional[Path] = None
+    property_hostgroup: Optional[Path] = None
+    siteadmin_hostgroup: Optional[Path] = None
+    macro: Optional[Path] = None
+
+
 class ZacSettings(ConfigBaseModel):
     source_collector_dir: str
     host_modifier_dir: str
+    map_dir: Path = Field(
+        default=Path("path/to/map_dir"),
+        description="Path to the directory containing mapping files.",
+    )
     health_file: Optional[Path] = None
     failsafe_file: Optional[Path] = None
     failsafe_ok_file: Optional[Path] = None
@@ -484,6 +520,8 @@ class ZacSettings(ConfigBaseModel):
     db: DBSettings = DBSettings()
     process: ProcessesSettings = ProcessesSettings()
     logging: LoggingSettings = LoggingSettings()
+    macros: MacrosSettings = MacrosSettings()
+    mapping_files: MappingFilesSettings = MappingFilesSettings()
 
     # Deprecated options
     db_uri: str = Field(default="", deprecated=True)
@@ -570,6 +608,52 @@ class ZacSettings(ConfigBaseModel):
         if not v.exists():
             utils.make_parent_dirs(v)
         return v
+
+    def _resolve_map_file_path(
+        self, file_path: Optional[Path], default_filename: str
+    ) -> Path:
+        return file_path or (self.map_dir / default_filename)
+
+    def _get_map_file(
+        self,
+        file_path: Optional[Path],
+        default_filename: str,
+        name: str,
+        required: bool = False,
+    ) -> MapFile:
+        """Resolve a file path and return a MapFile object."""
+        path = self._resolve_map_file_path(file_path, default_filename)
+        return MapFile(path=path, name=name, required=required)
+
+    def get_siteadmin_hostgroup_map_file(self) -> MapFile:
+        """Return the siteadmin:hostgroup map file object."""
+        return self._get_map_file(
+            self.mapping_files.siteadmin_hostgroup,
+            "siteadmin_hostgroup_map.txt",
+            "Siteadmin hostgroup map",
+        )
+
+    def get_property_hostgroup_map_file(self) -> MapFile:
+        """Return property:hostgroup map file object."""
+        return self._get_map_file(
+            self.mapping_files.property_hostgroup,
+            "property_hostgroup_map.txt",
+            "Property hostgroup map",
+        )
+
+    def get_property_template_map_file(self) -> MapFile:
+        """Return property:template map file object."""
+        return self._get_map_file(
+            self.mapping_files.property_template,
+            "property_template_map.txt",
+            "Property template map",
+        )
+
+    def get_macro_map_file_path(self) -> Path:
+        """Return the path to the macro map file."""
+        # NOTE: we don't return a MapFile for MacroMap,
+        # since it operates on a different file format.
+        return self._resolve_map_file_path(self.mapping_files.macro, "macro_map.yaml")
 
 
 class FailureStrategy(str, Enum):
@@ -725,6 +809,24 @@ class Settings(ConfigBaseModel):
     config_path: Optional[Path] = Field(
         default=None, description="Path the config was loaded from.", exclude=True
     )
+
+    @model_validator(mode="after")
+    def _handle_deprecated_map_dir(self) -> Self:
+        """Handle deprecated `zabbix.map_dir` setting.
+
+        Set `map_dir` in [zac] if not set and is set in [zabbix].
+        """
+        if (
+            "map_dir" in self.zabbix.model_fields_set
+            and "map_dir" not in self.zac.model_fields_set
+        ):
+            try:
+                self.zac.map_dir = Path(self.zabbix.map_dir)
+            # Best-effort. If the deprecated map_dir is invalid, we just ignore it.
+            except Exception:
+                pass
+
+        return self
 
 
 def get_config(path: Optional[Path] = None) -> Settings:

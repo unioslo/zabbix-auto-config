@@ -14,6 +14,7 @@ from typing import Optional
 from typing import Union
 
 import structlog
+from typing_extensions import deprecated
 
 from zabbix_auto_config.pyzabbix.types import HostTag
 
@@ -48,6 +49,7 @@ def zac_tags2zabbix_tags(zac_tags: ZacTags) -> list[HostTag]:
     return [HostTag(tag=tag[0], value=tag[1]) for tag in zac_tags]
 
 
+@deprecated("Use zabbix_auto_config.map_file.MapFile.read() instead")
 def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
     _map: dict[str, list[str]] = {}
 
@@ -85,7 +87,7 @@ def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
                 continue
 
             if key in _map:
-                log.warning("Duplicate key in map file", key=key, lineno=lineno)
+                log.debug("Duplicate key in map file", key=key, lineno=lineno)
                 _map[key].extend(values)
             else:
                 _map[key] = values
@@ -94,7 +96,7 @@ def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
     for key, values in _map.items():
         values_dedup = list(dict.fromkeys(values))  # dict.fromkeys() guarantees order
         if len(values) != len(values_dedup):
-            logger.warning("Ignoring duplicate values in map file.", key=key)
+            logger.debug("Ignoring duplicate values in map file.", key=key)
         _map[key] = values_dedup
     return _map
 
