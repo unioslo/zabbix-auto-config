@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from datetime import timedelta
 from ipaddress import IPv4Address
 from ipaddress import IPv6Address
@@ -19,11 +20,19 @@ from zabbix_auto_config.pyzabbix.types import HostTag
     [
         (r"\d", True),
         (r"\D", True),
-        (r"\z", False),
         (r"hello", True),
         (r"\.", True),
         (r"\(", True),
         (r"\)", True),
+        # \z became a valid pattern from 3.14 for some reason... :)
+        pytest.param(
+            r"\z",
+            False,
+            marks=pytest.mark.xfail(
+                sys.version_info >= (3, 14),
+                reason="\\z is not a valid pattern in Python < 3.14",
+            ),
+        ),
     ],
 )
 def test_is_valid_regexp(input: str, expected: bool):
