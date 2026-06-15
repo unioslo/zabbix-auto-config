@@ -859,7 +859,7 @@ def test_settings_map_dir() -> None:
 def test_settings_map_dir_in_both() -> None:
     """Test that map_dir from `[zac]` is used when both `[zac]` and `[zabbix]` have map_dir set."""
 
-    # No warnings should be raised
+    # No warnings should be raised since we never access zabbix.map_dir
     with warnings.catch_warnings():
         warnings.simplefilter("error")  # error if warning is raised
         conf = Settings(
@@ -894,9 +894,8 @@ def test_get_siteadmin_hostgroup_map_file(
     new_map_file = new_dir / "custom_siteadmin_hostgroup_map.txt"
     new_map_file.write_text(hostgroup_map_file.read_text())
 
-    # Set the new mapping file in the config
+    # Uses mapping file set in zac.mapping_files
     config.zac.mapping_files.siteadmin_hostgroup = new_map_file
-
     map_file = config.zac.get_siteadmin_hostgroup_map_file()
     assert map_file.path == new_map_file
 
@@ -920,9 +919,8 @@ def test_get_property_hostgroup_map_file(
     new_map_file = new_dir / "custom_property_hostgroup_map.txt"
     new_map_file.write_text(property_hostgroup_map_file.read_text())
 
-    # Set the new mapping file in the config
+    # Uses mapping file set in zac.mapping_files
     config.zac.mapping_files.property_hostgroup = new_map_file
-
     map_file = config.zac.get_property_hostgroup_map_file()
     assert map_file.path == new_map_file
 
@@ -946,9 +944,8 @@ def test_get_property_template_map_file(
     new_map_file = new_dir / "custom_property_template_map.txt"
     new_map_file.write_text(property_template_map_file.read_text())
 
-    # Set the new mapping file in the config
+    # Uses mapping file set in zac.mapping_files
     config.zac.mapping_files.property_template = new_map_file
-
     map_file = config.zac.get_property_template_map_file()
     assert map_file.path == new_map_file
 
