@@ -87,7 +87,7 @@ def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
                 continue
 
             if key in _map:
-                log.warning("Duplicate key in map file", key=key, lineno=lineno)
+                log.debug("Duplicate key in map file", key=key, lineno=lineno)
                 _map[key].extend(values)
             else:
                 _map[key] = values
@@ -96,7 +96,7 @@ def read_map_file(path: Union[str, Path]) -> dict[str, list[str]]:
     for key, values in _map.items():
         values_dedup = list(dict.fromkeys(values))  # dict.fromkeys() guarantees order
         if len(values) != len(values_dedup):
-            logger.warning("Ignoring duplicate values in map file.", key=key)
+            logger.debug("Ignoring duplicate values in map file.", key=key)
         _map[key] = values_dedup
     return _map
 
