@@ -27,7 +27,12 @@ from zabbix_auto_config.macros import ResolvedMacro
 if TYPE_CHECKING:
     from zabbix_auto_config.pyzabbix.types import Macro as ZabbixMacro
 
-macros_app = ZacApp(add_completion=False, pretty_exceptions_enable=False, name="macros")
+macros_app = ZacApp(
+    name="macros",
+    add_completion=False,
+    no_args_is_help=True,
+    pretty_exceptions_enable=False,
+)
 
 _CONSOLE = Console()
 
