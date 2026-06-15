@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
 
 import pytest
 from inline_snapshot import snapshot
@@ -48,7 +47,7 @@ def _write_yaml(tmp_path: Path, body: str) -> Path:
 
 
 def _load_mapping(
-    tmp_path: Path, body: str, description_prefix: Optional[str] = None
+    tmp_path: Path, body: str, description_prefix: str | None = None
 ) -> MacroMap:
     """Helper function to write a mapping file and load it."""
     p = _write_yaml(tmp_path, body)

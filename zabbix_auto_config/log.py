@@ -7,7 +7,6 @@ from collections.abc import MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from typing import Union
 
 import structlog
 from structlog.dev import Column
@@ -20,12 +19,11 @@ from zabbix_auto_config.config import Settings
 from zabbix_auto_config.dirs import ensure_directory
 from zabbix_auto_config.exceptions import ZACException
 
-
 # Ensure basic config is applied before structlog configuration
 structlog.configure(logger_factory=structlog.stdlib.LoggerFactory())
 
 
-HandlerDict = MutableMapping[str, Union[str, int]]
+HandlerDict = MutableMapping[str, str | int]
 
 
 @dataclass

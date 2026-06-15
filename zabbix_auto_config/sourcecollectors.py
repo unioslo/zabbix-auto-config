@@ -3,11 +3,11 @@ from __future__ import annotations
 import inspect
 import os
 from typing import Any
+from typing import Self
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import ValidationError
-from typing_extensions import Self
 
 from zabbix_auto_config.exceptions import ZACException
 

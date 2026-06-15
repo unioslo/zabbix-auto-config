@@ -10,10 +10,9 @@ from multiprocessing import Queue
 from typing import Any
 from typing import NamedTuple
 from typing import Protocol
+from typing import TypeAlias
 from typing import TypedDict
 from typing import runtime_checkable
-
-from typing_extensions import TypeAlias
 
 from zabbix_auto_config.config import SourceCollectorSettings
 from zabbix_auto_config.models import Host

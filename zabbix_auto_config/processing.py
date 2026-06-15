@@ -16,7 +16,6 @@ from datetime import timedelta
 from enum import Enum
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Optional
 from typing import TypeVar
 
 import httpx
@@ -439,7 +438,7 @@ class SourceHandlerProcess(BaseProcess):
         self,
         cursor: Cursor,
         host: models.Host,
-        current_host: Optional[models.Host],
+        current_host: models.Host | None,
         source: str,
     ) -> HostAction:
         # TODO: still some optimizations to be done here with regards to bulk insertions/updates
@@ -574,7 +573,7 @@ class SourceMergerProcess(BaseProcess):
     def handle_host(
         self,
         cursor: Cursor,
-        current_host: Optional[models.Host],
+        current_host: models.Host | None,
         source_hosts: list[models.Host],
     ) -> HostAction:
         """Merge host and apply host modifiers. Updates DB if changed
@@ -1314,7 +1313,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
         zabbix_host: Host,
         interface: models.Interface,
         useip: bool,
-        old_interface: Optional[HostInterface] = None,
+        old_interface: HostInterface | None = None,
     ) -> None:
         log = logger.bind(
             host=zabbix_host.host,
@@ -1366,8 +1365,8 @@ class ZabbixHostUpdater(ZabbixUpdater):
         interface: models.Interface,
         ifacetype: InterfaceType,
         useip: bool,
-        dns: Optional[str],
-        ip: Optional[str],
+        dns: str | None,
+        ip: str | None,
     ) -> None:
         details = self.validate_interface_details(
             CreateHostInterfaceDetails, interface, zabbix_host
@@ -1400,8 +1399,8 @@ class ZabbixHostUpdater(ZabbixUpdater):
         old_interface: HostInterface,
         ifacetype: InterfaceType,
         useip: bool,
-        dns: Optional[str],
-        ip: Optional[str],
+        dns: str | None,
+        ip: str | None,
     ) -> None:
         details = self.validate_interface_details(
             UpdateHostInterfaceDetails, interface, zabbix_host
@@ -1431,7 +1430,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
     def validate_interface_details(
         self, cls: type[HostInterfaceDetailsT], interface: models.Interface, host: Host
-    ) -> Optional[HostInterfaceDetailsT]:
+    ) -> HostInterfaceDetailsT | None:
         """Validate interface details from a source host.
 
         Attempts to construct a model used to create or update a host interface
@@ -2132,7 +2131,7 @@ class ZabbixHostgroupUpdater(ZabbixUpdater):
                         continue
                     self.create_hostgroup(hostgroup)
 
-    def create_templategroup(self, templategroup_name: str) -> Optional[str]:
+    def create_templategroup(self, templategroup_name: str) -> str | None:
         """Create a template group in Zabbix.
 
         Wrapper over API client that catches errors and logs them. Never raises.

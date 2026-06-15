@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Optional
 
 if TYPE_CHECKING:
     from httpx import Response as HTTPResponse
@@ -33,9 +32,9 @@ class ZabbixAPIRequestError(ZabbixAPIException):
     def __init__(
         self,
         *args: Any,
-        params: Optional[ParamsType] = None,
-        api_response: Optional[ZabbixAPIResponse] = None,
-        response: Optional[HTTPResponse] = None,
+        params: ParamsType | None = None,
+        api_response: ZabbixAPIResponse | None = None,
+        response: HTTPResponse | None = None,
     ) -> None:
         super().__init__(*args)
         self.params = params

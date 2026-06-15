@@ -16,9 +16,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from typing import Annotated
 from typing import Any
-from typing import Optional
+from typing import Literal
 from typing import Protocol
-from typing import Union
 
 from pydantic import AliasChoices
 from pydantic import BaseModel
@@ -31,7 +30,6 @@ from pydantic import WrapValidator
 from pydantic import field_serializer
 from pydantic import field_validator
 from pydantic_core import PydanticCustomError
-from typing_extensions import Literal
 from typing_extensions import TypeAliasType
 from typing_extensions import TypedDict
 
@@ -63,15 +61,13 @@ def json_custom_error_validator(
 Json = TypeAliasType(
     "Json",
     Annotated[
-        Union[
-            MutableMapping[str, "Json"],
-            Sequence["Json"],
-            str,
-            int,
-            float,
-            bool,
-            None,
-        ],
+        MutableMapping[str, "Json"]
+        | Sequence["Json"]
+        | str
+        | int
+        | float
+        | bool
+        | None,
         WrapValidator(json_custom_error_validator),
     ],
 )
@@ -86,7 +82,7 @@ Can only contain native JSON-serializable types.
 class ModifyHostItem(TypedDict):
     """Argument for a host ID in an API request."""
 
-    hostid: Union[str, int]
+    hostid: str | int
 
 
 ModifyHostParams = list[ModifyHostItem]
@@ -100,7 +96,7 @@ E.g. `[{"hostid": "123"}, {"hostid": "456"}]`
 class ModifyGroupItem(TypedDict):
     """Argument for a group ID in an API request."""
 
-    groupid: Union[str, int]
+    groupid: str | int
 
 
 ModifyGroupParams = list[ModifyGroupItem]
@@ -113,7 +109,7 @@ E.g. `[{"groupid": "123"}, {"groupid": "456"}]`
 class ModifyTemplateItem(TypedDict):
     """Argument for a template ID in an API request."""
 
-    templateid: Union[str, int]
+    templateid: str | int
 
 
 ModifyTemplateParams = list[ModifyTemplateItem]
@@ -137,7 +133,7 @@ class ZabbixAPIError(BaseModel):
 
     code: int
     message: str
-    data: Optional[str] = None
+    data: str | None = None
 
 
 class ZabbixAPIResponse(BaseModel):
@@ -147,7 +143,7 @@ class ZabbixAPIResponse(BaseModel):
     id: int
     result: Any = None
     """Result of API call, if request succeeded."""
-    error: Optional[ZabbixAPIError] = None
+    error: ZabbixAPIError | None = None
     """Error info, if request failed."""
 
 
@@ -165,7 +161,7 @@ class ZabbixAPIBaseModel(BaseModel):
 class ZabbixRight(ZabbixAPIBaseModel):
     permission: int
     id: str
-    name: Optional[str] = None  # name of group (injected by application)
+    name: str | None = None  # name of group (injected by application)
 
     def model_dump_api(self) -> dict[str, Any]:
         return self.model_dump(
@@ -176,12 +172,12 @@ class ZabbixRight(ZabbixAPIBaseModel):
 class User(ZabbixAPIBaseModel):
     userid: str
     username: str = Field(..., validation_alias=AliasChoices("username", "alias"))
-    name: Optional[str] = None
-    surname: Optional[str] = None
-    url: Optional[str] = None
-    autologin: Optional[str] = None
-    autologout: Optional[str] = None
-    roleid: Optional[int] = Field(
+    name: str | None = None
+    surname: str | None = None
+    url: str | None = None
+    autologin: str | None = None
+    autologout: str | None = None
+    roleid: int | None = Field(
         default=None, validation_alias=AliasChoices("roleid", "type")
     )
     # NOTE: Not adding properties we don't use, since Zabbix has a habit of breaking
@@ -215,7 +211,7 @@ class Template(ZabbixAPIBaseModel):
     )
     """Parent templates (templates this template inherits from)."""
 
-    name: Optional[str] = None
+    name: str | None = None
     """The visible name of the template."""
 
 
@@ -231,14 +227,14 @@ class HostGroup(ZabbixAPIBaseModel):
     name: str
     hosts: list[Host] = []
     flags: int = 0
-    internal: Optional[int] = None  # <6.2
+    internal: int | None = None  # <6.2
     templates: list[Template] = []  # <6.2
 
 
 class HostTag(ZabbixAPIBaseModel):
     tag: str
     value: str
-    automatic: Optional[int] = Field(default=None, exclude=True)
+    automatic: int | None = Field(default=None, exclude=True)
     """Tag is automatically set by host discovery. Only used for lookups."""
 
 
@@ -247,7 +243,7 @@ class HostTag(ZabbixAPIBaseModel):
 class Host(ZabbixAPIBaseModel):
     hostid: str
     host: str = ""
-    description: Optional[str] = None
+    description: str | None = None
     groups: list[HostGroup] = Field(
         default_factory=list,
         # Compat for >= 6.2.0
@@ -260,17 +256,17 @@ class Host(ZabbixAPIBaseModel):
         validation_alias=AliasChoices("parentTemplates", "parent_templates"),
     )
     inventory: dict[str, Any] = Field(default_factory=dict)
-    proxyid: Optional[str] = Field(
+    proxyid: str | None = Field(
         None,
         # Compat for <7.0.0
         validation_alias=AliasChoices("proxyid", "proxy_hostid"),
     )
-    proxy_address: Optional[str] = None
-    maintenance_status: Optional[str] = None
-    zabbix_agent: Optional[int] = Field(
+    proxy_address: str | None = None
+    maintenance_status: str | None = None
+    zabbix_agent: int | None = Field(
         None, validation_alias=AliasChoices("available", "active_available")
     )
-    status: Optional[MonitoringStatus] = None
+    status: MonitoringStatus | None = None
     macros: list[Macro] = Field(default_factory=list)
     interfaces: list[HostInterface] = Field(default_factory=list)
     tags: list[HostTag] = Field(default_factory=list)
@@ -296,17 +292,17 @@ class Host(ZabbixAPIBaseModel):
 class HostInterface(ZabbixAPIBaseModel):
     type: int
     ip: str
-    dns: Optional[str] = None
+    dns: str | None = None
     port: str
     useip: bool  # this is an int in the API
     main: int
     # SNMP details
     details: dict[str, Any] = Field(default_factory=dict)
     # Values not required for creation:
-    interfaceid: Optional[str] = None
-    available: Optional[int] = None
-    hostid: Optional[str] = None
-    bulk: Optional[int] = None
+    interfaceid: str | None = None
+    available: int | None = None
+    hostid: str | None = None
+    bulk: int | None = None
 
     @field_validator("details", mode="before")
     @classmethod
@@ -328,46 +324,46 @@ class HostInterface(ZabbixAPIBaseModel):
 
 class CreateHostInterfaceDetails(ZabbixAPIBaseModel):
     version: int
-    bulk: Optional[int] = None
-    community: Optional[str] = None
-    max_repetitions: Optional[int] = None
-    securityname: Optional[str] = None
-    securitylevel: Optional[int] = None
-    authpassphrase: Optional[str] = None
-    privpassphrase: Optional[str] = None
-    authprotocol: Optional[int] = None
-    privprotocol: Optional[int] = None
-    contextname: Optional[str] = None
+    bulk: int | None = None
+    community: str | None = None
+    max_repetitions: int | None = None
+    securityname: str | None = None
+    securitylevel: int | None = None
+    authpassphrase: str | None = None
+    privpassphrase: str | None = None
+    authprotocol: int | None = None
+    privprotocol: int | None = None
+    contextname: str | None = None
 
 
 class UpdateHostInterfaceDetails(ZabbixAPIBaseModel):
-    version: Optional[int] = None
-    bulk: Optional[int] = None
-    community: Optional[str] = None
-    max_repetitions: Optional[int] = None
-    securityname: Optional[str] = None
-    securitylevel: Optional[int] = None
-    authpassphrase: Optional[str] = None
-    privpassphrase: Optional[str] = None
-    authprotocol: Optional[int] = None
-    privprotocol: Optional[int] = None
-    contextname: Optional[str] = None
+    version: int | None = None
+    bulk: int | None = None
+    community: str | None = None
+    max_repetitions: int | None = None
+    securityname: str | None = None
+    securitylevel: int | None = None
+    authpassphrase: str | None = None
+    privpassphrase: str | None = None
+    authprotocol: int | None = None
+    privprotocol: int | None = None
+    contextname: str | None = None
 
 
 class Proxy(ZabbixAPIBaseModel):
     proxyid: str
     name: str = Field(..., validation_alias=AliasChoices("host", "name"))
     hosts: list[Host] = Field(default_factory=list)
-    status: Optional[int] = None
-    operating_mode: Optional[int] = None
+    status: int | None = None
+    operating_mode: int | None = None
     address: str = Field(
         validation_alias=AliasChoices(
             "address",  # >=7.0.0
             "proxy_address",  # <7.0.0
         )
     )
-    compatibility: Optional[int] = None  # >= 7.0
-    version: Optional[int] = None  # >= 7.0
+    compatibility: int | None = None  # >= 7.0
+    version: int | None = None  # >= 7.0
 
     def __hash__(self) -> str:
         return self.proxyid  # kinda hacky, but lets us use it in dicts
@@ -375,7 +371,7 @@ class Proxy(ZabbixAPIBaseModel):
 
 class MacroBase(ZabbixAPIBaseModel):
     macro: str
-    value: Optional[str] = None  # Optional in case secret value
+    value: str | None = None  # Optional in case secret value
     type: int
     """Macro type. 0 - text, 1 - secret, 2 - vault secret (>=7.0)"""
     description: str
@@ -386,7 +382,7 @@ class Macro(MacroBase):
 
     hostid: str
     hostmacroid: str
-    automatic: Optional[int] = None  # >= 7.0 only. 0 = user, 1 = discovery rule
+    automatic: int | None = None  # >= 7.0 only. 0 = user, 1 = discovery rule
     hosts: list[Host] = Field(default_factory=list)
     templates: list[Template] = Field(default_factory=list)
 
@@ -397,19 +393,17 @@ class GlobalMacro(MacroBase):
 
 class Item(ZabbixAPIBaseModel):
     itemid: str
-    delay: Optional[str] = None
-    hostid: Optional[str] = None
-    interfaceid: Optional[str] = None
-    key: Optional[str] = Field(
-        default=None, validation_alias=AliasChoices("key_", "key")
-    )
-    name: Optional[str] = None
-    type: Optional[int] = None
-    url: Optional[str] = None
-    value_type: Optional[int] = None
-    description: Optional[str] = None
-    history: Optional[str] = None
-    lastvalue: Optional[str] = None
+    delay: str | None = None
+    hostid: str | None = None
+    interfaceid: str | None = None
+    key: str | None = Field(default=None, validation_alias=AliasChoices("key_", "key"))
+    name: str | None = None
+    type: int | None = None
+    url: str | None = None
+    value_type: int | None = None
+    description: str | None = None
+    history: str | None = None
+    lastvalue: str | None = None
     hosts: list[Host] = []
 
 
@@ -424,7 +418,7 @@ class MediaType(ZabbixAPIBaseModel):
     mediatypeid: str
     name: str
     type: int
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class UserMedia(ZabbixAPIBaseModel):
@@ -441,28 +435,28 @@ class UserMedia(ZabbixAPIBaseModel):
 class TimePeriod(ZabbixAPIBaseModel):
     period: int
     timeperiod_type: int
-    start_date: Optional[datetime] = None
-    start_time: Optional[int] = None
-    every: Optional[int] = None
-    dayofweek: Optional[int] = None
-    day: Optional[int] = None
-    month: Optional[int] = None
+    start_date: datetime | None = None
+    start_time: int | None = None
+    every: int | None = None
+    dayofweek: int | None = None
+    day: int | None = None
+    month: int | None = None
 
 
 class ProblemTag(ZabbixAPIBaseModel):
     tag: str
-    operator: Optional[int]
-    value: Optional[str]
+    operator: int | None
+    value: str | None
 
 
 class Maintenance(ZabbixAPIBaseModel):
     maintenanceid: str
     name: str
-    active_since: Optional[datetime] = None
-    active_till: Optional[datetime] = None
-    description: Optional[str] = None
-    maintenance_type: Optional[int] = None
-    tags_evaltype: Optional[int] = None
+    active_since: datetime | None = None
+    active_till: datetime | None = None
+    description: str | None = None
+    maintenance_type: int | None = None
+    tags_evaltype: int | None = None
     timeperiods: list[TimePeriod] = []
     tags: list[ProblemTag] = []
     hosts: list[Host] = []
@@ -479,7 +473,7 @@ class Event(ZabbixAPIBaseModel):
     acknowledged: int
     clock: datetime
     name: str
-    value: Optional[int] = None  # docs seem to imply this is optional
+    value: int | None = None  # docs seem to imply this is optional
     severity: int
     # NYI:
     # r_eventid
@@ -494,8 +488,8 @@ class Event(ZabbixAPIBaseModel):
 
 class Trigger(ZabbixAPIBaseModel):
     triggerid: str
-    description: Optional[str]
-    expression: Optional[str]
+    description: str | None
+    expression: str | None
     event_name: str
     opdata: str
     comments: str
@@ -504,10 +498,10 @@ class Trigger(ZabbixAPIBaseModel):
     lastchange: datetime
     priority: int
     state: int
-    templateid: Optional[str]
+    templateid: str | None
     type: int
     url: str
-    url_name: Optional[str] = None  # >6.0
+    url_name: str | None = None  # >6.0
     value: int
     recovery_mode: int
     recovery_expression: str
@@ -533,7 +527,7 @@ class Image(ZabbixAPIBaseModel):
     imagetype: int
     # NOTE: Optional so we can fetch an image without its data
     # This lets us get the IDs of all images without keeping the data in memory
-    image: Optional[str] = None
+    image: str | None = None
 
 
 class Map(ZabbixAPIBaseModel):
@@ -541,36 +535,36 @@ class Map(ZabbixAPIBaseModel):
     name: str
     height: int
     width: int
-    backgroundid: Optional[str] = None  # will this be an empty string instead?
+    backgroundid: str | None = None  # will this be an empty string instead?
     # Other fields are omitted. We only use this for export and import.
 
 
 class ImportRule(BaseModel):  # does not need to inherit from ZabbixAPIBaseModel
     createMissing: bool
-    updateExisting: Optional[bool] = None
-    deleteMissing: Optional[bool] = None
+    updateExisting: bool | None = None
+    deleteMissing: bool | None = None
 
 
 class ImportRules(ZabbixAPIBaseModel):
     discoveryRules: ImportRule
     graphs: ImportRule
-    groups: Optional[ImportRule] = None  # < 6.2
-    host_groups: Optional[ImportRule] = None  # >= 6.2
+    groups: ImportRule | None = None  # < 6.2
+    host_groups: ImportRule | None = None  # >= 6.2
     hosts: ImportRule
     httptests: ImportRule
     images: ImportRule
     items: ImportRule
     maps: ImportRule
     mediaTypes: ImportRule
-    template_groups: Optional[ImportRule] = None  # >= 6.2
+    template_groups: ImportRule | None = None  # >= 6.2
     templateLinkage: ImportRule
     templates: ImportRule
     templateDashboards: ImportRule
     triggers: ImportRule
     valueMaps: ImportRule
-    templateScreens: Optional[ImportRule] = None  # < 6.0
-    applications: Optional[ImportRule] = None  # < 6.0
-    screens: Optional[ImportRule] = None  # < 6.0
+    templateScreens: ImportRule | None = None  # < 6.0
+    applications: ImportRule | None = None  # < 6.0
+    screens: ImportRule | None = None  # < 6.0
 
     model_config = ConfigDict(validate_assignment=True)
 

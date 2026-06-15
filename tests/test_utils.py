@@ -4,7 +4,6 @@ from datetime import timedelta
 from ipaddress import IPv4Address
 from ipaddress import IPv6Address
 from pathlib import Path
-from typing import Union
 
 import pytest
 import structlog
@@ -32,7 +31,7 @@ def test_is_valid_regexp(input: str, expected: bool):
 
 
 @given(st.ip_addresses())
-def test_is_valid_ip(ip_address: Union[IPv4Address, IPv6Address]):
+def test_is_valid_ip(ip_address: IPv4Address | IPv6Address):
     assert utils.is_valid_ip(str(ip_address))
 
 

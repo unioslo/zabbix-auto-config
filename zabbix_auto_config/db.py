@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Optional
 
 import psycopg2
 import structlog
@@ -17,7 +16,7 @@ logger = structlog.stdlib.get_logger(__name__)
 
 
 def get_connection(
-    settings: DBSettings, dbname: Optional[str] = None
+    settings: DBSettings, dbname: str | None = None
 ) -> psycopg2.extensions.connection:
     """Get a connection to the Postgres database.
 

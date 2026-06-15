@@ -7,7 +7,7 @@ name = "zabbix-auto-config"
 dynamic = ["version"]
 description = "Zabbix auto config - ZAC"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license.file = "LICENSE"
 keywords = []
 authors = [{ name = "Paal Braathen", email = "paal.braathen@usit.uio.no" }]
@@ -19,10 +19,10 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
     "multiprocessing-logging>=0.3.1",
@@ -41,9 +41,7 @@ dependencies = [
 
 
 [dependency-groups]
-dev = [
-    { include-group = "test" },
-]
+dev = [{ include-group = "test" }]
 test = [
     "pytest>=7.4.3",
     "pytest-timeout>=2.2.0",
@@ -78,7 +76,7 @@ packages = ["zabbix_auto_config"]
 format-command = "ruff format --stdin-filename {filename}"
 
 [tool.pyright]
-pythonVersion = "3.9"
+pythonVersion = "3.11"
 
 [tool.ruff]
 # Same as Black.
@@ -102,6 +100,7 @@ extend-select = [
     "TID252",  # flake8-tidy-imports (prefer absolute imports)
     "C4",      # flake8-comprehensions
     "B",       # flake8-bugbear
+    "UP",      # pyupgrade
 ]
 # 2. Avoid enforcing line-length violations (`E501`)
 ignore = ["E501"]

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Optional
+from typing import assert_never
 
 import rich.box
 import structlog.stdlib
@@ -14,7 +14,6 @@ from pydantic_core import ErrorDetails
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
-from typing_extensions import assert_never
 
 from zabbix_auto_config.cli._app import ZacApp
 from zabbix_auto_config.macros import HostMacroResult
@@ -107,7 +106,7 @@ def _render_macro_map_file(m: MacroMapFileIn) -> Table:
 @macros_app.command("validate")
 def validate(
     ctx: typer.Context,
-    file: Optional[Path] = typer.Argument(  # noqa: B008
+    file: Path | None = typer.Argument(  # noqa: B008
         None, help="Alternative path to macro mapping file"
     ),
     verbose: bool = typer.Option(  # noqa: B008
@@ -156,7 +155,7 @@ def validate(
     )
 
 
-class OutputMode(str, Enum):
+class OutputMode(StrEnum):
     VERBOSE = "verbose"
     COMPACT = "compact"
     JSON = "json"
@@ -165,7 +164,7 @@ class OutputMode(str, Enum):
 @macros_app.command("preview")
 def preview_macros(
     ctx: typer.Context,
-    hostname: Optional[str] = typer.Option(  # noqa: B008
+    hostname: str | None = typer.Option(  # noqa: B008
         None, "--hostname", help="Hostname to filter by. Required if --offline is set."
     ),
     offline: bool = typer.Option(  # noqa: B008
@@ -173,7 +172,7 @@ def preview_macros(
         "--offline",
         help="Preview macros from the last run without connecting to Zabbix or other sources.",
     ),
-    properties: Optional[str] = typer.Option(  # noqa: B008
+    properties: str | None = typer.Option(  # noqa: B008
         None,
         "--properties",
         help="Comma-separated list of properties to calculate macros for. Required for --offline to preview macros for specific properties without connecting to sources.",
@@ -242,7 +241,7 @@ def _preview_offline(
 
 
 def _preview_online(
-    macro_map: MacroMap, hostname: Optional[str]
+    macro_map: MacroMap, hostname: str | None
 ) -> dict[str, HostMacroResult]:
     """Preview macros for real hosts in Zabbix, optionally filtered by hostname."""
     from zabbix_auto_config.processing import ZabbixHostUpdater
@@ -297,12 +296,12 @@ def _preview_online(
     return results
 
 
-def _is_secret(macro_type: Optional[int], value_type: Optional[MacroValueType]) -> bool:
+def _is_secret(macro_type: int | None, value_type: MacroValueType | None) -> bool:
     """Determine if a macro if secret or not."""
     return macro_type == 1 or value_type == MacroValueType.SECRET
 
 
-def _mask(value: Optional[str], secret: bool) -> str:
+def _mask(value: str | None, secret: bool) -> str:
     """Mask a macro value (if necessary)."""
     return "***" if secret else (value or "")
 

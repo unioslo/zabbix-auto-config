@@ -9,7 +9,6 @@ import time
 from multiprocessing import Queue
 from pathlib import Path
 from typing import Literal
-from typing import Optional
 from typing import TypedDict
 
 import structlog
@@ -136,20 +135,20 @@ def log_process_status(processes: list[processing.BaseProcess]) -> None:
 @app.callback()
 def main(
     ctx: typer.Context,
-    failsafe: Optional[int] = typer.Option(  # noqa: B008
+    failsafe: int | None = typer.Option(  # noqa: B008
         None,
         "--failsafe",
         "-F",
         help="Maximum number of hosts to change.",
         show_default=False,
     ),
-    dryrun: Optional[bool] = typer.Option(  # noqa: B008
+    dryrun: bool | None = typer.Option(  # noqa: B008
         None,
         "--dryrun",
         "-D",
         help="Dry run mode.",
     ),
-    config_path: Optional[Path] = typer.Option(  # noqa: B008
+    config_path: Path | None = typer.Option(  # noqa: B008
         None,
         "--config",
         "-C",

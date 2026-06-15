@@ -22,8 +22,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Literal
-from typing import Optional
-from typing import Union
 
 import httpx
 import structlog
@@ -132,9 +130,9 @@ class ZabbixAPI:
     def __init__(
         self,
         server: str = "http://localhost/zabbix",
-        timeout: Optional[int] = None,
+        timeout: int | None = None,
         read_only: bool = False,
-        verify_ssl: Union[bool, Path] = True,
+        verify_ssl: bool | Path = True,
     ):
         """Parameters:
         server: Base URI for zabbix web interface (omitting /api_jsonrpc.php)
@@ -155,11 +153,9 @@ class ZabbixAPI:
         logger.info("JSON-RPC Server Endpoint", url=self.url)
 
         # Attributes for properties
-        self._version: Optional[Version] = None
+        self._version: Version | None = None
 
-    def _get_ssl_context(
-        self, verify_ssl: Union[bool, Path]
-    ) -> Union[ssl.SSLContext, bool]:
+    def _get_ssl_context(self, verify_ssl: bool | Path) -> ssl.SSLContext | bool:
         if isinstance(verify_ssl, Path):
             if not verify_ssl.exists():
                 raise ValueError(f"CA bundle not found: {verify_ssl}")
@@ -171,7 +167,7 @@ class ZabbixAPI:
             ctx = verify_ssl
         return ctx
 
-    def _get_client(self, verify_ssl: Union[bool, Path]) -> httpx.Client:
+    def _get_client(self, verify_ssl: bool | Path) -> httpx.Client:
         kwargs: HTTPXClientKwargs = {}
         if self.timeout is not None:
             kwargs["timeout"] = self.timeout
@@ -193,9 +189,9 @@ class ZabbixAPI:
 
     def login(
         self,
-        user: Optional[str] = None,
-        password: Optional[str] = None,
-        auth_token: Optional[str] = None,
+        user: str | None = None,
+        password: str | None = None,
+        auth_token: str | None = None,
     ) -> str:
         """Convenience method for logging into the API and storing the resulting
         auth token as an instance variable.
@@ -259,7 +255,7 @@ class ZabbixAPI:
         return self.apiinfo.version()
 
     def do_request(
-        self, method: str, params: Optional[ParamsType] = None
+        self, method: str, params: ParamsType | None = None
     ) -> ZabbixAPIResponse:
         params = params or {}
 
@@ -333,8 +329,8 @@ class ZabbixAPI:
         search: bool = False,
         select_hosts: bool = False,
         select_templates: bool = False,
-        sort_order: Optional[SortOrder] = None,
-        sort_field: Optional[str] = None,
+        sort_order: SortOrder | None = None,
+        sort_field: str | None = None,
     ) -> HostGroup:
         """Fetch a host group given its name or ID.
 
@@ -374,8 +370,8 @@ class ZabbixAPI:
         search_union: bool = True,
         select_hosts: bool = False,
         select_templates: bool = False,
-        sort_order: Optional[SortOrder] = None,
-        sort_field: Optional[str] = None,
+        sort_order: SortOrder | None = None,
+        sort_field: str | None = None,
     ) -> list[HostGroup]:
         """Fetch a list of host groups given its name or ID.
 
@@ -532,8 +528,8 @@ class ZabbixAPI:
         search: bool = False,
         search_union: bool = True,
         select_templates: bool = False,
-        sort_field: Optional[str] = None,
-        sort_order: Optional[SortOrder] = None,
+        sort_field: str | None = None,
+        sort_order: SortOrder | None = None,
     ) -> list[TemplateGroup]:
         """Fetch a list of template groups, optionally filtered by name(s).
 
@@ -619,12 +615,12 @@ class ZabbixAPI:
         select_interfaces: bool = False,
         select_inventory: bool = False,
         select_macros: bool = False,
-        proxyid: Optional[str] = None,
-        maintenance: Optional[MaintenanceStatus] = None,
-        status: Optional[MonitoringStatus] = None,
-        agent_status: Optional[AgentAvailable] = None,
-        sort_field: Optional[str] = None,
-        sort_order: Optional[SortOrder] = None,
+        proxyid: str | None = None,
+        maintenance: MaintenanceStatus | None = None,
+        status: MonitoringStatus | None = None,
+        agent_status: AgentAvailable | None = None,
+        sort_field: str | None = None,
+        sort_order: SortOrder | None = None,
         search: bool = False,
     ) -> Host:
         """Fetch a host given a name or id."""
@@ -659,18 +655,17 @@ class ZabbixAPI:
         select_macros: bool = False,
         select_interfaces: bool = False,
         select_tags: bool = False,
-        proxyid: Optional[str] = None,
+        proxyid: str | None = None,
         # These params take special API values we don't want to evaluate
         # inside this method, so we delegate it to the enums.
-        maintenance: Optional[MaintenanceStatus] = None,
-        status: Optional[MonitoringStatus] = None,
-        agent_status: Optional[AgentAvailable] = None,
-        flags: Optional[int] = None,
-        sort_field: Optional[str] = None,
-        sort_order: Optional[Literal["ASC", "DESC"]] = None,
-        search: Optional[
-            bool
-        ] = True,  # we generally always want to search when multiple hosts are requested
+        maintenance: MaintenanceStatus | None = None,
+        status: MonitoringStatus | None = None,
+        agent_status: AgentAvailable | None = None,
+        flags: int | None = None,
+        sort_field: str | None = None,
+        sort_order: Literal["ASC", "DESC"] | None = None,
+        search: bool
+        | None = True,  # we generally always want to search when multiple hosts are requested
     ) -> Iterator[Host]:
         """Fetch all hosts matching the given criteria(s).
 
@@ -713,7 +708,7 @@ class ZabbixAPI:
 
         # Filter by the given host name or ID if we have one
         if names_or_ids:
-            id_mode: Optional[bool] = None
+            id_mode: bool | None = None
             for name_or_id in names_or_ids:
                 name_or_id = name_or_id.strip()
                 is_id = name_or_id.isnumeric()
@@ -787,12 +782,12 @@ class ZabbixAPI:
         self,
         host: str,
         groups: list[HostGroup],
-        proxy: Optional[Proxy] = None,
+        proxy: Proxy | None = None,
         status: MonitoringStatus = MonitoringStatus.ON,
-        interfaces: Optional[list[HostInterface]] = None,
+        interfaces: list[HostInterface] | None = None,
         inventory_mode: InventoryMode = InventoryMode.AUTOMATIC,
-        inventory: Optional[dict[str, Any]] = None,
-        description: Optional[str] = None,
+        inventory: dict[str, Any] | None = None,
+        description: str | None = None,
     ) -> str:
         params: ParamsType = {
             "host": host,
@@ -829,11 +824,11 @@ class ZabbixAPI:
     def update_host(
         self,
         host: Host,
-        status: Optional[MonitoringStatus] = None,
-        groups: Optional[list[HostGroup]] = None,
-        templates: Optional[list[Template]] = None,
-        tags: Optional[list[HostTag]] = None,
-        inventory_mode: Optional[InventoryMode] = None,
+        status: MonitoringStatus | None = None,
+        groups: list[HostGroup] | None = None,
+        templates: list[Template] | None = None,
+        tags: list[HostTag] | None = None,
+        inventory_mode: InventoryMode | None = None,
     ) -> None:
         """Update a host.
 
@@ -918,7 +913,7 @@ class ZabbixAPI:
 
     def get_host_interface(
         self,
-        interfaceid: Optional[str] = None,
+        interfaceid: str | None = None,
     ) -> HostInterface:
         """Fetch a host interface given its ID"""
         interfaces = self.get_host_interfaces(interfaceids=interfaceid)
@@ -928,10 +923,10 @@ class ZabbixAPI:
 
     def get_host_interfaces(
         self,
-        hostids: Union[str, list[str], None] = None,
-        interfaceids: Union[str, list[str], None] = None,
-        itemids: Union[str, list[str], None] = None,
-        triggerids: Union[str, list[str], None] = None,
+        hostids: str | list[str] | None = None,
+        interfaceids: str | list[str] | None = None,
+        itemids: str | list[str] | None = None,
+        triggerids: str | list[str] | None = None,
         # Can expand with the rest of the parameters if needed
     ) -> list[HostInterface]:
         """Fetch a list of host interfaces, optionally filtered by host ID,
@@ -959,9 +954,9 @@ class ZabbixAPI:
         type: InterfaceType,
         use_ip: bool,
         port: str,
-        ip: Optional[str] = None,
-        dns: Optional[str] = None,
-        details: Optional[CreateHostInterfaceDetails] = None,
+        ip: str | None = None,
+        dns: str | None = None,
+        details: CreateHostInterfaceDetails | None = None,
     ) -> str:
         if not ip and not dns:
             raise ZabbixAPIException("Either IP or DNS must be provided")
@@ -1002,14 +997,14 @@ class ZabbixAPI:
     def update_host_interface(
         self,
         interface: HostInterface,
-        hostid: Optional[str] = None,
-        main: Optional[bool] = None,
-        type: Optional[InterfaceType] = None,
-        use_ip: Optional[bool] = None,
-        port: Optional[str] = None,
-        ip: Optional[str] = None,
-        dns: Optional[str] = None,
-        details: Optional[UpdateHostInterfaceDetails] = None,
+        hostid: str | None = None,
+        main: bool | None = None,
+        type: InterfaceType | None = None,
+        use_ip: bool | None = None,
+        port: str | None = None,
+        ip: str | None = None,
+        dns: str | None = None,
+        details: UpdateHostInterfaceDetails | None = None,
     ) -> None:
         params: ParamsType = {"interfaceid": interface.interfaceid}
         if hostid is not None:
@@ -1211,7 +1206,7 @@ class ZabbixAPI:
         self,
         rights: list[ZabbixRight],
         permission: UsergroupPermission,
-        groups: Union[list[HostGroup], list[TemplateGroup]],
+        groups: list[HostGroup] | list[TemplateGroup],
     ) -> list[ZabbixRight]:
         new_rights: list[ZabbixRight] = []  # list of new rights to add
         rights = list(rights)  # copy rights (don't modify original)
@@ -1272,13 +1267,13 @@ class ZabbixAPI:
 
     def get_macro(
         self,
-        host: Optional[Host] = None,
-        macro_name: Optional[str] = None,
+        host: Host | None = None,
+        macro_name: str | None = None,
         search: bool = False,
         select_hosts: bool = False,
         select_templates: bool = False,
-        sort_field: Optional[str] = "macro",
-        sort_order: Optional[SortOrder] = None,
+        sort_field: str | None = "macro",
+        sort_order: SortOrder | None = None,
     ) -> Macro:
         """Fetch a macro given a host ID and macro name."""
         macros = self.get_macros(
@@ -1303,13 +1298,13 @@ class ZabbixAPI:
 
     def get_macros(
         self,
-        macro_name: Optional[str] = None,
-        host: Optional[Host] = None,
+        macro_name: str | None = None,
+        host: Host | None = None,
         search: bool = False,
         select_hosts: bool = False,
         select_templates: bool = False,
-        sort_field: Optional[str] = "macro",
-        sort_order: Optional[SortOrder] = None,
+        sort_field: str | None = "macro",
+        sort_order: SortOrder | None = None,
     ) -> list[Macro]:
         params: ParamsType = {"output": "extend"}
 
@@ -1341,10 +1336,10 @@ class ZabbixAPI:
 
     def get_global_macro(
         self,
-        macro_name: Optional[str] = None,
+        macro_name: str | None = None,
         search: bool = False,
-        sort_field: Optional[str] = "macro",
-        sort_order: Optional[SortOrder] = None,
+        sort_field: str | None = "macro",
+        sort_order: SortOrder | None = None,
     ) -> Macro:
         """Fetch a global macro given a macro name."""
         macros = self.get_macros(
@@ -1359,10 +1354,10 @@ class ZabbixAPI:
 
     def get_global_macros(
         self,
-        macro_name: Optional[str] = None,
+        macro_name: str | None = None,
         search: bool = False,
-        sort_field: Optional[str] = "macro",
-        sort_order: Optional[SortOrder] = None,
+        sort_field: str | None = "macro",
+        sort_order: SortOrder | None = None,
     ) -> list[GlobalMacro]:
         params: ParamsType = {"output": "extend", "globalmacro": True}
 
@@ -1390,7 +1385,7 @@ class ZabbixAPI:
         macro: str,
         value: str,
         description: str | None = None,
-        type: Optional[int] = None,
+        type: int | None = None,
     ) -> str:
         """Create a macro given a host ID, macro name and value."""
         params: ParamsType = {"hostid": host.hostid, "macro": macro, "value": value}
@@ -1415,7 +1410,7 @@ class ZabbixAPI:
         macroid: str,
         value: str,
         description: str | None = None,
-        type: Optional[int] = None,
+        type: int | None = None,
     ) -> str:
         """Update a macro given a macro ID and value."""
         params: ParamsType = {"hostmacroid": macroid, "value": value}
@@ -1567,7 +1562,7 @@ class ZabbixAPI:
     def add_templates_to_groups(
         self,
         templates: list[Template],
-        groups: Union[list[HostGroup], list[TemplateGroup]],
+        groups: list[HostGroup] | list[TemplateGroup],
     ) -> None:
         try:
             self.template.massadd(
@@ -1697,7 +1692,7 @@ class ZabbixAPI:
     def link_templates_to_groups(
         self,
         templates: list[Template],
-        groups: Union[list[HostGroup], list[TemplateGroup]],
+        groups: list[HostGroup] | list[TemplateGroup],
     ) -> None:
         """Link one or more templates to one or more host/template groups.
 
@@ -1726,7 +1721,7 @@ class ZabbixAPI:
     def remove_templates_from_groups(
         self,
         templates: list[Template],
-        groups: Union[list[HostGroup], list[TemplateGroup]],
+        groups: list[HostGroup] | list[TemplateGroup],
     ) -> None:
         """Remove template(s) from host/template group(s).
 
@@ -1755,9 +1750,9 @@ class ZabbixAPI:
     def get_items(
         self,
         *names: str,
-        templates: Optional[list[Template]] = None,
-        hosts: Optional[list[Template]] = None,  # NYI
-        proxies: Optional[list[Proxy]] = None,  # NYI
+        templates: list[Template] | None = None,
+        hosts: list[Template] | None = None,  # NYI
+        proxies: list[Proxy] | None = None,  # NYI
         search: bool = True,
         monitored: bool = False,
         select_hosts: bool = False,
@@ -1788,13 +1783,13 @@ class ZabbixAPI:
         self,
         username: str,
         password: str,
-        first_name: Optional[str] = None,
-        last_name: Optional[str] = None,
-        role: Optional[UserRole] = None,
-        autologin: Optional[bool] = None,
-        autologout: Union[str, int, None] = None,
-        usergroups: Union[list[Usergroup], None] = None,
-        media: Optional[list[UserMedia]] = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        role: UserRole | None = None,
+        autologin: bool | None = None,
+        autologout: str | int | None = None,
+        usergroups: list[Usergroup] | None = None,
+        media: list[UserMedia] | None = None,
     ) -> str:
         # TODO: handle invalid password
         # TODO: handle invalid type
@@ -1837,7 +1832,7 @@ class ZabbixAPI:
             raise ZabbixNotFoundError(f"Role {name_or_id!r} not found")
         return roles[0]
 
-    def get_roles(self, name_or_id: Optional[str] = None) -> list[Role]:
+    def get_roles(self, name_or_id: str | None = None) -> list[Role]:
         params: ParamsType = {"output": "extend"}
         if name_or_id is not None:
             if name_or_id.isdigit():
@@ -1856,8 +1851,8 @@ class ZabbixAPI:
 
     def get_users(
         self,
-        username: Optional[str] = None,
-        role: Optional[UserRole] = None,
+        username: str | None = None,
+        role: UserRole | None = None,
         search: bool = False,
     ) -> list[User]:
         params: ParamsType = {"output": "extend"}
@@ -1898,13 +1893,13 @@ class ZabbixAPI:
     def update_user(
         self,
         user: User,
-        current_password: Optional[str] = None,
-        new_password: Optional[str] = None,
-        first_name: Optional[str] = None,
-        last_name: Optional[str] = None,
-        role: Optional[UserRole] = None,
-        autologin: Optional[bool] = None,
-        autologout: Union[str, int, None] = None,
+        current_password: str | None = None,
+        new_password: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        role: UserRole | None = None,
+        autologin: bool | None = None,
+        autologout: str | int | None = None,
     ) -> str:
         """Update a user. Returns ID of updated user."""
         query: ParamsType = {"userid": user.userid}
@@ -1943,7 +1938,7 @@ class ZabbixAPI:
         return mts[0]
 
     def get_mediatypes(
-        self, name: Optional[str] = None, search: bool = False
+        self, name: str | None = None, search: bool = False
     ) -> list[MediaType]:
         params: ParamsType = {"output": "extend"}
         filter_params: ParamsType = {}
@@ -1969,10 +1964,10 @@ class ZabbixAPI:
 
     def get_maintenances(
         self,
-        maintenance_ids: Optional[list[str]] = None,
-        hostgroups: Optional[list[HostGroup]] = None,
-        hosts: Optional[list[Host]] = None,
-        name: Optional[str] = None,
+        maintenance_ids: list[str] | None = None,
+        hostgroups: list[HostGroup] | None = None,
+        hosts: list[Host] | None = None,
+        name: str | None = None,
         select_hosts: bool = False,
     ) -> list[Maintenance]:
         params: ParamsType = {
@@ -2000,10 +1995,10 @@ class ZabbixAPI:
         name: str,
         active_since: datetime,
         active_till: datetime,
-        description: Optional[str] = None,
-        hosts: Optional[list[Host]] = None,
-        hostgroups: Optional[list[HostGroup]] = None,
-        data_collection: Optional[DataCollectionMode] = None,
+        description: str | None = None,
+        hosts: list[Host] | None = None,
+        hostgroups: list[HostGroup] | None = None,
+        data_collection: DataCollectionMode | None = None,
     ) -> str:
         """Create a one-time maintenance definition."""
         if not hosts and not hostgroups:
@@ -2040,7 +2035,7 @@ class ZabbixAPI:
     def update_maintenance(
         self,
         maintenance: Maintenance,
-        hosts: Optional[list[Host]] = None,
+        hosts: list[Host] | None = None,
     ) -> None:
         """Update a maintenance definition."""
         params: ParamsType = {"maintenanceid": maintenance.maintenanceid}
@@ -2100,20 +2095,20 @@ class ZabbixAPI:
 
     def get_triggers(
         self,
-        trigger_ids: Union[str, list[str], None] = None,
-        hosts: Optional[list[Host]] = None,
-        hostgroups: Optional[list[HostGroup]] = None,
-        templates: Optional[list[Template]] = None,
-        description: Optional[str] = None,
-        priority: Optional[TriggerPriority] = None,
+        trigger_ids: str | list[str] | None = None,
+        hosts: list[Host] | None = None,
+        hostgroups: list[HostGroup] | None = None,
+        templates: list[Template] | None = None,
+        description: str | None = None,
+        priority: TriggerPriority | None = None,
         unacknowledged: bool = False,
-        skip_dependent: Optional[bool] = None,
-        monitored: Optional[bool] = None,
-        active: Optional[bool] = None,
-        expand_description: Optional[bool] = None,
-        filter: Optional[dict[str, Any]] = None,
+        skip_dependent: bool | None = None,
+        monitored: bool | None = None,
+        active: bool | None = None,
+        expand_description: bool | None = None,
+        filter: dict[str, Any] | None = None,
         select_hosts: bool = False,
-        sort_field: Optional[str] = "lastchange",
+        sort_field: str | None = "lastchange",
         sort_order: SortOrder = "DESC",
     ) -> list[Trigger]:
         params: ParamsType = {"output": "extend"}
@@ -2153,9 +2148,7 @@ class ZabbixAPI:
             raise ZabbixAPICallError("Failed to fetch triggers") from e
         return [Trigger(**trigger) for trigger in resp]
 
-    def update_trigger(
-        self, trigger: Trigger, hosts: Optional[list[Host]] = None
-    ) -> str:
+    def update_trigger(self, trigger: Trigger, hosts: list[Host] | None = None) -> str:
         """Update a trigger."""
         params: ParamsType = {"triggerid": trigger.triggerid}
         if hosts:
