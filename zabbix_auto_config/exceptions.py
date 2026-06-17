@@ -6,6 +6,7 @@ from typing import Any
 if TYPE_CHECKING:
     from httpx import Response as HTTPResponse
 
+    from zabbix_auto_config.pyzabbix.types import Json
     from zabbix_auto_config.pyzabbix.types import ParamsType
     from zabbix_auto_config.pyzabbix.types import ZabbixAPIResponse
 
@@ -32,7 +33,7 @@ class ZabbixAPIRequestError(ZabbixAPIException):
     def __init__(
         self,
         *args: Any,
-        params: ParamsType | None = None,
+        params: ParamsType | Json | None = None,
         api_response: ZabbixAPIResponse | None = None,
         response: HTTPResponse | None = None,
     ) -> None:

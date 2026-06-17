@@ -255,7 +255,7 @@ class ZabbixAPI:
         return self.apiinfo.version()
 
     def do_request(
-        self, method: str, params: ParamsType | None = None
+        self, method: str, params: ParamsType | Json | None = None
     ) -> ZabbixAPIResponse:
         params = params or {}
 
