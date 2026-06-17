@@ -3,11 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from typing import Any
 
-from zabbix_auto_config.pyzabbix.types import Json
-
 if TYPE_CHECKING:
     from httpx import Response as HTTPResponse
 
+    from zabbix_auto_config.pyzabbix.types import Json
     from zabbix_auto_config.pyzabbix.types import ParamsType
     from zabbix_auto_config.pyzabbix.types import ZabbixAPIResponse
 
