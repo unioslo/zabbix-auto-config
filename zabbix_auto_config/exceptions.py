@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from typing import Any
 
+from zabbix_auto_config.pyzabbix.types import Json
+
 if TYPE_CHECKING:
     from httpx import Response as HTTPResponse
 
@@ -32,7 +34,7 @@ class ZabbixAPIRequestError(ZabbixAPIException):
     def __init__(
         self,
         *args: Any,
-        params: ParamsType | None = None,
+        params: ParamsType | Json | None = None,
         api_response: ZabbixAPIResponse | None = None,
         response: HTTPResponse | None = None,
     ) -> None:
