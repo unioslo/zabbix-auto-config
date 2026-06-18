@@ -628,14 +628,14 @@ class MacroMapFileIn(BaseModel):
 
     @field_validator("macros", mode="before")
     @classmethod
-    def _validate_macro_names(cls, macros: Any) -> dict[MacroName, MacroDefIn]:
+    def _validate_macro_names(cls, macros: Any) -> Any:
         """Validate and normalize macro names."""
         if not isinstance(macros, dict):
-            return macros  # pragma: no cover # pydantic error
+            return macros  # pragma: no cover # pydantic handles error
 
         for raw_name, val in list(macros.items()):
             try:
-                macro_name = validate_macro_name(raw_name)
+                macro_name = validate_macro_name(str(raw_name))
             except ValueError as e:
                 logger.error(
                     "Invalid macro name in macro mapping file; skipping",
@@ -644,6 +644,8 @@ class MacroMapFileIn(BaseModel):
                 )
                 del macros[raw_name]
             else:
+                # Insert validated name if different from raw name
+                # and delete raw name
                 if macro_name != raw_name:
                     logger.warning(
                         "Macro name has leading/trailing whitespace; normalizing",

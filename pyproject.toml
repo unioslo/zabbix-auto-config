@@ -41,7 +41,8 @@ dependencies = [
 
 
 [dependency-groups]
-dev = [{ include-group = "test" }]
+dev = [{ include-group = "test" }, { include-group = "lint" }]
+lint = ["basedpyright>=1.39.8", "ruff>=0.12.5"]
 test = [
     "pytest>=9.0.3",
     "pytest-timeout>=2.2.0",
@@ -75,8 +76,27 @@ packages = ["zabbix_auto_config"]
 [tool.inline-snapshot]
 format-command = "ruff format --stdin-filename {filename}"
 
-[tool.pyright]
+[tool.basedpyright]
 pythonVersion = "3.11"
+typeCheckingMode = "recommended"
+reportUnannotatedClassAttribute = "hint"
+reportUnusedCallResult = "hint"
+reportImplicitOverride = "hint"
+reportImportCycles = "hint"
+
+# When working with pydantic before-validators, we have no choice
+# but to use and interact with `Any`-typed values.
+reportExplicitAny = false
+reportAny = false
+
+executionEnvironments = [
+    { root = "zabbix_auto_config" },
+    # inline-snapshot does not generate MacroName NewType annotations
+    # for MacroIdentity.name fields, despite 0.32.6 claiming to do so:
+    # https://15r10nk.github.io/inline-snapshot/latest/changelog/#exec-1--0326-2026-04-10
+    { root = "tests/test_macros.py", reportPrivateUsage = false, reportArgumentType = false },
+    { root = "tests", reportPrivateUsage = false },
+]
 
 [tool.ruff]
 # Same as Black.

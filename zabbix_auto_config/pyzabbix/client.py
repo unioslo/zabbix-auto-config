@@ -2246,7 +2246,7 @@ class ZabbixAPIObjectClass:
             if args and kwargs:
                 raise TypeError("Found both args and kwargs")
 
-            return self.parent.do_request(f"{self.name}.{attr}", args or kwargs).result  # type: ignore
+            return self.parent.do_request(f"{self.name}.{attr}", args or kwargs).result
 
         return fn
 
