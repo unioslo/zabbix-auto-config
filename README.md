@@ -330,7 +330,7 @@ tail -fn +1 /path/to/log/file | jq .
 By default, the log file is created in `$XDG_STATE_HOME/zabbix-auto-config/logs/app.log`. The application displays the path to the log file on startup if file logging is enabled and the level is set to `DEBUG`:
 
 ```
-2025-09-16T10:15:21.043038Z [debug    ] Logging to file                file=/home/vscode/.local/state/zabbix-auto-config/log/app.log process_name=MainProcess
+[debug    ] Logging to file                file=/home/vscode/.local/state/zabbix-auto-config/log/app.log process_name=MainProcess
 ```
 
 ## Running
