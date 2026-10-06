@@ -63,6 +63,7 @@ from zabbix_auto_config.pyzabbix.types import Map
 from zabbix_auto_config.pyzabbix.types import MediaType
 from zabbix_auto_config.pyzabbix.types import ParamsType
 from zabbix_auto_config.pyzabbix.types import Proxy
+from zabbix_auto_config.pyzabbix.types import ProxyGroup
 from zabbix_auto_config.pyzabbix.types import Role
 from zabbix_auto_config.pyzabbix.types import Template
 from zabbix_auto_config.pyzabbix.types import TemplateGroup
@@ -695,14 +696,18 @@ class ZabbixAPI:
             search (Optional[bool], optional): Force positional arguments to be treated as a search pattern. Defaults to True.
 
         Raises:
-            ZabbixAPIException: _description_
+            ZabbixAPIException:
 
         Returns:
-            list[Host]: _description_
+            Iterator[Host]: Generator of Host objects.
         """
-        params: ParamsType = {
-            "output": ["hostid", "host", "proxyid", "status", "inventory_mode"]
-        }
+        # Only fetch what we use from the API to minimize memory usage
+        output_params = ["hostid", "host", "proxyid", "status", "inventory_mode"]
+        if self.version.release >= (7, 0, 0):
+            output_params.extend(["proxy_groupid", "assigned_proxyid", "monitored_by"])
+
+        params: ParamsType = {"output": output_params}
+
         filter_params: ParamsType = {}
         search_params: ParamsType = {}
 
@@ -771,6 +776,8 @@ class ZabbixAPI:
         if sort_order:
             params["sortorder"] = sort_order
 
+        # XXX: what is this `or []` about? Can we have a succesful
+        # request that responds with something that is _not_ a list?
         resp: list[Any] = self.host.get(**params) or []
 
         # Instantiate one at the time when iterating
@@ -1265,6 +1272,57 @@ class ZabbixAPI:
         else:
             return [Proxy(**proxy) for proxy in res]
 
+    def get_proxy_group(
+        self,
+        name_or_id: str,
+        *,
+        proxies: list[Proxy] | None = None,
+        select_proxies: bool = False,
+    ) -> ProxyGroup:
+        """Fetches a proxy group given its ID or name."""
+        groups = self.get_proxy_groups(
+            name_or_id,
+            proxies=proxies,
+            select_proxies=select_proxies,
+        )
+        if not groups:
+            raise ZabbixNotFoundError(f"Proxy group {name_or_id!r} not found")
+        return groups[0]
+
+    def get_proxy_groups(
+        self,
+        *names_or_ids: str,
+        proxies: list[Proxy] | None = None,
+        select_proxies: bool = False,
+    ) -> list[ProxyGroup]:
+        """Fetches a proxy group given its ID or name."""
+        params: ParamsType = {"output": "extend"}
+        search_params: ParamsType = {}
+
+        # TODO: refactor this along with other methods that take names or ids (or wildcards)
+        if "*" in names_or_ids:
+            names_or_ids = ()
+
+        for name_or_id in names_or_ids:
+            name_or_id = name_or_id.strip()
+            is_id = name_or_id.isnumeric()
+            if is_id:
+                append_param(params, "proxy_groupids", name_or_id)
+            else:
+                append_param(search_params, "name", name_or_id)
+                params.setdefault("searchWildcardsEnabled", True)
+                params.setdefault("searchByAny", True)
+
+        if proxies:
+            params["proxyids"] = [proxy.proxyid for proxy in proxies]
+        if select_proxies:
+            params["selectProxies"] = "extend"
+        try:
+            result = self.proxygroup.get(**params)
+        except ZabbixAPIException as e:
+            raise ZabbixAPICallError("Failed to retrieve proxy groups") from e
+        return [ProxyGroup(**group) for group in result]
+
     def get_macro(
         self,
         host: Host | None = None,
@@ -1483,8 +1541,31 @@ class ZabbixAPI:
             )
         return resp["hostids"][0]
 
+    def update_host_proxy_group(self, host: Host, proxy_group: ProxyGroup) -> str:
+        """Update a host's proxy group."""
+        # NOTE: this method requires Zabbix 7.0 or later, and assumes that
+        # the caller has already verified that the Zabbix version is 7.0 or later.
+        params: ParamsType = {
+            "hostid": host.hostid,
+            "proxy_groupid": proxy_group.proxy_groupid,
+            "monitored_by": MonitoredBy.PROXY_GROUP.value,
+        }
+        try:
+            resp = self.host.update(**params)
+        except ZabbixAPIException as e:
+            raise ZabbixAPICallError(
+                f"Failed to update host proxy group for host {host.host!r} (ID {host.hostid})"
+            ) from e
+        if not resp or not resp.get("hostids"):
+            raise ZabbixNotFoundError(
+                f"No host ID returned when updating proxy for host {host.host!r} (ID {host.hostid})"
+            )
+        return resp["hostids"][0]
+
     def clear_host_proxy(self, host: Host) -> str:
-        """Clear a host's proxy."""
+        """Clear a host's proxy settings by setting it to Zabbix Server monitoring.
+
+        Can be used to clear both proxy and proxy group."""
         params: ParamsType = {
             "hostid": host.hostid,
             compat.host_proxyid(self.version): "0",

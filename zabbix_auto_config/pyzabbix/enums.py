@@ -149,3 +149,11 @@ class MonitoredBy(IntEnum):  # >= 7.0
     SERVER = 0
     PROXY = 1
     PROXY_GROUP = 2
+
+
+class ProxyGroupState(IntEnum):
+    UNKNOWN = 0
+    OFFLINE = 1
+    RECOVERING = 2
+    ONLINE = 3
+    DEGRADING = 4

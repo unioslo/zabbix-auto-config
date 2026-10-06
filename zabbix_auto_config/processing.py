@@ -14,6 +14,7 @@ from collections import defaultdict
 from datetime import datetime
 from datetime import timedelta
 from enum import Enum
+from enum import IntEnum
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import TypeVar
@@ -63,6 +64,7 @@ from zabbix_auto_config.pyzabbix.types import Macro
 from zabbix_auto_config.pyzabbix.types import Maintenance
 from zabbix_auto_config.pyzabbix.types import ModelWithHosts
 from zabbix_auto_config.pyzabbix.types import Proxy
+from zabbix_auto_config.pyzabbix.types import ProxyGroup
 from zabbix_auto_config.pyzabbix.types import Template
 from zabbix_auto_config.pyzabbix.types import UpdateHostInterfaceDetails
 from zabbix_auto_config.state import State
@@ -821,13 +823,15 @@ class ZabbixUpdater(BaseProcess):
                     db_hosts[host.hostname] = host
             return db_hosts
 
-    def create_hostgroup(self, hostgroup_name: str) -> None:
+    def create_hostgroup(self, hostgroup_name: str) -> str | None:
         """Create a host group in Zabbix.
 
         Wrapper over API client that catches errors and logs them. Never raises.
 
         Args:
             hostgroup_name (str): Name of the host group to create.
+        Returns:
+            str | None: The ID of the created host group, or None if creation failed.
         """
         log = logger.bind(hostgroup_name=hostgroup_name)
         if self.zabbix_config.dryrun:
@@ -838,6 +842,7 @@ class ZabbixUpdater(BaseProcess):
         try:
             groupid = self.api.create_hostgroup(hostgroup_name)
             log.info("Created host group", groupid=groupid)
+            return groupid
         except ZabbixAPICallError as e:
             log.error("Failed to create hostgroup", error=str(e))
         except Exception as e:
@@ -1107,6 +1112,34 @@ class ZabbixGarbageCollector(ZabbixUpdater):
             log.info("Deleted hosts")
 
 
+class ProxySyncAction(IntEnum):
+    """Result of proxy or proxy group sync operation."""
+
+    NOT_ELIGIBLE = 0
+    """Host is not eligible for proxy assignment."""
+
+    NO_MATCH = 10
+    """No matching proxy found for the host."""
+
+    CLEARED = 20
+    """Cleared proxy from host with existing proxy."""
+
+    # Enum values from hereon out indicate that host has been given a proxy (group)
+    # and should not be considered for further proxy assignment operations
+    ASSIGNED = 30
+    """Assigned proxy to host without existing proxy group."""
+
+    UPDATED = 40
+    """Updated proxy on host with existing proxy group."""
+
+    KEEP = 999
+    """No changes necessary - current configuration kept."""
+
+    def is_unresolved(self) -> bool:
+        """Return True if further proxy assignment is required."""
+        return self < ProxySyncAction.ASSIGNED
+
+
 class ZabbixHostUpdater(ZabbixUpdater):
     def __init__(self, name: str, state: State, config: Settings) -> None:
         super().__init__(name, state, config)
@@ -1128,6 +1161,25 @@ class ZabbixHostUpdater(ZabbixUpdater):
             self.macro_map = MacroMap.from_config(self.config)
         else:
             self.macro_map = MacroMap.new()  # empty mapping
+
+        self.use_proxy_groups = (
+            self.config.zac.process.host_updater.proxy_groups.enabled
+            and self.zabbix_version.release >= (7, 0, 0)
+        )
+        """Whether proxy group assignment is enabled in config and supported by the Zabbix server."""
+
+        # Report own settings on startup
+        logger.debug(
+            "ZabbixHostUpdater settings initialized",
+            update_interval=self.update_interval,
+            disabled_hostgroup=self.disabled_hostgroup.name,
+            enabled_hostgroup=self.enabled_hostgroup.name,
+            macro_map=len(self.macro_map.definitions),
+            proxy_groups=self.config.zac.process.host_updater.proxy_groups.model_dump(
+                mode="json"
+            ),
+            use_proxy_groups=self.use_proxy_groups,
+        )
 
     def get_or_create_hostgroup(self, hostgroup: str) -> HostGroup:
         """Fetch a host group, creating it if it doesn't exist."""
@@ -1501,6 +1553,32 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             log.info("Set proxy on host")
 
+    def set_proxy_group(self, zabbix_host: Host, proxy_group: ProxyGroup) -> None:
+        """Set the proxy group on a host.
+
+        Wrapper over API client that catches errors and logs them. Never raises.
+
+        Args:
+            zabbix_host (Host): The host to set the proxy group on.
+            proxy_group (ProxyGroup): The proxy group to assign to the host.
+        """
+        log = logger.bind(
+            host=zabbix_host.host,
+            hostid=zabbix_host.hostid,
+            proxy_group=proxy_group.name,
+        )
+        if self.zabbix_config.dryrun:
+            log.info("DRYRUN: Setting proxy group host")
+            return
+        try:
+            self.api.update_host_proxy_group(zabbix_host, proxy_group)
+        except ZabbixAPIException as e:
+            log.error("Failed to set proxy group on host", error=str(e))
+        except Exception as e:
+            log.exception("Unexpected error setting proxy group on host", error=str(e))
+        else:
+            log.info("Set proxy group on host")
+
     def set_tags(self, zabbix_host: Host, tags: ZacTags) -> None:
         """Set tags on a host.
 
@@ -1528,46 +1606,170 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             log.info("Set tags on host")
 
-    def _sync_proxy(
-        self, db_host: models.Host, zabbix_host: Host, zabbix_proxies: dict[str, Proxy]
-    ) -> None:
-        """Sync the proxy assignment of a Zabbix host with the proxy pattern defined on the DB host."""
-        log = logger.bind(host=zabbix_host.host, hostid=zabbix_host.hostid)
-        zabbix_proxy_id = zabbix_host.proxyid
-
-        zabbix_proxy = [
-            proxy
-            for proxy in zabbix_proxies.values()
-            if proxy.proxyid == zabbix_proxy_id
+    # TODO: cache this per iteration somehow? Is everything hashable?
+    def _filter_proxy_groups_by_proxy(
+        self, proxy_pattern: str, proxy_groups: list[ProxyGroup]
+    ) -> list[ProxyGroup]:
+        """Get a list of proxy groups that contain proxies matching the given pattern."""
+        return [
+            group
+            for group in proxy_groups
+            if any(re.match(proxy_pattern, proxy.name) for proxy in group.proxies)
         ]
-        current_zabbix_proxy = zabbix_proxy[0] if zabbix_proxy else None
 
-        # A host with proxy_pattern should get a proxy that matches the pattern.
-        if db_host.proxy_pattern:
-            possible_proxies = [
-                proxy
-                for proxy in zabbix_proxies.values()
-                if re.match(db_host.proxy_pattern, proxy.name)
-            ]
-            if not possible_proxies:
-                log.error(
-                    "Proxy pattern doesn't match any proxies.",
-                    proxy_pattern=db_host.proxy_pattern,
-                )
-            else:
-                new_proxy = random.choice(possible_proxies)
-                if current_zabbix_proxy and not re.match(
-                    db_host.proxy_pattern,
-                    current_zabbix_proxy.name,
-                ):
-                    # Wrong proxy, set new
-                    self.set_proxy(zabbix_host, new_proxy)
-                elif not current_zabbix_proxy:
-                    # Missing proxy, set new
-                    self.set_proxy(zabbix_host, new_proxy)
-        elif not db_host.proxy_pattern and current_zabbix_proxy:
-            # Should not have proxy, remove
-            self.clear_proxy(zabbix_host)
+    def _filter_proxy_groups_by_name(
+        self, group_name_pattern: str, proxy_groups: list[ProxyGroup]
+    ) -> list[ProxyGroup]:
+        """Get a list of proxy groups whose names match the given pattern."""
+        return [
+            group for group in proxy_groups if re.match(group_name_pattern, group.name)
+        ]
+
+    def _host_is_proxy_group_eligible(self, db_host: models.Host) -> bool:
+        """Determine if a host should be assigned a proxy group based on its properties.
+
+        If no opt-in properties are configured, every host is considered eligible.
+        """
+        return not self.config.zac.process.host_updater.proxy_groups.properties or any(
+            prop in db_host.properties
+            for prop in self.config.zac.process.host_updater.proxy_groups.properties
+        )
+
+    def _sync_proxy_group(
+        self,
+        db_host: models.Host,
+        zabbix_host: Host,
+        proxy_groups: list[ProxyGroup],
+    ) -> ProxySyncAction:
+        """Sync the proxy assignment of a Zabbix host with the proxy pattern defined on the DB host."""
+
+        current_group = next(
+            (g for g in proxy_groups if g.proxy_groupid == zabbix_host.proxy_groupid),
+            None,
+        )
+
+        # Host ineligible for proxy group due to properties or proxy pattern
+        eligible = self._host_is_proxy_group_eligible(db_host)
+        if not eligible or not db_host.proxy_pattern:
+            if current_group is not None:
+                self.clear_proxy(zabbix_host)
+                return ProxySyncAction.CLEARED
+            return (
+                ProxySyncAction.NOT_ELIGIBLE
+                if not eligible
+                else ProxySyncAction.NO_MATCH
+            )
+
+        # From here on: host is eligible AND proxy_pattern is set.
+        match_by_proxy = (
+            self.config.zac.process.host_updater.proxy_groups.detect_group_via_proxy
+        )
+        possible = (
+            self._filter_proxy_groups_by_proxy(db_host.proxy_pattern, proxy_groups)
+            if match_by_proxy
+            else self._filter_proxy_groups_by_name(db_host.proxy_pattern, proxy_groups)
+        )
+        if not possible:
+            return ProxySyncAction.NO_MATCH
+
+        if current_group is None:
+            self.set_proxy_group(zabbix_host, random.choice(possible))
+            return ProxySyncAction.ASSIGNED
+
+        if not any(current_group.proxy_groupid == g.proxy_groupid for g in possible):
+            self.set_proxy_group(zabbix_host, random.choice(possible))
+            return ProxySyncAction.UPDATED
+
+        return ProxySyncAction.KEEP
+
+    def _sync_proxy(
+        self, db_host: models.Host, zabbix_host: Host, zabbix_proxies: list[Proxy]
+    ) -> ProxySyncAction:
+        """Sync the proxy assignment of a Zabbix host with the proxy pattern defined on the DB host."""
+        # XXX: we _may_ face a very subtle bug here wherein we haven't properly
+        # collected all proxies, but host still has `proxyid`, leading to an incomplete
+        # match, even though host still has proxy.
+        # We could use `Host.proxyid` as the definitive check.
+        current_proxy = next(
+            (p for p in zabbix_proxies if p.proxyid == zabbix_host.proxyid),
+            None,
+        )
+
+        possible = [
+            proxy
+            for proxy in zabbix_proxies
+            if db_host.proxy_pattern and re.match(db_host.proxy_pattern, proxy.name)
+        ]
+
+        # No proxy to assign (no proxy_pattern, or pattern matched nothing):
+        if not possible:
+            # clear stale proxy (if assigned)
+            if current_proxy is not None:
+                self.clear_proxy(zabbix_host)
+                return ProxySyncAction.CLEARED
+            if not db_host.proxy_pattern:
+                return ProxySyncAction.KEEP
+            return ProxySyncAction.NO_MATCH
+
+        if current_proxy is None:
+            self.set_proxy(zabbix_host, random.choice(possible))
+            return ProxySyncAction.ASSIGNED
+
+        if current_proxy not in possible:
+            self.set_proxy(zabbix_host, random.choice(possible))
+            return ProxySyncAction.UPDATED
+
+        return ProxySyncAction.KEEP
+
+    def get_proxy_groups(self) -> list[ProxyGroup]:
+        """Fetch all proxy groups."""
+        zproxy_groups = self.api.get_proxy_groups(select_proxies=True)
+        if not zproxy_groups:
+            logger.warning("No Zabbix proxy groups found.")
+        return zproxy_groups
+
+    def get_proxies(self) -> list[Proxy]:
+        """Fetch all proxies."""
+        zproxies = self.api.get_proxies()
+        if not zproxies:
+            logger.warning("No Zabbix proxies found.")
+        return zproxies
+
+    def _sync_monitoring(
+        self,
+        db_host: models.Host,
+        zabbix_host: Host,
+        proxies: list[Proxy],
+        proxy_groups: list[ProxyGroup],
+    ) -> None:
+        """Sync monitoring status of the host based on the proxy pattern defined on the DB host.
+
+        Tries to assign in order of: Proxy Group → Proxy → Zabbix server.
+        """
+        group_result: ProxySyncAction | None = None
+        proxy_result: ProxySyncAction | None = None
+
+        if self.use_proxy_groups:
+            group_result = self._sync_proxy_group(db_host, zabbix_host, proxy_groups)
+
+        # Fall back to a regular proxy if any of:
+        # 1. Proxy groups are not enabled (no result from `_sync_proxy_group`)
+        # 2. Proxy groups are enabled AND:
+        #    a. Host did not have matching properties (NOT_ELIGIBLE)
+        #    b. No matching proxy groups (NO_MATCH)
+        #    c. The host had its proxy group removed (CLEARED)
+        if group_result is None or group_result.is_unresolved():
+            proxy_result = self._sync_proxy(db_host, zabbix_host, proxies)
+
+        # NOTE: we lose the reference to the proxy (group) after sync methods
+        # so we cannot log the ID of the proxy (group) of the host, since we
+        # don't update the `zabbix_host` object here
+        logger.debug(
+            "Host monitoring synced",
+            host=zabbix_host.host,
+            proxy=proxy_result.name if proxy_result is not None else None,
+            proxy_group=group_result.name if group_result is not None else None,
+        )
 
     def _sync_interfaces(self, db_host: models.Host, zabbix_host: Host) -> None:
         """Sync interfaces of a Zabbix host with the interfaces defined on the DB host."""
@@ -1820,10 +2022,18 @@ class ZabbixHostUpdater(ZabbixUpdater):
             log.info("Updated macro on host")
 
     def _update_host(
-        self, db_host: models.Host, zabbix_host: Host, zabbix_proxies: dict[str, Proxy]
+        self,
+        db_host: models.Host,
+        zabbix_host: Host,
+        proxies: list[Proxy],
+        proxy_groups: list[ProxyGroup],
     ) -> None:
-        """Update a host in Zabbix to match merged DB host from sources."""
-        self._sync_proxy(db_host, zabbix_host, zabbix_proxies)
+        """Update a host in Zabbix to match merged DB host from sources.
+
+        Proxy groups are assigned if enabled and host meets conditions.
+        Otherwise proxies are assigned.
+        """
+        self._sync_monitoring(db_host, zabbix_host, proxies, proxy_groups)
         self._sync_interfaces(db_host, zabbix_host)
         self._sync_tags(db_host, zabbix_host)
         self._sync_inventory(db_host, zabbix_host)
@@ -1847,10 +2057,10 @@ class ZabbixHostUpdater(ZabbixUpdater):
         )
         zabbix_hosts = {host.host: host for host in zhosts}
 
-        zproxies = self.api.get_proxies()
-        zabbix_proxies = {proxy.name: proxy for proxy in zproxies}
-        if not zabbix_proxies:
-            logger.warning("No Zabbix proxies found.")
+        proxy_groups: list[ProxyGroup] = []
+        if self.use_proxy_groups:
+            proxy_groups = self.get_proxy_groups()
+        proxies = self.get_proxies()
 
         zabbix_managed_hosts: list[Host] = []
         zabbix_manual_hosts: list[Host] = []
@@ -1919,7 +2129,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
 
             db_host = db_hosts[hostname]
             zabbix_host = zabbix_hosts[hostname]
-            self._update_host(db_host, zabbix_host, zabbix_proxies)
+            self._update_host(db_host, zabbix_host, proxies, proxy_groups)
 
 
 class ZabbixTemplateUpdater(ZabbixUpdater):

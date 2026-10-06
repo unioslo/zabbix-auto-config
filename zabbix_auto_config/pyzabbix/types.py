@@ -34,7 +34,9 @@ from typing_extensions import TypeAliasType
 from typing_extensions import TypedDict
 
 from zabbix_auto_config.pyzabbix.enums import InventoryMode
+from zabbix_auto_config.pyzabbix.enums import MonitoredBy
 from zabbix_auto_config.pyzabbix.enums import MonitoringStatus
+from zabbix_auto_config.pyzabbix.enums import ProxyGroupState
 
 if TYPE_CHECKING:
     from zabbix_auto_config.pyzabbix.enums import InterfaceType
@@ -262,6 +264,9 @@ class Host(ZabbixAPIBaseModel):
         validation_alias=AliasChoices("proxyid", "proxy_hostid"),
     )
     proxy_address: str | None = None
+    proxy_groupid: str | None = None  # >= 7.0
+    assigned_proxyid: str | None = None  # >= 7.0
+    monitored_by: MonitoredBy | None = None  # >= 7.0
     maintenance_status: str | None = None
     zabbix_agent: int | None = Field(
         None, validation_alias=AliasChoices("available", "active_available")
@@ -367,6 +372,18 @@ class Proxy(ZabbixAPIBaseModel):
 
     def __hash__(self) -> str:
         return self.proxyid  # kinda hacky, but lets us use it in dicts
+
+
+class ProxyGroup(ZabbixAPIBaseModel):
+    """Zabbix Proxy Group object."""
+
+    proxy_groupid: str
+    name: str
+    description: str
+    failover_delay: str
+    min_online: str  # 1-1000, may be a macro
+    state: ProxyGroupState
+    proxies: list[Proxy] = Field(default_factory=list)
 
 
 class MacroBase(ZabbixAPIBaseModel):

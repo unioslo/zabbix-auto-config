@@ -129,6 +129,27 @@ class ZabbixHostSettings(ConfigBaseModel):
     """Remove a host from all its maintenances when disabling it"""
 
 
+class ProxyGroupSettings(ConfigBaseModel):
+    """Settings for Zabbix proxy groups."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Assign proxy groups to hosts instead of individual proxies.",
+    )
+    detect_group_via_proxy: bool = Field(
+        default=False,
+        description="Detect appropriate group to assign host to based on its proxies (instead of the group's name)",
+    )
+    properties: list[str] = Field(
+        default_factory=list,
+        description=(
+            "If defined, only hosts with one of these properties will be assigned proxy groups. "
+            "Hosts without any of these properties are assigned proxies instead."
+            "If this option is not defined, all hosts are eligible for proxy group assignment."
+        ),
+    )
+
+
 class ProcessSettings(ConfigBaseModel):
     update_interval: int = Field(default=60, ge=0)
 
@@ -139,7 +160,7 @@ class SourceMergerSettings(ProcessSettings):
 
 
 class HostUpdaterSettings(ProcessSettings):
-    pass
+    proxy_groups: ProxyGroupSettings = Field(default_factory=ProxyGroupSettings)
 
 
 class HostGroupUpdaterSettings(ProcessSettings):

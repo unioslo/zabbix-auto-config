@@ -244,7 +244,14 @@ def test_load_config_from_path(sample_config_path: Path) -> None:
                 },
                 "process": {
                     "source_merger": {"update_interval": 60},
-                    "host_updater": {"update_interval": 60},
+                    "host_updater": {
+                        "update_interval": 60,
+                        "proxy_groups": {
+                            "enabled": False,
+                            "detect_group_via_proxy": False,
+                            "properties": [],
+                        },
+                    },
                     "hostgroup_updater": {"update_interval": 60},
                     "template_updater": {"update_interval": 60},
                     "garbage_collector": {
