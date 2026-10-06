@@ -1744,9 +1744,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
     ) -> None:
         """Sync monitoring status of the host based on the proxy pattern defined on the DB host.
 
-        1. If proxy groups are enabled and the host meets the conditions, assign a proxy group.
-        2. If no proxy group, try to assign a proxy.
-        3. If no proxy matches, monitor with Zabbix server.
+        Tries to assign in order of: Proxy Group → Proxy → Zabbix server.
         """
         group_result: ProxySyncAction | None = None
         proxy_result: ProxySyncAction | None = None
