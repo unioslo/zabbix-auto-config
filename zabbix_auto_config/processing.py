@@ -1744,21 +1744,15 @@ class ZabbixHostUpdater(ZabbixUpdater):
     ) -> None:
         """Sync monitoring status of the host based on the proxy pattern defined on the DB host.
 
-        If proxy groups are enabled and the host meets the conditions, assign a proxy group.
-        Otherwise, assign a proxy.
+        1. If proxy groups are enabled and the host meets the conditions, assign a proxy group.
+        2. If no proxy group, try to assign a proxy.
+        3. If no proxy matches, monitor with Zabbix server.
         """
-
-        result: ProxySyncAction | None = None
-
-        # NOTE: we lose the reference to the proxy (group) after sync method
-        # so we cannot log the ID of the proxy (group) of the host, since we
-        # operate on a (potentially) stale host object after syncing it here.
+        group_result: ProxySyncAction | None = None
+        proxy_result: ProxySyncAction | None = None
 
         if self.use_proxy_groups:
-            result = self._sync_proxy_group(db_host, zabbix_host, proxy_groups)
-            logger.debug(
-                "Proxy group assignment", host=zabbix_host.host, action=result.name
-            )
+            group_result = self._sync_proxy_group(db_host, zabbix_host, proxy_groups)
 
         # Fall back to a regular proxy if any of:
         # 1. Proxy groups are not enabled (no result from `_sync_proxy_group`)
@@ -1766,9 +1760,18 @@ class ZabbixHostUpdater(ZabbixUpdater):
         #    a. Host did not have matching properties (NOT_ELIGIBLE)
         #    b. No matching proxy groups (NO_MATCH)
         #    c. The host had its proxy group removed (CLEARED)
-        if result is None or result.is_unresolved():
-            result = self._sync_proxy(db_host, zabbix_host, proxies)
-            logger.debug("Proxy assignment", host=zabbix_host.host, action=result.name)
+        if group_result is None or group_result.is_unresolved():
+            proxy_result = self._sync_proxy(db_host, zabbix_host, proxies)
+
+        # NOTE: we lose the reference to the proxy (group) after sync methods
+        # so we cannot log the ID of the proxy (group) of the host, since we
+        # don't update the `zabbix_host` object here
+        logger.debug(
+            "Host monitoring synced",
+            host=zabbix_host.host,
+            proxy=proxy_result.name if proxy_result is not None else None,
+            proxy_group=group_result.name if group_result is not None else None,
+        )
 
     def _sync_interfaces(self, db_host: models.Host, zabbix_host: Host) -> None:
         """Sync interfaces of a Zabbix host with the interfaces defined on the DB host."""
