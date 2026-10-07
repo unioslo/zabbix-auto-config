@@ -1234,7 +1234,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             self.api.update_host(
                 zabbix_host,
                 status=MonitoringStatus.OFF,
-                templates_clear=zabbix_host.templates,  # IMPORTANT: unlink and clear all templates
+                templates_clear=zabbix_host.parent_templates,  # IMPORTANT: unlink and clear all templates
                 groups=[self.disabled_hostgroup],
             )
         except ZabbixAPIException as e:
