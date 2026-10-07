@@ -827,6 +827,7 @@ class ZabbixAPI:
         status: MonitoringStatus | None = None,
         groups: list[HostGroup] | None = None,
         templates: list[Template] | None = None,
+        templates_clear: list[Template] | None = None,
         tags: list[HostTag] | None = None,
         inventory_mode: InventoryMode | None = None,
     ) -> None:
@@ -842,6 +843,8 @@ class ZabbixAPI:
             New host groups for the host. Replaces existing groups.
         templates: Optional[list[Template]]
             New templates for the host. Replaces existing templates.
+        templates_clear: Optional[list[Template]]
+            Templates to unlink and clear from the host.
         """
         params: ParamsType = {"hostid": host.hostid}
         if groups is not None:
@@ -849,7 +852,11 @@ class ZabbixAPI:
         if status is not None:
             params["status"] = status
         if templates is not None:
-            params["templates"] = [t.model_dump_api() for t in templates]
+            params["templates"] = [{"templateid": t.templateid} for t in templates]
+        if templates_clear is not None:
+            params["templates_clear"] = [
+                {"templateid": t.templateid} for t in templates_clear
+            ]
         if tags is not None:
             params["tags"] = [t.model_dump_api() for t in tags]
         if inventory_mode is not None:

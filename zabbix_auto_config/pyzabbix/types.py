@@ -249,7 +249,6 @@ class Host(ZabbixAPIBaseModel):
         # Compat for >= 6.2.0
         validation_alias=AliasChoices("groups", "hostgroups"),
     )
-    templates: list[Template] = Field(default_factory=list)
     parent_templates: list[Template] = Field(
         default_factory=list,
         # Accept both casings

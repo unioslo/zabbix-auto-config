@@ -1234,7 +1234,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             self.api.update_host(
                 zabbix_host,
                 status=MonitoringStatus.OFF,
-                templates=[],
+                templates_clear=zabbix_host.parent_templates,  # IMPORTANT: unlink and clear all templates
                 groups=[self.disabled_hostgroup],
             )
         except ZabbixAPIException as e:
@@ -1963,7 +1963,6 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
             templates (list[Template]): List of _all_ templates for the host.
             host (Host): The host to set templates on.
         """
-        # For logging
         log = logger.bind(
             host=host.host,
             hostid=host.hostid,
