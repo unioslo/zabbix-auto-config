@@ -1130,6 +1130,10 @@ class ZabbixHostUpdater(ZabbixUpdater):
             self.macro_map = MacroMap.new()  # empty mapping
 
         self.managed_interface_properties: dict[int, list[str]] = {
+            # NOTE: Agent interfaces are not automatically removed due to the fact
+            # that they are currently created ad-hoc by ZAC if missing, and not synced via sources.
+            # If we could distinguish between default agent interfaces and manually configured ones,
+            # we could potentially manage agent interfaces too.
             InterfaceType.JMX: self.config.zac.process.host_updater.interfaces.jmx_properties,
             InterfaceType.SNMP: self.config.zac.process.host_updater.interfaces.snmp_properties,
             InterfaceType.IPMI: self.config.zac.process.host_updater.interfaces.ipmi_properties,
