@@ -1034,7 +1034,7 @@ class ZabbixGarbageCollector(ZabbixUpdater):
         with self.db_connection, self.db_connection.cursor() as cursor:
             cursor.execute(
                 # NOTE: This array unpacking is roughly equal to `WHERE host_id NOT IN (...)`
-                #       which means if the list is empty, we delete _all_ hosts.
+                #       which means if the list is empty, we remove _all_ hosts from this table.
                 #       This is intended, because it means we have no disabled hosts in Zabbix,
                 #       thus no Zabbix deletions should take place by the GC.
                 sql.SQL("DELETE FROM {} WHERE host_id != ALL(%s::text[])").format(
@@ -1286,7 +1286,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
             self.api.update_host(
                 zabbix_host,
                 status=MonitoringStatus.OFF,
-                templates=[],
+                templates_clear=zabbix_host.parent_templates,  # IMPORTANT: unlink and clear all templates
                 groups=[self.disabled_hostgroup],
             )
         except ZabbixAPIException as e:
@@ -2173,7 +2173,6 @@ class ZabbixTemplateUpdater(ZabbixUpdater):
             templates (list[Template]): List of _all_ templates for the host.
             host (Host): The host to set templates on.
         """
-        # For logging
         log = logger.bind(
             host=host.host,
             hostid=host.hostid,
