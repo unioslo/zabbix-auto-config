@@ -134,6 +134,12 @@ update_interval = 60
 [zac.process.host_updater]
 update_interval = 60
 
+[zac.process.host_updater.interfaces]
+remove_stale = true
+jmx_properties = ["managed_jmx"]
+snmp_properties = ["managed_snmp"]
+ipmi_properties = ["managed_ipmi"]
+
 [zac.process.hostgroup_updater]
 update_interval = 60
 

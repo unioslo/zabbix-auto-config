@@ -1129,6 +1129,16 @@ class ZabbixHostUpdater(ZabbixUpdater):
         else:
             self.macro_map = MacroMap.new()  # empty mapping
 
+        self.managed_interface_properties: dict[int, list[str]] = {
+            # NOTE: Agent interfaces are not automatically removed due to the fact
+            # that they are currently created ad-hoc by ZAC if missing, and not synced via sources.
+            # If we could distinguish between default agent interfaces and manually configured ones,
+            # we could potentially manage agent interfaces too.
+            InterfaceType.JMX: self.config.zac.process.host_updater.interfaces.jmx_properties,
+            InterfaceType.SNMP: self.config.zac.process.host_updater.interfaces.snmp_properties,
+            InterfaceType.IPMI: self.config.zac.process.host_updater.interfaces.ipmi_properties,
+        }
+
     def get_or_create_hostgroup(self, hostgroup: str) -> HostGroup:
         """Fetch a host group, creating it if it doesn't exist."""
         try:
@@ -1428,6 +1438,26 @@ class ZabbixHostUpdater(ZabbixUpdater):
             ip=ip,
         )
 
+    def delete_host_interface(
+        self, zabbix_host: Host, zabbix_interface: HostInterface
+    ) -> None:
+        """Remove an interface from a host."""
+        log = logger.bind(
+            host=zabbix_host.host,
+            hostid=zabbix_host.hostid,
+            interface_type=zabbix_interface.type,
+            interface_id=zabbix_interface.interfaceid,
+        )
+        if self.zabbix_config.dryrun:
+            log.info("DRYRUN: Removing interface from host")
+            return
+        if not zabbix_interface.interfaceid:
+            log.error("Interface ID is missing, cannot remove interface")
+            return
+
+        self.api.delete_host_interface(zabbix_interface.interfaceid)
+        log.info("Removed interface from host")
+
     def validate_interface_details(
         self, cls: type[HostInterfaceDetailsT], interface: models.Interface, host: Host
     ) -> HostInterfaceDetailsT | None:
@@ -1582,6 +1612,7 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 i.type: i for i in zabbix_host.interfaces if i.main == 1
             }
 
+            # Set interfaces defined on DB host on the Zabbix host
             for interface in db_host.interfaces:
                 # We assume that we're using an IP if the endpoint is a valid IP
                 useip = utils.is_valid_ip(interface.endpoint)
@@ -1615,6 +1646,8 @@ class ZabbixHostUpdater(ZabbixUpdater):
                             useip,
                             zabbix_interface,
                         )
+
+                    # Update interface if its details change
                     if interface.type == 2 and interface.details:
                         details_dict = zabbix_interface.details
                         # Check that the interface details are correct.
@@ -1640,6 +1673,41 @@ class ZabbixHostUpdater(ZabbixUpdater):
                 else:
                     # This interface is missing, set it
                     self.set_interface(zabbix_host, interface, useip, None)
+
+        # Remove stale interfaces (exists in zabbix but not on DB host)
+        if self.config.zac.process.host_updater.interfaces.remove_stale:
+            for zabbix_interface in zabbix_host.interfaces:
+                # TODO: ensure local zabbix_host.interfaces is not stale from modifications above
+                # We may need to catch if we modify the host above, and then re-fetch to ensure
+                # we have up-to-date information here. Should consider refactoring
+                # into discrete methods that handle these things separately:
+                #   1. setting/updating interfaces
+                #   2. removing stale interfaces.
+                if not any(
+                    interface.type == zabbix_interface.type
+                    and (
+                        interface.endpoint == zabbix_interface.ip
+                        or interface.endpoint == zabbix_interface.dns
+                    )
+                    and self._host_has_interface_property(db_host, interface.type)
+                    for interface in db_host.interfaces
+                ):
+                    log.info(
+                        "Removing stale interface",
+                        interface_type=zabbix_interface.type,
+                        interface_ip=zabbix_interface.ip,
+                        interface_dns=zabbix_interface.dns,
+                    )
+                    self.delete_host_interface(zabbix_host, zabbix_interface)
+
+    # NOTE: can consider passing just the set of properties to this method, so we can
+    # cache the result for performance if needed.
+    def _host_has_interface_property(
+        self, db_host: models.Host, interface_type: int
+    ) -> bool:
+        if props := self.managed_interface_properties.get(interface_type, []):
+            return any(prop in db_host.properties for prop in props)
+        return False
 
     def _sync_tags(self, db_host: models.Host, zabbix_host: Host) -> None:
         """Sync tags of a Zabbix host with the tags defined on the DB host."""

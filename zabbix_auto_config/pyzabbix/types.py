@@ -13,7 +13,6 @@ from __future__ import annotations
 from collections.abc import MutableMapping
 from collections.abc import Sequence
 from datetime import datetime
-from typing import TYPE_CHECKING
 from typing import Annotated
 from typing import Any
 from typing import Literal
@@ -33,11 +32,9 @@ from pydantic_core import PydanticCustomError
 from typing_extensions import TypeAliasType
 from typing_extensions import TypedDict
 
+from zabbix_auto_config.pyzabbix.enums import InterfaceType
 from zabbix_auto_config.pyzabbix.enums import InventoryMode
 from zabbix_auto_config.pyzabbix.enums import MonitoringStatus
-
-if TYPE_CHECKING:
-    from zabbix_auto_config.pyzabbix.enums import InterfaceType
 
 SortOrder = Literal["ASC", "DESC"]
 

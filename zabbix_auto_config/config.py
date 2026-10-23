@@ -138,8 +138,28 @@ class SourceMergerSettings(ProcessSettings):
     pass
 
 
+class HostInterfaceSettings(ConfigBaseModel):
+    remove_stale: bool = Field(
+        default=True,
+        description="Remove stale interfaces (not in DB) from hosts. Does not remove agent interfaces.",
+    )
+
+    jmx_properties: list[str] = Field(
+        default_factory=list,
+        description="List of properties that trigger deletion of stale JMX interfaces.",
+    )
+    snmp_properties: list[str] = Field(
+        default_factory=list,
+        description="List of properties that trigger deletion of stale SNMP interfaces.",
+    )
+    ipmi_properties: list[str] = Field(
+        default_factory=list,
+        description="List of properties that trigger deletion of stale IPMI interfaces.",
+    )
+
+
 class HostUpdaterSettings(ProcessSettings):
-    pass
+    interfaces: HostInterfaceSettings = Field(default_factory=HostInterfaceSettings)
 
 
 class HostGroupUpdaterSettings(ProcessSettings):
@@ -153,7 +173,7 @@ class TemplateUpdaterSettings(ProcessSettings):
 class HostGcSettings(ConfigBaseModel):
     enabled: bool = Field(
         default=True,
-        description="Whether to remove disabled hosts from Zabbix after a certain retention period.",
+        description="Remove disabled hosts from Zabbix after a certain retention period.",
     )
 
     retention_days: int = Field(
