@@ -133,7 +133,7 @@ uv sync --no-dev
 ### pip
 
 ```bash
-pip install -e .
+pip install -r requirements.txt -e .    # or: pip install -r requirements.txt .
 ```
 
 When installing from source, installing in editable mode is recommended, as it allows for pulling in changes from git without having to reinstall the package.
@@ -646,7 +646,6 @@ bob@example.com:Siteadmin-bob-hosts
 
 Furthermore, if `zabbix.create_templategroups` is enabled in the config file, template groups (with the same name as the host groups, but with the prefix replaced by `Templates-`) will also be created automatically if they do not exist.
 
-
 #### Property-hostgroup mapping
 
 The property-hostgroup mapping file is used to group hosts based on their properties. For example, if you have a property called `location_downtown`, you can create a mapping that adds all hosts with this property to a host group called `Downtown`:
@@ -672,6 +671,7 @@ os_windows:Template OS Windows
 
 > [!IMPORTANT]
 > Macro management must be enabled in the config file before ZAC can manage macros.
+>
 > ```toml
 > [zac.macros]
 > enabled = true
@@ -761,7 +761,6 @@ macros:
 
 Zabbix macros can also include optional context that is used to determine which macro value should be selected given an input argument, turning the macros into pseudo-functions. Read the [Zabbix docs](https://www.zabbix.com/documentation/current/en/manual/config/macros/user_macros_context) for a primer on how macro contexts work.
 
-
 ```yaml
 macros:
   "{$LOW_SPACE_LIMIT}":
@@ -786,7 +785,6 @@ macros:
 ```
 
 Contexts exist independently of the parent macro it is defined on, and properties for contexts do not have to match those defined on the parent macro.
-
 
 ##### Overriding macros on specific hosts
 
@@ -824,8 +822,6 @@ macros:
     properties:
       # no properties will match this -> {$ZAC.PLAIN_MACRO} removed from all hosts
 ```
-
-
 
 ### Host inventory
 
@@ -872,7 +868,6 @@ All cron expressions supported by [croniter](https://pypi.org/project/croniter/)
 
 > [!WARNING]
 > If your garbage collector config uses `update_interval` from an older config, switch to `schedule` instead. `update_interval` is still supported for backwards compatibility, but may be removed in a future major version.
-
 
 #### Maintenance cleanup
 
