@@ -5,8 +5,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from httpx import ConnectTimeout
-from httpx import ReadTimeout
+from httpx2 import ConnectTimeout
+from httpx2 import ReadTimeout
 from zabbix_auto_config import exceptions
 from zabbix_auto_config.config import Settings
 from zabbix_auto_config.config import ZabbixSettings

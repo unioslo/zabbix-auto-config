@@ -147,7 +147,7 @@ def test_log_exceptions_after_processing(config: Settings) -> None:
 
 
 def test_log_exceptions_after_processing_external_logger(config: Settings) -> None:
-    stdlib_logger = logging.getLogger("httpx")
+    stdlib_logger = logging.getLogger("httpx2")
 
     try:
         1 / 0  # noqa: B018  # pyright: ignore[reportUnusedExpression]
