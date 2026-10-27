@@ -25,7 +25,7 @@ repos:
     hooks:
       # Keep uv.lock in sync with pyproject.toml
       - id: uv-lock
-      # Regenerate requirements.txt when lock or pyproject.toml changes
-      - id: pip-compile
-        args: ["pyproject.toml", "-o", "requirements.txt"]
+      # Export requirements.txt from uv.lock (ensures lockfile parity, unlike `uv pip compile`)
+      - id: uv-export
+        args: ["--frozen", "--no-dev", "--no-emit-project", "--no-hashes", "--output-file=requirements.txt", "--quiet"]
         files: ^(uv\.lock|pyproject\.toml)$

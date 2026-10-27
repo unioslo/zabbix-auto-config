@@ -133,8 +133,7 @@ uv sync --no-dev
 ### pip
 
 ```bash
-pip install -r requirements.txt
-pip install --no-deps -e .    # or: pip install --no-deps .
+pip install -r requirements.txt -e .    # or: pip install -r requirements.txt .
 ```
 
 When installing from source, installing in editable mode is recommended, as it allows for pulling in changes from git without having to reinstall the package.
