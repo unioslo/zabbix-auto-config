@@ -20,3 +20,12 @@ repos:
       - id: ruff-check
       # Run the formatter.
       - id: ruff-format
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.13.5
+    hooks:
+      # Keep uv.lock in sync with pyproject.toml
+      - id: uv-lock
+      # Regenerate requirements.txt when lock or pyproject.toml changes
+      - id: pip-compile
+        args: ["pyproject.toml", "-o", "requirements.txt"]
+        files: ^(uv\.lock|pyproject\.toml)$
