@@ -8,5 +8,6 @@ from zabbix_auto_config.models import Host
 def modify(host: Host) -> Host:
     if host.hostname == "bar.example.com":
         host.properties.add("barry")
-    host.proxy_pattern = ".*"
+    if not host.proxy_pattern:
+        host.proxy_pattern = ".*"
     return host
