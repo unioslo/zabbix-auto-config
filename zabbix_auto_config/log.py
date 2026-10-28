@@ -266,7 +266,7 @@ def configure_logging(config: Settings) -> None:
         cache_logger_on_first_use=False,
     )
 
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpx2").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 

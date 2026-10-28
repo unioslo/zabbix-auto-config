@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import TypeVar
 
-import httpx
+import httpx2
 import psycopg2
 import structlog
 from psycopg2 import sql
@@ -123,7 +123,7 @@ class BaseProcess(multiprocessing.Process):
                 except Exception as e:
                     log = logger.bind(error=str(e))
                     # These are the error types we handle ourselves then continue
-                    if isinstance(e, httpx.TimeoutException):
+                    if isinstance(e, httpx2.TimeoutException):
                         log.error("Timeout exception")
                     elif isinstance(e, ZabbixAPISessionExpired):
                         log.error("Zabbix API session expired")
@@ -775,13 +775,13 @@ class ZabbixUpdater(BaseProcess):
         )
         try:
             self.api.login(self.zabbix_config.username, self.zabbix_config.password)
-        except httpx.ConnectError as e:
+        except httpx2.ConnectError as e:
             log.error("Error while connecting to Zabbix")
             raise ZACException(*e.args) from e
-        except httpx.TimeoutException as e:
+        except httpx2.TimeoutException as e:
             log.error("Timed out while connecting to Zabbix API", error=str(e))
             raise ZACException(*e.args) from e
-        except (ZabbixAPIException, httpx.HTTPError) as e:
+        except (ZabbixAPIException, httpx2.HTTPError) as e:
             # NOTE: log whole exception here?
             log.error("Unable to login to Zabbix API", error=str(e))
             raise ZACException(*e.args) from e
